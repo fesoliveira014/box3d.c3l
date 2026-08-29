@@ -61,9 +61,10 @@ Struct initializers use `.field = value` for every supplied field; calls with �
 
 ## 5. Verify
 
+`module b3` spans `box3d.c3i`, `box3d.c3`, and `box3d_check.c3`, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation.
+
 ```sh
-c3c compile-only --no-obj box3d.c3i
-c3c compile-only --no-obj box3d.c3
+c3c compile-only --no-obj box3d.c3i box3d.c3 box3d_check.c3
 ```
 
 Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.3 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.

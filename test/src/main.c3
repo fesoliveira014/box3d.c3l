@@ -1,6 +1,6 @@
 module smoke;
 
-import box3d;
+import b3;
 import std::io;
 
 fn int main() {

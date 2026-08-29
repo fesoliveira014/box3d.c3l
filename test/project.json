@@ -7,7 +7,7 @@
     "libs"
   ],
   "dependencies": [
-    "box3d"
+    "b3"
   ],
   "sources": [
     "src/**"

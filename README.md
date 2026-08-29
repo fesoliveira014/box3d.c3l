@@ -8,16 +8,18 @@ being bound incrementally. See [the design](docs/superpowers/specs/2026-08-28-bo
 
 ## Using it
 
-Add the package to a C3 project's dependency search path and list `box3d` as a dependency:
+Add the package to a C3 project's dependency search path and list `b3` as a dependency:
 
 ```json
 {
   "dependency-search-paths": [ "libs" ],
-  "dependencies": [ "box3d" ]
+  "dependencies": [ "b3" ]
 }
 ```
 
-The module is `box3d`, after the manifest's `provides` name — not the directory name.
+The module is `b3`, after the manifest's `provides` name — not the directory name `box3d.c3l`. The
+module takes the C library's own symbol prefix, so `b3CreateWorld` in C reads as `b3::create_world`
+in C3.
 
 Set the `BOX3D_CHECKED` feature to compile validity checks into every wrapper that takes an
 identifier, which turns a stale or destroyed handle into a fault instead of undefined behavior:
@@ -44,8 +46,9 @@ Only `linux-x64` is built today.
 
 ## Conventions
 
-The `b3` prefix never appears on the C3 side — `box3d::create_world`, not `b3CreateWorld`. Functions
-are `snake_case`, types `PascalCase`. A C name shaped `b3Type_Method` becomes a method on that type.
+The `b3` prefix is the module name and never appears inside an identifier — `b3::create_world`, not
+`b3CreateWorld`. Functions are `snake_case`, types `PascalCase`. A C name shaped `b3Type_Method`
+becomes a method on that type.
 Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
 sentinel.
 

@@ -1,5 +1,5 @@
 {
-  "provides": "box3d",
+  "provides": "b3",
   "linklib-dir": "linked-libs",
   "targets": {
     "linux-x64": { "linked-libraries": ["box3d", "m", "pthread"] }

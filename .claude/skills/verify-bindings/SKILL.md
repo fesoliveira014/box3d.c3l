@@ -1,6 +1,6 @@
 ---
 name: verify-bindings
-description: Compile-check the box3d C3 binding bundle and build the test/ consumer project against it. Use before every commit, after editing any .c3/.c3i in this repo, or when asked to verify, check, or test the bindings.
+description: Compile-check the b3 C3 binding bundle and build the test/ consumer project against it. Use before every commit, after editing any .c3/.c3i in this repo, or when asked to verify, check, or test the bindings.
 ---
 
 # Verify the box3d bindings

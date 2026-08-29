@@ -1,11 +1,11 @@
 ---
 name: add-binding
-description: Bind a box3d C symbol into the box3d C3 module across the three layers (extern in box3d.c3i, optional-returning wrapper in box3d.c3, faults in box3d_check.c3). Use when binding a new box3d function, ID type, struct, or enum — e.g. "bind b3CreateWorld", "/add-binding b3Body_SetTransform", "bind the shape API". Reads the real box3d header for exact signatures, then applies this repo's prefix-stripping, method-syntax, @cname, $assert layout-pin, and error-as-fault rules.
+description: Bind a box3d C symbol into the b3 C3 module across the three layers (extern in box3d.c3i, optional-returning wrapper in box3d.c3, faults in box3d_check.c3). Use when binding a new box3d function, ID type, struct, or enum — e.g. "bind b3CreateWorld", "/add-binding b3Body_SetTransform", "bind the shape API". Reads the real box3d header for exact signatures, then applies this repo's prefix-stripping, method-syntax, @cname, $assert layout-pin, and error-as-fault rules.
 ---
 
 # Add a box3d binding
 
-Bind the requested box3d symbol(s) into the `box3d` module. Input: `$ARGUMENTS` (a C symbol, a feature area, or a description). If empty, ask what to bind.
+Bind the requested box3d symbol(s) into the `b3` module. Input: `$ARGUMENTS` (a C symbol, a feature area, or a description). If empty, ask what to bind.
 
 Before writing any C3: invoke the `c3-expert`, `c3-style`, and `c3-bindings` skills, and read `docs/style.md` and `CLAUDE.md`. Those are the source of truth and override anything here.
 
@@ -21,7 +21,7 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 
 ## 2. Translate into `box3d.c3i`
 
-- **Strip the `b3` prefix on the C3 side; keep the real symbol verbatim in `@cname`.**
+- **The `b3` prefix is the module name; strip it from every identifier and keep the real symbol verbatim in `@cname`.**
 - **Functions** → `snake_case`. A `b3Type_Method` C name becomes method syntax on that type; a bare `b3Verb...` constructor/destructor becomes a method on the type it produces or consumes where that reads naturally, otherwise a free function.
 
   ```c3
@@ -30,7 +30,7 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
   extern fn void BodyId.set_transform(self, Pos position, Quat rotation) @cname("b3Body_SetTransform");
   ```
 
-- **Types** → `PascalCase`, `b3` stripped. box3d IDs (`b3WorldId`, `b3BodyId`, `b3ShapeId`, `b3JointId`, `b3ContactId`) are **value structs passed and returned by value**, not opaque pointers — declare their fields exactly as the header has them. Use `@opaque` or `inline void*` only for a type that genuinely is a pointer handle in C (`b3RecPlayer*` and the like), and only after confirming it in the header.
+- **Types** → `PascalCase`, `b3` stripped. The IDs (`b3WorldId`, `b3BodyId`, `b3ShapeId`, `b3JointId`, `b3ContactId`) are **value structs passed and returned by value**, not opaque pointers — declare their fields exactly as the header has them. Use `@opaque` or `inline void*` only for a type that genuinely is a pointer handle in C (`b3RecPlayer*` and the like), and only after confirming it in the header.
 - **Structs C3 reads** are declared in full, field for field, in header order.
 - **Constants / enum values** → `SCREAMING_SNAKE_CASE`, prefix stripped. A closed C set becomes a C3 `enum`; a flag-bits set becomes a `bitstruct X : uint { bool field : 0; ... }`.
 - Keep the extern layer faithful to C: raw return types, raw out-parameters, no interpretation. No `@builtin` on any declaration.

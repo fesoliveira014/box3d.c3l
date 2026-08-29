@@ -1,1 +1,1 @@
-module box3d;
+module b3;

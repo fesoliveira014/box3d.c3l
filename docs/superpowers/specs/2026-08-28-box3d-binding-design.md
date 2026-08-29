@@ -7,8 +7,13 @@ Status: approved, not yet implemented
 
 Bind [box3d](https://github.com/erincatto/box3d) — Erin Catto's C17 3D physics library — into a C3
 library package (`box3d.c3l`) that a C3 project consumes as a normal dependency. The binding must
-present a C3-native API: C3 types, C3 error handling, C3 naming. A caller should never see a `b3`
-prefix, a raw status value, or a null handle standing in for an error.
+present a C3-native API: C3 types, C3 error handling, C3 naming. A caller should never see a raw
+status value or a null handle standing in for an error.
+
+The module is `b3`, taking the C library's own symbol prefix as its namespace, so `b3CreateWorld`
+reads as `b3::create_world`. The prefix is therefore never part of an identifier — the namespace
+carries it. The package directory keeps the library's full name, `box3d.c3l`; C3 resolves a
+dependency by the manifest's `provides` name, not by directory.
 
 ## Constraints
 
@@ -114,7 +119,7 @@ values. Pointer-and-count pairs become slices. Cleanup uses `defer`, and failure
 
 ## Structure
 
-One flat `module box3d`, split by role and then by area:
+One flat `module b3`, split by role and then by area:
 
 ```
 box3d.c3i          types, identifiers, extern fn declarations, $assert pins
@@ -128,11 +133,12 @@ box3d_check.c3     faultdefs, validity helpers, null-identifier helpers
 Later files appear when the area they cover is bound, not before. `box3d.c3i` splits by area once it
 passes roughly a thousand lines. The manifest needs no `sources` entry: every `.c3` and `.c3i` at the
 package root compiles into the library, which was verified by calling a function defined in
-`box3d.c3` from the consumer project.
+`box3d.c3` from the consumer project. Filenames keep the library's name; only the module is `b3`,
+and C3 does not require the two to match.
 
 The extern layer stays faithful to C — raw return types, raw out-parameters, no interpretation. All
-interpretation happens in the wrapper layer. `@cname` carries the verbatim C symbol; the C3 side
-never shows the `b3` prefix. A C name shaped `b3Type_Method` becomes a method on that type.
+interpretation happens in the wrapper layer. `@cname` carries the verbatim C symbol; no identifier on the
+C3 side repeats the `b3` prefix the module already supplies. A C name shaped `b3Type_Method` becomes a method on that type.
 
 The `static inline` functions in `id.h` and `math_functions.h` have no symbols in `libbox3d.a` and
 cannot be bound. Where they are needed they are reimplemented in C3 and tested against the C

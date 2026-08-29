@@ -87,3 +87,50 @@ fn void the_world_limit_becomes_a_fault() @test {
     }
     assert(b3::byte_count() == baseline);
 }
+
+fn void a_world_reports_the_properties_its_definition_asked_for() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    assert(world.gravity().y == -10.0);
+    assert(world.restitution_threshold() == 1.0);
+    assert(world.hit_event_threshold() == 1.0);
+    assert(world.maximum_linear_speed() == 400.0);
+    assert(world.is_sleeping_enabled());
+    assert(world.is_continuous_enabled());
+    assert(world.is_warm_starting_enabled());
+    assert(world.worker_count() == 1);
+    assert(world.awake_body_count() == 0);
+}
+
+fn void a_property_survives_a_round_trip() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    b3::Vec3 half_g = { 0.0, -1.5, 0.0 };
+    world.set_gravity(half_g);
+    assert(world.gravity().y == -1.5);
+
+    world.enable_sleeping(false);
+    assert(!world.is_sleeping_enabled());
+
+    world.set_maximum_linear_speed(12.5);
+    assert(world.maximum_linear_speed() == 12.5);
+}
+
+fn void an_empty_world_has_empty_counters() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    b3::Counters counters = world.counters();
+    assert(counters.body_count == 0);
+    assert(counters.shape_count == 0);
+    assert(counters.contact_count == 0);
+    assert(counters.joint_count == 0);
+
+    b3::Capacity capacity = world.max_capacity();
+    assert(capacity.static_body_count >= 0);
+}

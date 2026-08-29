@@ -2,6 +2,9 @@ obj/
 build/
 CLAUDE.local.md
 
+# Working design notes and plans — local only
+docs/superpowers/
+
 # Built native libraries — produced by scripts/build-box3d.sh
 linked-libs/**/*.a
 linked-libs/**/*.so

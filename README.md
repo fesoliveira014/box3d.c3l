@@ -4,7 +4,7 @@ C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rig
 library written in C17.
 
 Status: early. The package structure, native build, and design are in place; the API surface is
-being bound incrementally. See [the design](docs/superpowers/specs/2026-08-28-box3d-binding-design.md).
+being bound incrementally.
 
 ## Using it
 

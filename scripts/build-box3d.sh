@@ -1,0 +1,90 @@
+#!/bin/sh
+# Build the box3d static library from the vendored submodule into linked-libs/<target>/,
+# then probe the public struct layouts the C3 binding pins with $assert.
+#
+# Usage:
+#   scripts/build-box3d.sh            build, then print the probed layouts
+#   scripts/build-box3d.sh --check    build, then fail if a layout drifted from scripts/abi-sizes.txt
+#   scripts/build-box3d.sh --update   build, then rewrite scripts/abi-sizes.txt from the probe
+#
+# Cross-compiling the other manifest targets is deferred; this builds the host target only.
+set -e
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VENDOR="$ROOT/vendor/box3d"
+TARGET="linux-x64"
+OUT="$ROOT/linked-libs/$TARGET"
+TYPES="$ROOT/scripts/abi-types.txt"
+SIZES="$ROOT/scripts/abi-sizes.txt"
+MODE="${1:-}"
+
+if [ ! -f "$VENDOR/CMakeLists.txt" ]; then
+    echo "ERROR: vendor/box3d is empty. Run: git submodule update --init" >&2
+    exit 1
+fi
+
+# BOX3D_DOUBLE_PRECISION is a PUBLIC compile definition: it switches b3Vec3/b3Pos and every
+# struct that embeds them from float to double. The C3 binding is written against the float
+# ABI, so it must stay OFF here — a build with it on silently corrupts every call.
+echo "Configuring box3d (float ABI, samples/tests/benchmarks off)"
+cmake -S "$VENDOR" -B "$VENDOR/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+    -DBUILD_SHARED_LIBS=OFF \
+    -DBOX3D_DOUBLE_PRECISION=OFF \
+    -DBOX3D_SAMPLES=OFF \
+    -DBOX3D_UNIT_TESTS=OFF \
+    -DBOX3D_BENCHMARKS=OFF \
+    -DBOX3D_DOCS=OFF \
+    -DBOX3D_VALIDATE=OFF
+
+cmake --build "$VENDOR/build" --target box3d --parallel
+
+LIB="$(find "$VENDOR/build" -name 'libbox3d.a' -print -quit)"
+[ -n "$LIB" ] || { echo "ERROR: libbox3d.a not produced by the build" >&2; exit 1; }
+mkdir -p "$OUT"
+cp "$LIB" "$OUT/libbox3d.a"
+echo "Installed $OUT/libbox3d.a"
+
+# --- layout probe -----------------------------------------------------------
+# scripts/abi-types.txt lists one C type name per line (blank lines and # comments ignored).
+# Every struct the binding declares in full belongs here; the $assert in box3d.c3i must match.
+[ -f "$TYPES" ] || { echo "No $TYPES yet — skipping layout probe."; exit 0; }
+
+PROBE="$VENDOR/build/abi_probe.c"
+{
+    echo '#include <box3d/box3d.h>'
+    echo '#include <stdio.h>'
+    echo 'int main(void) {'
+    sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$TYPES" | while IFS= read -r t; do
+        printf '    printf("%%s %%zu %%zu\\n", "%s", sizeof(%s), _Alignof(%s));\n' "$t" "$t" "$t"
+    done
+    echo '    return 0;'
+    echo '}'
+} > "$PROBE"
+
+"${CC:-cc}" -std=c17 -I"$VENDOR/include" "$PROBE" -o "$VENDOR/build/abi_probe"
+probed="$("$VENDOR/build/abi_probe")"
+
+case "$MODE" in
+    --update)
+        printf '%s\n' "$probed" > "$SIZES"
+        echo "Wrote $SIZES:"
+        printf '%s\n' "$probed"
+        ;;
+    --check)
+        if [ ! -f "$SIZES" ]; then
+            echo "ERROR: $SIZES missing. Run: scripts/build-box3d.sh --update" >&2
+            exit 1
+        fi
+        if ! printf '%s\n' "$probed" | diff -u "$SIZES" - ; then
+            echo "ERROR: box3d struct layout drifted from $SIZES." >&2
+            echo "The \$assert pins in the C3 binding are now wrong. Update both together." >&2
+            exit 1
+        fi
+        echo "Layouts match $SIZES."
+        ;;
+    *)
+        printf '%s\n' "$probed"
+        ;;
+esac

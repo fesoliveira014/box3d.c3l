@@ -1,0 +1,9 @@
+This package vendors a static build (linked-libs/<target>/libbox3d.a) of Box3D,
+by Erin Catto, licensed under the MIT License. The full license text is in
+LICENSE.box3d.mit. See https://github.com/erincatto/box3d.
+
+Box3D itself is not redistributed as source here; it is a git submodule under
+vendor/box3d, built by scripts/build-box3d.sh.
+
+The C3 binding itself (box3d.c3i, box3d.c3, box3d_check.c3) is MIT-licensed —
+see LICENSE.

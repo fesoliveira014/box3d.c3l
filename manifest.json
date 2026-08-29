@@ -1,0 +1,7 @@
+{
+  "provides": "box3d",
+  "linklib-dir": "linked-libs",
+  "targets": {
+    "linux-x64": { "linked-libraries": ["box3d", "m", "pthread"] }
+  }
+}

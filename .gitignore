@@ -1,0 +1,9 @@
+obj/
+build/
+CLAUDE.local.md
+
+# Built native libraries — produced by scripts/build-box3d.sh
+linked-libs/**/*.a
+linked-libs/**/*.so
+linked-libs/**/*.lib
+linked-libs/**/*.dll

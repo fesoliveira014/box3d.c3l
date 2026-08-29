@@ -1,0 +1,3 @@
+module box3d;
+
+// extern fn int some_library_function();

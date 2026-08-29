@@ -25,10 +25,10 @@ macro bool checked_access() {
 }
 
 <*
- @return "the world, or WORLD_LIMIT_REACHED when box3d returned a null identifier"
+ @return "the world, or INVALID_HANDLE when box3d returned a null identifier"
 *>
 macro WorldId? WorldId.checked(self) {
-    if (self.is_null()) return WORLD_LIMIT_REACHED~;
+    if (self.is_null()) return INVALID_HANDLE~;
     return self;
 }
 

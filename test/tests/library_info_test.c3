@@ -14,7 +14,11 @@ fn void the_library_was_built_for_the_float_abi() @test {
     b3::assert_float_abi()!!;
 }
 
-fn void nothing_is_allocated_before_a_world_exists() @test {
+// c3c runs tests in alphabetical order by name across the whole target, so this name is chosen to
+// sort after every world-creating test in the suite: it is a canary for a leak in any of them, not
+// a check that no world has existed yet. A future rename should keep it sorting last, or it stops
+// catching anything.
+fn void zero_bytes_remain_once_earlier_worlds_are_destroyed() @test {
     assert(b3::byte_count() == 0);
 }
 

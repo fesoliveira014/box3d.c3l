@@ -49,9 +49,13 @@ Only `linux-x64` is built today.
 
 The `b3` prefix is the module name and never appears inside an identifier — `b3::create_world`, not
 `b3CreateWorld`. Functions are `snake_case`, types `PascalCase`. A C name shaped `b3Type_Method`
-becomes a method on that type.
+becomes a method on that type. Getters drop the `Get` verb; setters keep `Set` — `b3World_GetGravity`
+becomes `world.gravity()`, `b3World_SetGravity` becomes `world.set_gravity(v)`.
 Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
-sentinel.
+sentinel. `create_world` in particular validates that its definition came from `default_world_def()`
+before calling into box3d — the one behaviour it has that calling C directly does not, since a
+release build of box3d compiles out its own check for this and would otherwise simulate silently
+with a garbage definition.
 
 box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
 operators and vector methods work directly on values that cross the ABI. Matrices are a plain

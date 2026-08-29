@@ -183,6 +183,11 @@ struct Capacity {
 }
 $assert Capacity::size == 20;
 $assert Capacity::alignment == 4;
+$assert Capacity::members[0].offset == 0 && Capacity::members[0].name == "static_shape_count";
+$assert Capacity::members[1].offset == 4 && Capacity::members[1].name == "dynamic_shape_count";
+$assert Capacity::members[2].offset == 8 && Capacity::members[2].name == "static_body_count";
+$assert Capacity::members[3].offset == 12 && Capacity::members[3].name == "dynamic_body_count";
+$assert Capacity::members[4].offset == 16 && Capacity::members[4].name == "contact_count";
 
 struct WorldDef {
     Vec3 gravity;
@@ -210,6 +215,24 @@ struct WorldDef {
 $assert WorldDef::size == 144;
 $assert WorldDef::alignment == 8;
 $assert WorldDef::members[0].offset == 0 && WorldDef::members[0].name == "gravity";
+$assert WorldDef::members[1].offset == 12 && WorldDef::members[1].name == "restitution_threshold";
+$assert WorldDef::members[2].offset == 16 && WorldDef::members[2].name == "hit_event_threshold";
+$assert WorldDef::members[3].offset == 20 && WorldDef::members[3].name == "contact_hertz";
+$assert WorldDef::members[4].offset == 24 && WorldDef::members[4].name == "contact_damping_ratio";
+$assert WorldDef::members[5].offset == 28 && WorldDef::members[5].name == "contact_speed";
+$assert WorldDef::members[6].offset == 32 && WorldDef::members[6].name == "maximum_linear_speed";
+$assert WorldDef::members[7].offset == 40 && WorldDef::members[7].name == "friction_callback";
+$assert WorldDef::members[8].offset == 48 && WorldDef::members[8].name == "restitution_callback";
+$assert WorldDef::members[9].offset == 56 && WorldDef::members[9].name == "enable_sleep";
+$assert WorldDef::members[10].offset == 57 && WorldDef::members[10].name == "enable_continuous";
+$assert WorldDef::members[11].offset == 60 && WorldDef::members[11].name == "worker_count";
+$assert WorldDef::members[12].offset == 64 && WorldDef::members[12].name == "enqueue_task";
+$assert WorldDef::members[13].offset == 72 && WorldDef::members[13].name == "finish_task";
+$assert WorldDef::members[14].offset == 80 && WorldDef::members[14].name == "user_task_context";
+$assert WorldDef::members[15].offset == 88 && WorldDef::members[15].name == "user_data";
+$assert WorldDef::members[16].offset == 96 && WorldDef::members[16].name == "create_debug_shape";
+$assert WorldDef::members[17].offset == 104 && WorldDef::members[17].name == "destroy_debug_shape";
+$assert WorldDef::members[18].offset == 112 && WorldDef::members[18].name == "user_debug_shape_context";
 $assert WorldDef::members[19].offset == 120 && WorldDef::members[19].name == "capacity";
 $assert WorldDef::members[20].offset == 140 && WorldDef::members[20].name == "internal_value";
 
@@ -268,11 +291,22 @@ $assert Counters::alignment == 4;
 
 extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");
 
-extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld");
+<*
+ Raw world constructor. Bypasses create_world's definition-cookie guard, so it is private to the
+ module — box3d_world.c3's create_world is the only caller and is the only public way to a live
+ world.
+*>
+extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld") @private;
 extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
 extern fn void WorldId.step(self, float time_step, int sub_step_count) @cname("b3World_Step");
 extern fn bool WorldId.is_valid(self) @cname("b3World_IsValid");
 extern fn int world_count() @cname("b3GetWorldCount");
+
+<*
+ The high-water mark of worlds that have existed at once since the process started — not a limit.
+ `MAX_WORLDS` is the actual ceiling box3d enforces; this can read anywhere at or below it and never
+ tells a caller how many more worlds they are allowed to create.
+*>
 extern fn int max_world_count() @cname("b3GetMaxWorldCount");
 
 extern fn Vec3 WorldId.gravity(self) @cname("b3World_GetGravity");

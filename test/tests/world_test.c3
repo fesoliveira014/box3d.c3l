@@ -131,6 +131,116 @@ fn void an_empty_world_has_empty_counters() @test {
     assert(counters.contact_count == 0);
     assert(counters.joint_count == 0);
 
+    // The world's capacity is a usage high-water mark, not the definition's request, so an empty
+    // world reports zero across every field; a meaningful capacity test needs bodies.
     b3::Capacity capacity = world.max_capacity();
-    assert(capacity.static_body_count >= 0);
+    assert(capacity.static_shape_count == 0);
+    assert(capacity.dynamic_shape_count == 0);
+    assert(capacity.static_body_count == 0);
+    assert(capacity.dynamic_body_count == 0);
+    assert(capacity.contact_count == 0);
+}
+
+fn void every_settable_property_survives_a_round_trip() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    // Both thresholds default to 1.0, so five pairwise-distinct values are what actually catches a
+    // cross-wired setter/getter pair rather than passing by coincidence.
+    world.set_restitution_threshold(2.5);
+    world.set_hit_event_threshold(3.5);
+    world.set_maximum_linear_speed(500.0);
+    world.set_contact_recycle_distance(0.25);
+    world.set_worker_count(2);
+
+    assert(world.restitution_threshold() == 2.5);
+    assert(world.hit_event_threshold() == 3.5);
+    assert(world.maximum_linear_speed() == 500.0);
+    assert(world.contact_recycle_distance() == 0.25);
+    assert(world.worker_count() == 2);
+}
+
+fn void each_toggle_moves_only_its_own_flag() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    // All three default to true, so flipping one and checking only it changed is what actually
+    // catches a cross-wired toggle rather than passing by coincidence.
+    world.enable_continuous(false);
+    assert(!world.is_continuous_enabled());
+    assert(world.is_warm_starting_enabled());
+    assert(world.is_sleeping_enabled());
+
+    world.enable_warm_starting(false);
+    assert(!world.is_continuous_enabled());
+    assert(!world.is_warm_starting_enabled());
+    assert(world.is_sleeping_enabled());
+
+    world.enable_sleeping(false);
+    assert(!world.is_continuous_enabled());
+    assert(!world.is_warm_starting_enabled());
+    assert(!world.is_sleeping_enabled());
+}
+
+fn void user_data_round_trips() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    int sentinel;
+    world.set_user_data(&sentinel);
+    assert(world.user_data() == &sentinel);
+}
+
+fn void the_world_count_tracks_live_worlds() @test {
+    assert(b3::world_count() == 0);
+
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    assert(b3::world_count() == 1);
+    assert(b3::max_world_count() >= b3::world_count());
+
+    world.destroy();
+    assert(b3::world_count() == 0);
+}
+
+fn void a_stepped_world_reports_a_nonzero_profile() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    for (int i = 0; i < 10; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    b3::Profile profile = world.profile();
+    assert(profile.step > 0.0);
+}
+
+fn void speculative_and_static_tree_rebuild_leave_the_world_valid() @test {
+    int baseline = b3::byte_count();
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+
+    world.enable_speculative(true);
+    world.rebuild_static_tree();
+    world.step(1.0f / 60.0f, 4);
+    assert(world.is_valid());
+
+    world.destroy();
+    assert(b3::byte_count() == baseline);
+}
+
+fn void set_contact_tuning_takes_named_arguments() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    // set_contact_tuning cannot be round-tripped: box3d exposes no getter for these three values,
+    // and observing an effect needs shapes in contact. The ordering (hertz, damping ratio, contact
+    // speed) is verified against the header, not against a read-back; named arguments make the
+    // parameter order load-bearing at the call site instead of a silent positional assumption.
+    world.set_contact_tuning(hertz: 30.0, damping_ratio: 10.0, contact_speed: 3.0);
 }

@@ -14,7 +14,7 @@ b3Plane 16 4
 b3Version 12 4
 b3CosSin 8 4
 b3SegmentDistanceResult 32 4
-b3Capacity 20 4
-b3WorldDef 144 8 gravity=0 capacity=120 internalValue=140
+b3Capacity 20 4 staticShapeCount=0 dynamicShapeCount=4 staticBodyCount=8 dynamicBodyCount=12 contactCount=16
+b3WorldDef 144 8 gravity=0 restitutionThreshold=12 hitEventThreshold=16 contactHertz=20 contactDampingRatio=24 contactSpeed=28 maximumLinearSpeed=32 frictionCallback=40 restitutionCallback=48 enableSleep=56 enableContinuous=57 workerCount=60 enqueueTask=64 finishTask=72 userTaskContext=80 userData=88 createDebugShape=96 destroyDebugShape=104 userDebugShapeContext=112 capacity=120 internalValue=140
 b3Profile 92 4
 b3Counters 200 4

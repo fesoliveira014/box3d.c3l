@@ -47,17 +47,35 @@ cp "$LIB" "$OUT/libbox3d.a"
 echo "Installed $OUT/libbox3d.a"
 
 # --- layout probe -----------------------------------------------------------
-# scripts/abi-types.txt lists one C type name per line (blank lines and # comments ignored).
-# Every struct the binding declares in full belongs here; the $assert in box3d.c3i must match.
+# scripts/abi-types.txt lists one C type per line, optionally followed by a space and a
+# comma-separated field list: `b3BodyId index1,world0,generation` (blank lines and # comments
+# ignored). Every struct the binding declares in full belongs here; the $assert size pin in
+# box3d.c3i must match, and a listed field gets its own offsetof pin.
 [ -f "$TYPES" ] || { echo "No $TYPES yet — skipping layout probe."; exit 0; }
 
 PROBE="$VENDOR/build/abi_probe.c"
 {
     echo '#include <box3d/box3d.h>'
+    echo '#include <stddef.h>'
     echo '#include <stdio.h>'
     echo 'int main(void) {'
-    sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$TYPES" | while IFS= read -r t; do
-        printf '    printf("%%s %%zu %%zu\\n", "%s", sizeof(%s), _Alignof(%s));\n' "$t" "$t" "$t"
+    sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$TYPES" | while IFS= read -r line; do
+        t="${line%% *}"
+        if [ "$t" = "$line" ]; then
+            fields=""
+        else
+            fields="${line#* }"
+        fi
+        printf '    printf("%%s %%zu %%zu", "%s", sizeof(%s), _Alignof(%s));\n' "$t" "$t" "$t"
+        if [ -n "$fields" ]; then
+            saved_ifs="$IFS"
+            IFS=,
+            for f in $fields; do
+                printf '    printf(" %%s=%%zu", "%s", (size_t)offsetof(%s, %s));\n' "$f" "$t" "$f"
+            done
+            IFS="$saved_ifs"
+        fi
+        printf '%s\n' '    printf("\n");'
     done
     echo '    return 0;'
     echo '}'

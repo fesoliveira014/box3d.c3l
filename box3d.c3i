@@ -17,6 +17,8 @@ struct WorldId {
     ushort generation;
 }
 $assert WorldId::size == 4;
+$assert WorldId::members[0].offset == 0 && WorldId::members[0].name == "index1";
+$assert WorldId::members[1].offset == 2 && WorldId::members[1].name == "generation";
 
 struct BodyId {
     int index1;
@@ -24,6 +26,9 @@ struct BodyId {
     ushort generation;
 }
 $assert BodyId::size == 8;
+$assert BodyId::members[0].offset == 0 && BodyId::members[0].name == "index1";
+$assert BodyId::members[1].offset == 4 && BodyId::members[1].name == "world0";
+$assert BodyId::members[2].offset == 6 && BodyId::members[2].name == "generation";
 
 struct ShapeId {
     int index1;
@@ -31,6 +36,9 @@ struct ShapeId {
     ushort generation;
 }
 $assert ShapeId::size == 8;
+$assert ShapeId::members[0].offset == 0 && ShapeId::members[0].name == "index1";
+$assert ShapeId::members[1].offset == 4 && ShapeId::members[1].name == "world0";
+$assert ShapeId::members[2].offset == 6 && ShapeId::members[2].name == "generation";
 
 struct JointId {
     int index1;
@@ -38,6 +46,9 @@ struct JointId {
     ushort generation;
 }
 $assert JointId::size == 8;
+$assert JointId::members[0].offset == 0 && JointId::members[0].name == "index1";
+$assert JointId::members[1].offset == 4 && JointId::members[1].name == "world0";
+$assert JointId::members[2].offset == 6 && JointId::members[2].name == "generation";
 
 struct ContactId {
     int index1;
@@ -46,6 +57,10 @@ struct ContactId {
     uint generation;
 }
 $assert ContactId::size == 12;
+$assert ContactId::members[0].offset == 0 && ContactId::members[0].name == "index1";
+$assert ContactId::members[1].offset == 4 && ContactId::members[1].name == "world0";
+$assert ContactId::members[2].offset == 6 && ContactId::members[2].name == "padding";
+$assert ContactId::members[3].offset == 8 && ContactId::members[3].name == "generation";
 
 struct Transform {
     Vec3 p;
@@ -58,6 +73,8 @@ struct WorldTransform {
     Quat q;
 }
 $assert WorldTransform::size == 28;
+$assert WorldTransform::members[0].offset == 0 && WorldTransform::members[0].name == "p";
+$assert WorldTransform::members[1].offset == 12 && WorldTransform::members[1].name == "q";
 
 struct Aabb {
     Vec3 lower_bound;

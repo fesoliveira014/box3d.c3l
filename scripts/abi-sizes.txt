@@ -1,14 +1,14 @@
-b3WorldId 4 2
-b3BodyId 8 4
-b3ShapeId 8 4
-b3JointId 8 4
-b3ContactId 12 4
+b3WorldId 4 2 index1=0 generation=2
+b3BodyId 8 4 index1=0 world0=4 generation=6
+b3ShapeId 8 4 index1=0 world0=4 generation=6
+b3JointId 8 4 index1=0 world0=4 generation=6
+b3ContactId 12 4 index1=0 world0=4 padding=6 generation=8
 b3Vec3 12 4
 b3Pos 12 4
 b3Quat 16 4
 b3Matrix3 36 4
 b3Transform 28 4
-b3WorldTransform 28 4
+b3WorldTransform 28 4 p=0 q=12
 b3AABB 24 4
 b3Plane 16 4
 b3Version 12 4

@@ -32,3 +32,58 @@ fn void a_zeroed_definition_differs_from_a_default_one() @test {
 
     assert(zeroed.internal_value != def.internal_value);
 }
+
+fn void a_world_runs_and_then_reports_itself_invalid() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+
+    assert(world.is_valid());
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    world.destroy();
+    assert(!world.is_valid(), "a destroyed world must not report itself valid");
+}
+
+fn void a_definition_without_the_cookie_is_refused() @test {
+    b3::WorldDef zeroed;
+
+    if (catch err = b3::create_world(&zeroed)) {
+        assert(err == b3::INVALID_DEFINITION);
+        return;
+    }
+    assert(false, "box3d accepts a zeroed definition in a release build; the binding must not");
+}
+
+fn void a_world_releases_everything_it_allocated() @test {
+    int baseline = b3::byte_count();
+
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    assert(b3::byte_count() > baseline, "creating a world must allocate");
+
+    world.destroy();
+    assert(b3::byte_count() == baseline, "destroying it must release everything");
+}
+
+fn void the_world_limit_becomes_a_fault() @test {
+    int baseline = b3::byte_count();
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId[b3::MAX_WORLDS] worlds;
+
+    for (int i = 0; i < b3::MAX_WORLDS; i++) {
+        worlds[i] = b3::create_world(&def)!!;
+    }
+
+    if (catch err = b3::create_world(&def)) {
+        assert(err == b3::WORLD_LIMIT_REACHED);
+    } else {
+        assert(false, "the world past the limit must fault");
+    }
+
+    for (int i = 0; i < b3::MAX_WORLDS; i++) {
+        worlds[i].destroy();
+    }
+    assert(b3::byte_count() == baseline);
+}

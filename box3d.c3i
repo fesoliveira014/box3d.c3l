@@ -267,3 +267,10 @@ $assert Counters::size == 200;
 $assert Counters::alignment == 4;
 
 extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");
+
+extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld");
+extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
+extern fn void WorldId.step(self, float time_step, int sub_step_count) @cname("b3World_Step");
+extern fn bool WorldId.is_valid(self) @cname("b3World_IsValid");
+extern fn int world_count() @cname("b3GetWorldCount");
+extern fn int max_world_count() @cname("b3GetMaxWorldCount");

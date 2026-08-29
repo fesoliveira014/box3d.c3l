@@ -1,5 +1,17 @@
 module b3;
 
+import std::math::quaternion;
+
+alias Vec3 = float[<3>];
+alias Quat = Quaternionf;
+alias Matrix3 = Vec3[3];
+
+<*
+ A world position. Distinct from Vec3 so a position is never silently used as a direction.
+ box3d widens this to double in large-world mode, which this package does not build.
+*>
+typedef Pos = inline Vec3;
+
 struct WorldId {
     ushort index1;
     ushort generation;
@@ -34,3 +46,55 @@ struct ContactId {
     uint generation;
 }
 $assert ContactId::size == 12;
+
+struct Transform {
+    Vec3 p;
+    Quat q;
+}
+$assert Transform::size == 28;
+
+struct WorldTransform {
+    Pos p;
+    Quat q;
+}
+$assert WorldTransform::size == 28;
+
+struct Aabb {
+    Vec3 lower_bound;
+    Vec3 upper_bound;
+}
+$assert Aabb::size == 24;
+
+struct Plane {
+    Vec3 normal;
+    float offset;
+}
+$assert Plane::size == 16;
+
+struct CosSin {
+    float cosine;
+    float sine;
+}
+$assert CosSin::size == 8;
+
+struct SegmentDistanceResult {
+    Vec3 point1;
+    float fraction1;
+    Vec3 point2;
+    float fraction2;
+}
+$assert SegmentDistanceResult::size == 32;
+
+$assert Vec3::size == 12;
+$assert Pos::size == 12;
+$assert Quat::size == 16;
+$assert Matrix3::size == 36;
+
+extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
+extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
+extern fn SegmentDistanceResult segment_distance(Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2) @cname("b3SegmentDistance");
+extern fn bool is_valid_vec3(Vec3 a) @cname("b3IsValidVec3");
+extern fn bool is_valid_quat(Quat q) @cname("b3IsValidQuat");
+extern fn bool is_valid_transform(Transform a) @cname("b3IsValidTransform");
+extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
+extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");

@@ -21,14 +21,15 @@ The module is `b3`, after the manifest's `provides` name — not the directory n
 module takes the C library's own symbol prefix, so `b3CreateWorld` in C reads as `b3::create_world`
 in C3.
 
-Set the `BOX3D_CHECKED` feature to compile validity checks into every wrapper that takes an
-identifier, which turns a stale or destroyed handle into a fault instead of undefined behavior:
+The per-type `.checked()` macros (`WorldId.checked()`, `BodyId.checked()`, …) turn a null
+identifier into a named fault instead of undefined behavior; a caller opts in by routing an
+identifier through one explicitly. The `BOX3D_CHECKED` feature does not gate them — it only flips
+what `checked_access()` reports, for callers that want to branch on whether the build asked for
+checking:
 
 ```json
 { "features": [ "BOX3D_CHECKED" ] }
 ```
-
-Leave it off in a release build; the checks cost a call per operation.
 
 ## Building the native library
 
@@ -52,8 +53,9 @@ becomes a method on that type.
 Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
 sentinel.
 
-box3d's vectors, quaternions, and matrices map onto the C3 standard library's own types, so the
-usual operators and vector methods work directly on values that cross the ABI.
+box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
+operators and vector methods work directly on values that cross the ABI. Matrices are a plain
+array alias, `Vec3[3]`, not a standard-library matrix type.
 
 ## License
 

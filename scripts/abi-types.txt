@@ -1,0 +1,16 @@
+b3WorldId index1,generation
+b3BodyId index1,world0,generation
+b3ShapeId index1,world0,generation
+b3JointId index1,world0,generation
+b3ContactId index1,world0,padding,generation
+b3Vec3
+b3Pos
+b3Quat
+b3Matrix3
+b3Transform
+b3WorldTransform p,q
+b3AABB
+b3Plane
+b3Version
+b3CosSin
+b3SegmentDistanceResult

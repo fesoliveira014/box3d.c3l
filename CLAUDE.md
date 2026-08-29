@@ -12,10 +12,10 @@ C3 bindings for [box3d](https://github.com/erincatto/box3d) (Erin Catto's C17 3D
 - The build must stay on the **float ABI**: `BOX3D_DOUBLE_PRECISION` is a PUBLIC compile definition that switches `b3Vec3`/`b3Pos` and everything embedding them to double. The script forces it OFF; a build with it on silently corrupts every call.
 - `test/` — a standalone consumer project that exercises the bindings (`c3c build smoke` from `test/`). It is **not** part of the shipped library: `manifest.json` never references it, so consumers never inherit its deps. `test/libs/box3d.c3l` is a symlink to the repository root.
 
-There is no `project.json` and no standalone build here. To syntax-check a file in isolation:
+There is no `project.json` and no standalone build here. To syntax-check the package: `module b3` spans `box3d.c3i`, `box3d.c3`, and `box3d_check.c3`, so a single-file invocation cannot see the declarations its siblings provide — compile them together.
 
 ```sh
-c3c compile-only --no-obj box3d.c3i     # remove the obj/ dir it leaves behind
+c3c compile-only --no-obj box3d.c3i box3d.c3 box3d_check.c3     # remove the obj/ dir it leaves behind
 ```
 
 `manifest.json` sets no `sources`, and it does not need to: every `.c3` and `.c3i` at the package root is compiled into the library. Verified — a `fn` defined in `box3d.c3` is callable from `test/`, and the filename does not need to match the `provides` name.

@@ -5,17 +5,15 @@ description: Compile-check the b3 C3 binding bundle and build the test/ consumer
 
 # Verify the box3d bindings
 
-This package has no `project.json` and no standalone build, so verification is three steps: compile the binding files in isolation, compile a real consumer against them, then check the ABI pins.
+This package has no `project.json` and no standalone build, so verification is three steps: compile-check the binding package, compile a real consumer against them, then check the ABI pins.
 
-## 1. Compile-check each binding file in isolation
+## 1. Compile-check the binding package
+
+`module b3` spans `box3d.c3i`, `box3d.c3`, and `box3d_check.c3`, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation.
 
 ```sh
 cd /home/fesol/source/repos/box3d.c3l
-for f in *.c3i *.c3; do
-    [ -e "$f" ] || continue
-    echo "--- $f"
-    c3c compile-only --no-obj "$f" || echo "FAILED: $f"
-done
+c3c compile-only --no-obj box3d.c3i box3d.c3 box3d_check.c3
 rm -rf obj
 ```
 

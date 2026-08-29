@@ -1,0 +1,16 @@
+b3WorldId
+b3BodyId
+b3ShapeId
+b3JointId
+b3ContactId
+b3Vec3
+b3Pos
+b3Quat
+b3Matrix3
+b3Transform
+b3WorldTransform
+b3AABB
+b3Plane
+b3Version
+b3CosSin
+b3SegmentDistanceResult

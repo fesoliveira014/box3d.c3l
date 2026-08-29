@@ -1,1 +1,36 @@
 module b3;
+
+struct WorldId {
+    ushort index1;
+    ushort generation;
+}
+$assert WorldId::size == 4;
+
+struct BodyId {
+    int index1;
+    ushort world0;
+    ushort generation;
+}
+$assert BodyId::size == 8;
+
+struct ShapeId {
+    int index1;
+    ushort world0;
+    ushort generation;
+}
+$assert ShapeId::size == 8;
+
+struct JointId {
+    int index1;
+    ushort world0;
+    ushort generation;
+}
+$assert JointId::size == 8;
+
+struct ContactId {
+    int index1;
+    ushort world0;
+    short padding;
+    uint generation;
+}
+$assert ContactId::size == 12;

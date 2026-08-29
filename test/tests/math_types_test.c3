@@ -42,3 +42,41 @@ fn void the_standard_library_operators_apply_to_bound_vectors() @test {
     assert(b3::is_valid_vec3(sum));
     assert(a.dot(b) == 140.0);
 }
+
+fn void segment_distance_reports_each_field_of_two_skew_segments() @test {
+    b3::Vec3 p1 = { 0.0, 0.0, 0.0 };
+    b3::Vec3 q1 = { 6.0, 0.0, 0.0 };
+    b3::Vec3 p2 = { 1.0, -3.0, 1.0 };
+    b3::Vec3 q2 = { 1.0, 9.0, 1.0 };
+
+    b3::SegmentDistanceResult result = b3::segment_distance(p1, q1, p2, q2);
+
+    assert(result.point1.x == 1.0);
+    assert(result.point1.y == 0.0);
+    assert(result.point1.z == 0.0);
+    assert(result.fraction1 == 0.16666667f);
+    assert(result.point2.x == 1.0);
+    assert(result.point2.y == 0.0);
+    assert(result.point2.z == 1.0);
+    assert(result.fraction2 == 0.25);
+}
+
+fn void is_valid_aabb_requires_upper_at_or_above_lower() @test {
+    b3::Aabb ordered = { .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } };
+    b3::Aabb inverted = { .lower_bound = { 1.0, 1.0, 1.0 }, .upper_bound = { -1.0, -1.0, -1.0 } };
+
+    assert(b3::is_valid_aabb(ordered));
+    assert(!b3::is_valid_aabb(inverted));
+}
+
+fn void is_valid_plane_accepts_a_unit_normal_and_a_nonzero_offset() @test {
+    b3::Plane plane = { .normal = { 0.0, 1.0, 0.0 }, .offset = 3.5 };
+
+    assert(b3::is_valid_plane(plane));
+}
+
+fn void is_valid_transform_accepts_a_nonsymmetric_position_and_identity_rotation() @test {
+    b3::Transform xf = { .p = { 1.0, 2.0, 3.0 }, .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 } };
+
+    assert(b3::is_valid_transform(xf));
+}

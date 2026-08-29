@@ -14,3 +14,7 @@ b3Plane
 b3Version
 b3CosSin
 b3SegmentDistanceResult
+b3Capacity
+b3WorldDef gravity,capacity,internalValue
+b3Profile
+b3Counters

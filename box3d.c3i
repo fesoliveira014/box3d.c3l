@@ -159,3 +159,111 @@ extern fn void set_length_units_per_meter(float length_units) @cname("b3SetLengt
 extern fn float stall_threshold() @cname("b3GetStallThreshold");
 extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
 extern fn uint hash_bytes(uint hash, char* data, int count) @cname("b3Hash");
+
+alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float friction_b, ulong user_material_id_b);
+alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, float restitution_b, ulong user_material_id_b);
+alias TaskFn = fn void(void* task_context);
+alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, char* task_name);
+alias FinishTaskFn = fn void(void* user_task, void* user_context);
+alias CreateDebugShapeFn = fn void*(void* debug_shape, void* user_context);
+alias DestroyDebugShapeFn = fn void(void* user_shape, void* user_context);
+
+<*
+ The number of worlds box3d can hold at once. Mirrors B3_MAX_WORLDS in constants.h, which the C API
+ does not expose as a function.
+*>
+const int MAX_WORLDS = 128;
+
+struct Capacity {
+    int static_shape_count;
+    int dynamic_shape_count;
+    int static_body_count;
+    int dynamic_body_count;
+    int contact_count;
+}
+$assert Capacity::size == 20;
+$assert Capacity::alignment == 4;
+
+struct WorldDef {
+    Vec3 gravity;
+    float restitution_threshold;
+    float hit_event_threshold;
+    float contact_hertz;
+    float contact_damping_ratio;
+    float contact_speed;
+    float maximum_linear_speed;
+    FrictionFn friction_callback;
+    RestitutionFn restitution_callback;
+    bool enable_sleep;
+    bool enable_continuous;
+    uint worker_count;
+    EnqueueTaskFn enqueue_task;
+    FinishTaskFn finish_task;
+    void* user_task_context;
+    void* user_data;
+    CreateDebugShapeFn create_debug_shape;
+    DestroyDebugShapeFn destroy_debug_shape;
+    void* user_debug_shape_context;
+    Capacity capacity;
+    int internal_value;
+}
+$assert WorldDef::size == 144;
+$assert WorldDef::alignment == 8;
+$assert WorldDef::members[0].offset == 0 && WorldDef::members[0].name == "gravity";
+$assert WorldDef::members[19].offset == 120 && WorldDef::members[19].name == "capacity";
+$assert WorldDef::members[20].offset == 140 && WorldDef::members[20].name == "internal_value";
+
+struct Profile {
+    float step;
+    float pairs;
+    float collide;
+    float solve;
+    float solver_setup;
+    float constraints;
+    float prepare_constraints;
+    float integrate_velocities;
+    float warm_start;
+    float solve_impulses;
+    float integrate_positions;
+    float relax_impulses;
+    float apply_restitution;
+    float store_impulses;
+    float split_islands;
+    float transforms;
+    float sensor_hits;
+    float joint_events;
+    float hit_events;
+    float refit;
+    float bullets;
+    float sleep_islands;
+    float sensors;
+}
+$assert Profile::size == 92;
+$assert Profile::alignment == 4;
+
+struct Counters {
+    int body_count;
+    int shape_count;
+    int contact_count;
+    int joint_count;
+    int island_count;
+    int stack_used;
+    int arena_capacity;
+    int static_tree_height;
+    int tree_height;
+    int sat_call_count;
+    int sat_cache_hit_count;
+    int byte_count;
+    int task_count;
+    int[24] color_counts;
+    int[8] manifold_counts;
+    int awake_contact_count;
+    int recycled_contact_count;
+    int distance_iterations;
+    int push_back_iterations;
+    int root_iterations;
+}
+$assert Counters::size == 200;
+$assert Counters::alignment == 4;
+
+extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");

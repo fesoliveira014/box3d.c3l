@@ -38,13 +38,11 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 
 ## 3. Pin every declared struct's layout
 
-Add `$assert T::size == N;` immediately after each fully-declared struct (0.8.x syntax — `::size`, not `.sizeof`). Get `N` from the C side with a short probe compiled against the real header:
+Add `$assert T::size == N;` immediately after each fully-declared struct (0.8.x syntax — `::size`, not `.sizeof`). Get `N` from `scripts/build-box3d.sh`, never from an ad-hoc probe, so later drift is caught by `--check`:
 
-```c
-#include <box3d/box3d.h>
-#include <stdio.h>
-int main(void) { printf("%zu\n", sizeof(b3WorldDef)); }
-```
+1. Add the C type name to `scripts/abi-types.txt` (one type per line; append a comma-separated field list — `b3WorldDef fieldA,fieldB` — only if the binding also needs individual field offsets pinned, e.g. for a struct nothing bound reads field-by-field).
+2. Run `./scripts/build-box3d.sh --update` from the repository root.
+3. Read the size (and any field offsets) for the type out of `scripts/abi-sizes.txt`.
 
 A mismatch here is exactly the silent-corruption bug the assert exists to catch. Never guess `N`.
 
@@ -53,7 +51,7 @@ A mismatch here is exactly the silent-corruption bug the assert exists to catch.
 Callers use the wrapper layer, not the externs. It must not leak C's error conventions:
 
 - Fallible operations return an optional (`?`) with a named fault. **Never** return null-as-error, a sentinel, or a raw status code.
-- An invalid or zero ID coming back from C becomes a fault, not a value the caller has to test. Route it through `check()` in `box3d_check.c3`; add a new `faultdef` there (one fault per line) when no existing one fits.
+- An invalid or zero ID coming back from C becomes a fault, not a value the caller has to test. Route it through that type's `.checked()` macro in `box3d_check.c3` (add one, following `WorldId.checked()`/`BodyId.checked()`, if the type doesn't have one yet); add a new `faultdef` there (one fault per line) when no existing one fits.
 - Out-parameters become return values. A `pointer + count` pair becomes a slice.
 - Ownership follows `docs/style.md` §6: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup.
 

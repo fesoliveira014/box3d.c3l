@@ -14,3 +14,13 @@ Prerequisites: `linked-libs/linux-x64/libbox3d.a` must exist. Build it with
 c3c build smoke     # from this directory
 ./build/smoke
 ```
+
+`smoke` (`src/main.c3`) references nothing from the `b3` module, so it links even with a
+corrupted `@cname` — it does not prove the binding is wired correctly. The `unit` and
+`unit-checked` targets do: `tests/**` calls into bound functions, so they cannot link without
+every `@cname` resolving to the real symbol in the linked library.
+
+```sh
+c3c test unit             # BOX3D_CHECKED off
+c3c test unit-checked     # BOX3D_CHECKED on, exercises the .checked() path
+```

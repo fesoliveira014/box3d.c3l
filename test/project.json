@@ -14,6 +14,12 @@
       "type": "static-lib",
       "target": "linux-x64",
       "sources": [ "tests/**" ]
+    },
+    "unit-checked": {
+      "type": "static-lib",
+      "target": "linux-x64",
+      "sources": [ "tests/**" ],
+      "features": [ "BOX3D_CHECKED" ]
     }
   }
 }

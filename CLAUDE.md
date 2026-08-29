@@ -48,6 +48,7 @@ The `extern fn` layer stays faithful to C: raw return types, raw out-parameters,
 - An invalid/zero ID returned by C becomes a fault, not a value the caller has to test.
 - Out-parameters become return values; `_count`/pointer pairs become slices.
 - `defer` and `defer catch destroy` own cleanup.
+- Consumers opt into validity checking with `"features": [ "BOX3D_CHECKED" ]` in their `project.json`; wrappers test it with `$feat(BOX3D_CHECKED)`. Off by default, because a step touches thousands of bodies and the check is a call each. `$feature` is the deprecated spelling and warns on 0.8.3.
 
 ## Repo conventions
 

@@ -98,3 +98,31 @@ extern fn bool is_valid_quat(Quat q) @cname("b3IsValidQuat");
 extern fn bool is_valid_transform(Transform a) @cname("b3IsValidTransform");
 extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
 extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");
+
+alias AllocFn = fn void*(int size, int alignment);
+alias FreeFn = fn void(void* mem);
+alias AssertFn = fn int(char* condition, char* file_name, int line_number);
+alias LogFn = fn void(char* message);
+
+struct Version {
+    int major;
+    int minor;
+    int revision;
+}
+$assert Version::size == 12;
+
+extern fn Version get_version() @cname("b3GetVersion");
+extern fn bool is_double_precision() @cname("b3IsDoublePrecision");
+extern fn int byte_count() @cname("b3GetByteCount");
+extern fn void set_allocator(AllocFn alloc_fn, FreeFn free_fn) @cname("b3SetAllocator");
+extern fn void set_assert_fn(AssertFn assert_fn) @cname("b3SetAssertFcn");
+extern fn void set_log_fn(LogFn log_fn) @cname("b3SetLogFcn");
+extern fn ulong get_ticks() @cname("b3GetTicks");
+extern fn float milliseconds(ulong ticks) @cname("b3GetMilliseconds");
+extern fn void yield() @cname("b3Yield");
+extern fn void sleep(int milliseconds) @cname("b3Sleep");
+extern fn float length_units_per_meter() @cname("b3GetLengthUnitsPerMeter");
+extern fn void set_length_units_per_meter(float length_units) @cname("b3SetLengthUnitsPerMeter");
+extern fn float stall_threshold() @cname("b3GetStallThreshold");
+extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
+extern fn uint hash_bytes(uint hash, char* data, int count) @cname("b3Hash");

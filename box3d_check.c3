@@ -3,7 +3,8 @@ module b3;
 faultdef
     WORLD_LIMIT_REACHED,
     INVALID_DEFINITION,
-    INVALID_HANDLE;
+    INVALID_HANDLE,
+    DOUBLE_PRECISION_LIBRARY;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
 macro bool BodyId.is_null(self) => self.index1 == 0;
@@ -51,6 +52,14 @@ macro ShapeId? ShapeId.checked(self) {
  @return "the joint, or INVALID_HANDLE when box3d returned a null identifier"
 *>
 macro JointId? JointId.checked(self) {
+    if (self.is_null()) return INVALID_HANDLE~;
+    return self;
+}
+
+<*
+ @return "the contact, or INVALID_HANDLE when box3d returned a null identifier"
+*>
+macro ContactId? ContactId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
     return self;
 }

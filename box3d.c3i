@@ -17,6 +17,7 @@ struct WorldId {
     ushort generation;
 }
 $assert WorldId::size == 4;
+$assert WorldId::alignment == 2;
 $assert WorldId::members[0].offset == 0 && WorldId::members[0].name == "index1";
 $assert WorldId::members[1].offset == 2 && WorldId::members[1].name == "generation";
 
@@ -26,6 +27,7 @@ struct BodyId {
     ushort generation;
 }
 $assert BodyId::size == 8;
+$assert BodyId::alignment == 4;
 $assert BodyId::members[0].offset == 0 && BodyId::members[0].name == "index1";
 $assert BodyId::members[1].offset == 4 && BodyId::members[1].name == "world0";
 $assert BodyId::members[2].offset == 6 && BodyId::members[2].name == "generation";
@@ -36,6 +38,7 @@ struct ShapeId {
     ushort generation;
 }
 $assert ShapeId::size == 8;
+$assert ShapeId::alignment == 4;
 $assert ShapeId::members[0].offset == 0 && ShapeId::members[0].name == "index1";
 $assert ShapeId::members[1].offset == 4 && ShapeId::members[1].name == "world0";
 $assert ShapeId::members[2].offset == 6 && ShapeId::members[2].name == "generation";
@@ -46,6 +49,7 @@ struct JointId {
     ushort generation;
 }
 $assert JointId::size == 8;
+$assert JointId::alignment == 4;
 $assert JointId::members[0].offset == 0 && JointId::members[0].name == "index1";
 $assert JointId::members[1].offset == 4 && JointId::members[1].name == "world0";
 $assert JointId::members[2].offset == 6 && JointId::members[2].name == "generation";
@@ -57,6 +61,7 @@ struct ContactId {
     uint generation;
 }
 $assert ContactId::size == 12;
+$assert ContactId::alignment == 4;
 $assert ContactId::members[0].offset == 0 && ContactId::members[0].name == "index1";
 $assert ContactId::members[1].offset == 4 && ContactId::members[1].name == "world0";
 $assert ContactId::members[2].offset == 6 && ContactId::members[2].name == "padding";
@@ -67,12 +72,14 @@ struct Transform {
     Quat q;
 }
 $assert Transform::size == 28;
+$assert Transform::alignment == 4;
 
 struct WorldTransform {
     Pos p;
     Quat q;
 }
 $assert WorldTransform::size == 28;
+$assert WorldTransform::alignment == 4;
 $assert WorldTransform::members[0].offset == 0 && WorldTransform::members[0].name == "p";
 $assert WorldTransform::members[1].offset == 12 && WorldTransform::members[1].name == "q";
 
@@ -81,18 +88,21 @@ struct Aabb {
     Vec3 upper_bound;
 }
 $assert Aabb::size == 24;
+$assert Aabb::alignment == 4;
 
 struct Plane {
     Vec3 normal;
     float offset;
 }
 $assert Plane::size == 16;
+$assert Plane::alignment == 4;
 
 struct CosSin {
     float cosine;
     float sine;
 }
 $assert CosSin::size == 8;
+$assert CosSin::alignment == 4;
 
 struct SegmentDistanceResult {
     Vec3 point1;
@@ -101,11 +111,16 @@ struct SegmentDistanceResult {
     float fraction2;
 }
 $assert SegmentDistanceResult::size == 32;
+$assert SegmentDistanceResult::alignment == 4;
 
 $assert Vec3::size == 12;
+$assert Vec3::alignment == 4;
 $assert Pos::size == 12;
+$assert Pos::alignment == 4;
 $assert Quat::size == 16;
+$assert Quat::alignment == 4;
 $assert Matrix3::size == 36;
+$assert Matrix3::alignment == 4;
 
 extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
 extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
@@ -127,14 +142,15 @@ struct Version {
     int revision;
 }
 $assert Version::size == 12;
+$assert Version::alignment == 4;
 
-extern fn Version get_version() @cname("b3GetVersion");
+extern fn Version version() @cname("b3GetVersion");
 extern fn bool is_double_precision() @cname("b3IsDoublePrecision");
 extern fn int byte_count() @cname("b3GetByteCount");
 extern fn void set_allocator(AllocFn alloc_fn, FreeFn free_fn) @cname("b3SetAllocator");
 extern fn void set_assert_fn(AssertFn assert_fn) @cname("b3SetAssertFcn");
 extern fn void set_log_fn(LogFn log_fn) @cname("b3SetLogFcn");
-extern fn ulong get_ticks() @cname("b3GetTicks");
+extern fn ulong ticks() @cname("b3GetTicks");
 extern fn float milliseconds(ulong ticks) @cname("b3GetMilliseconds");
 extern fn void yield() @cname("b3Yield");
 extern fn void sleep(int milliseconds) @cname("b3Sleep");

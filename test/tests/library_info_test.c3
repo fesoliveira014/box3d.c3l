@@ -3,7 +3,7 @@ module b3_test;
 import b3;
 
 fn void the_vendored_library_is_the_expected_version() @test {
-    b3::Version version = b3::get_version();
+    b3::Version version = b3::version();
     assert(version.major == 0);
     assert(version.minor == 2);
     assert(version.revision == 0);

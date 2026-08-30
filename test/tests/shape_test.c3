@@ -513,7 +513,8 @@ fn void wind_pushes_a_shape_downwind() @test {
         world.step(1.0f / 60.0f, 4);
     }
 
-    assert(body.linear_velocity().x > 0.1, "a second of wind moves a falling sphere downwind");
+    float downwind = body.linear_velocity().x;
+    assert(downwind > 0.2 && downwind < 0.6, "a second of wind at speed 20 with drag 1 moves a falling sphere about 0.375 m/s downwind");
 }
 
 fn void a_box_comes_to_rest_on_static_ground() @test {

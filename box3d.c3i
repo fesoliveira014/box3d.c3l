@@ -421,6 +421,11 @@ $assert BodyDef::members[18].offset == 100 && BodyDef::members[18].name == "inte
 
 extern fn BodyDef default_body_def() @cname("b3DefaultBodyDef");
 
+<*
+ Raw body constructor. Bypasses WorldId.create_body's definition-cookie guard, so it is private
+ to the module — box3d_body.c3's WorldId.create_body is the only caller and is the only public
+ way to a live body.
+*>
 extern fn BodyId create_body_raw(WorldId world_id, BodyDef* def) @cname("b3CreateBody") @private;
 extern fn void BodyId.destroy(self) @cname("b3DestroyBody");
 extern fn bool BodyId.is_valid(self) @cname("b3Body_IsValid");

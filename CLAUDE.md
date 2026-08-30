@@ -11,6 +11,7 @@ C3 bindings for [box3d](https://github.com/erincatto/box3d) (Erin Catto's C17 3D
 - `vendor/box3d/` — the upstream C library as a git submodule. `scripts/build-box3d.sh` configures and builds it with CMake into `linked-libs/<target>/libbox3d.a`; `--check` fails the build when a probed struct layout drifts from `scripts/abi-sizes.txt`, and `--update` rewrites that file. Only `linux-x64` is built today.
 - The build must stay on the **float ABI**: `BOX3D_DOUBLE_PRECISION` is a PUBLIC compile definition that switches `b3Vec3`/`b3Pos` and everything embedding them to double. The script forces it OFF; a build with it on silently corrupts every call.
 - `test/` — a standalone consumer project that exercises the bindings (`c3c build smoke` from `test/`). It is **not** part of the shipped library: `manifest.json` never references it, so consumers never inherit its deps. `test/libs/box3d.c3l` is a symlink to the repository root.
+- **A single direct test failure plus a burst of unrelated `world_count()`/`byte_count()` failures elsewhere in the same run is the signature of one leaked world, not several independent regressions.** C3's panic path skips `defer`, so a test that panics after creating a world it has not yet destroyed leaks that world for the rest of the process, and every later test that counts live worlds or bytes fails against a shifted baseline.
 
 There is no `project.json` and no standalone build here. To syntax-check the package: `module b3` spans every `.c3`/`.c3i` file at the package root, so a single-file invocation cannot see the declarations its siblings provide — compile them together, with a glob so the next file added is never silently skipped.
 
@@ -41,9 +42,10 @@ Do not assume `docs/style.md`'s `c3c build`/`c3c test` commands run in *this* re
 - **Never bind from memory.** Read the actual declaration in the submodule's `include/box3d/*.h` before writing C3. A wrong parameter or return type is a silent cross-ABI memory bug.
 - **Bind incrementally** — only the surface actually needed. The binding grows over time.
 
-Two deliberate, recorded carve-outs from `docs/style.md`, so they are not re-flagged as drift:
+Three deliberate, recorded carve-outs from `docs/style.md`, so they are not re-flagged as drift:
 
 - **§6 (`create_x`/`destroy_x` free functions) does not apply to world destruction.** `create_world` stays a free function — it has no receiver yet — but destruction is `world.destroy()`, a method, not `destroy_world()`. The C API is handle-oriented: `b3DestroyWorld` takes the same `b3WorldId` every other world method does, and a method reads the same way every other world operation does.
+- **§6 also does not apply once a creation function has a natural receiver at call time.** `world.create_body(def)` is a method, not `create_body(world, def)`, because the world it belongs to already exists when it is called — `create_world` stays free only because that carve-out does not apply to it: there is no world yet to receive the call. The same test governs the shape and joint constructors that follow: `body.create_shape(...)`, `world.create_joint(...)` become methods on whatever object already exists at the call site, and only a constructor with no existing receiver stays a free function.
 - **§3's file-order rule (typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions) does not apply within `box3d.c3i`.** Declarations there are grouped by area (math, base hooks, world, …) instead, so a reader looking for one area finds every kind of declaration for it together rather than scattered by declaration kind.
 
 ## Wrappers are where errors become faults

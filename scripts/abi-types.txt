@@ -29,7 +29,7 @@ b3ShapeDef name,userData,materials,materialCount,baseMaterial,density,explosionS
 b3Sphere center,radius
 b3Capsule center1,center2,radius
 b3HullVertex
-b3HullHalfEdge
+b3HullHalfEdge next,twin,origin,face
 b3HullFace
 b3HullData version,hash,aabb,surfaceArea,volume,innerRadius,center,centralInertia,vertexCount,vertexOffset,pointOffset,edgeCount,edgeOffset,faceCount,planeOffset,faceOffset,soaVertexOffset,soaNormalOffset,byteCount
 b3BoxHull base,boxVertices,boxPoints,boxEdges,boxPlanes,boxFaces,padding,vx,vy,vz,nx,ny,nz

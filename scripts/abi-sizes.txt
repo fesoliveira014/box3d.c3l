@@ -29,7 +29,7 @@ b3ShapeDef 120 8 name=0 userData=8 materials=16 materialCount=24 baseMaterial=32
 b3Sphere 16 4 center=0 radius=12
 b3Capsule 28 4 center1=0 center2=12 radius=24
 b3HullVertex 1 1
-b3HullHalfEdge 4 1
+b3HullHalfEdge 4 1 next=0 twin=1 origin=2 face=3
 b3HullFace 1 1
 b3HullData 144 8 version=0 hash=8 aabb=16 surfaceArea=40 volume=44 innerRadius=48 center=52 centralInertia=64 vertexCount=100 vertexOffset=104 pointOffset=108 edgeCount=112 edgeOffset=116 faceCount=120 planeOffset=124 faceOffset=128 soaVertexOffset=132 soaNormalOffset=136 byteCount=140
 b3BoxHull 640 8 base=0 boxVertices=144 boxPoints=152 boxEdges=248 boxPlanes=344 boxFaces=440 padding=446 vx=448 vy=480 vz=512 nx=544 ny=576 nz=608

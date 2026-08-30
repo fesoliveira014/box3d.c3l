@@ -226,3 +226,80 @@ fn void a_world_with_shapes_releases_everything_it_allocated() @test {
     world.destroy();
     assert(b3::byte_count() == baseline, "a destroyed world releases every shape it owned");
 }
+
+fn void shape_properties_round_trip() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+
+    shape.set_friction(0.25);
+    shape.set_restitution(0.5);
+    shape.set_density(2000.0, true);
+    shape.set_name("hull plating");
+    assert(shape.friction() == 0.25);
+    assert(shape.restitution() == 0.5);
+    assert(shape.density() == 2000.0);
+    assert(shape.name().str_view() == "hull plating");
+
+    b3::Filter filter = b3::default_filter();
+    filter.category_bits = 4;
+    filter.mask_bits = 12;
+    filter.group_index = -3;
+    shape.set_filter(filter, true);
+    b3::Filter back = shape.filter();
+    assert(back.category_bits == 4);
+    assert(back.mask_bits == 12);
+    assert(back.group_index == -3);
+
+    b3::SurfaceMaterial material = b3::default_surface_material();
+    material.friction = 0.125;
+    material.rolling_resistance = 0.25;
+    material.user_material_id = 7;
+    shape.set_surface_material(material);
+    assert(shape.surface_material().friction == 0.125);
+    assert(shape.surface_material().rolling_resistance == 0.25);
+    assert(shape.surface_material().user_material_id == 7);
+
+    int marker = 42;
+    shape.set_user_data(&marker);
+    assert(*(int*)shape.user_data() == 42);
+}
+
+fn void the_shape_event_flags_start_disabled_and_round_trip() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+
+    assert(!shape.are_sensor_events_enabled());
+    assert(!shape.are_contact_events_enabled());
+    assert(!shape.are_hit_events_enabled());
+    assert(!shape.are_pre_solve_events_enabled());
+
+    shape.enable_sensor_events(true);
+    shape.enable_contact_events(true);
+    shape.enable_hit_events(true);
+    shape.enable_pre_solve_events(true);
+    assert(shape.are_sensor_events_enabled());
+    assert(shape.are_contact_events_enabled());
+    assert(shape.are_hit_events_enabled());
+    assert(shape.are_pre_solve_events_enabled());
+
+    shape.enable_contact_events(false);
+    assert(!shape.are_contact_events_enabled());
+}

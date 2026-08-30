@@ -6,7 +6,7 @@ fn void a_null_identifier_becomes_a_fault() @test {
     b3::WorldId world;
 
     if (catch err = world.checked()) {
-        assert(err == b3::WORLD_LIMIT_REACHED);
+        assert(err == b3::INVALID_HANDLE);
         return;
     }
     assert(false, "a null world identifier must not be accepted");
@@ -24,4 +24,14 @@ fn void the_checked_switch_reports_the_build() @test {
     $else
         assert(!b3::checked_access());
     $endif
+}
+
+fn void a_null_contact_identifier_becomes_a_fault() @test {
+    b3::ContactId contact;
+
+    if (catch err = contact.checked()) {
+        assert(err == b3::INVALID_HANDLE);
+        return;
+    }
+    assert(false, "a null contact identifier must not be accepted");
 }

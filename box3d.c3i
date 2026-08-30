@@ -17,6 +17,7 @@ struct WorldId {
     ushort generation;
 }
 $assert WorldId::size == 4;
+$assert WorldId::alignment == 2;
 $assert WorldId::members[0].offset == 0 && WorldId::members[0].name == "index1";
 $assert WorldId::members[1].offset == 2 && WorldId::members[1].name == "generation";
 
@@ -26,6 +27,7 @@ struct BodyId {
     ushort generation;
 }
 $assert BodyId::size == 8;
+$assert BodyId::alignment == 4;
 $assert BodyId::members[0].offset == 0 && BodyId::members[0].name == "index1";
 $assert BodyId::members[1].offset == 4 && BodyId::members[1].name == "world0";
 $assert BodyId::members[2].offset == 6 && BodyId::members[2].name == "generation";
@@ -36,6 +38,7 @@ struct ShapeId {
     ushort generation;
 }
 $assert ShapeId::size == 8;
+$assert ShapeId::alignment == 4;
 $assert ShapeId::members[0].offset == 0 && ShapeId::members[0].name == "index1";
 $assert ShapeId::members[1].offset == 4 && ShapeId::members[1].name == "world0";
 $assert ShapeId::members[2].offset == 6 && ShapeId::members[2].name == "generation";
@@ -46,6 +49,7 @@ struct JointId {
     ushort generation;
 }
 $assert JointId::size == 8;
+$assert JointId::alignment == 4;
 $assert JointId::members[0].offset == 0 && JointId::members[0].name == "index1";
 $assert JointId::members[1].offset == 4 && JointId::members[1].name == "world0";
 $assert JointId::members[2].offset == 6 && JointId::members[2].name == "generation";
@@ -57,6 +61,7 @@ struct ContactId {
     uint generation;
 }
 $assert ContactId::size == 12;
+$assert ContactId::alignment == 4;
 $assert ContactId::members[0].offset == 0 && ContactId::members[0].name == "index1";
 $assert ContactId::members[1].offset == 4 && ContactId::members[1].name == "world0";
 $assert ContactId::members[2].offset == 6 && ContactId::members[2].name == "padding";
@@ -67,12 +72,14 @@ struct Transform {
     Quat q;
 }
 $assert Transform::size == 28;
+$assert Transform::alignment == 4;
 
 struct WorldTransform {
     Pos p;
     Quat q;
 }
 $assert WorldTransform::size == 28;
+$assert WorldTransform::alignment == 4;
 $assert WorldTransform::members[0].offset == 0 && WorldTransform::members[0].name == "p";
 $assert WorldTransform::members[1].offset == 12 && WorldTransform::members[1].name == "q";
 
@@ -81,18 +88,21 @@ struct Aabb {
     Vec3 upper_bound;
 }
 $assert Aabb::size == 24;
+$assert Aabb::alignment == 4;
 
 struct Plane {
     Vec3 normal;
     float offset;
 }
 $assert Plane::size == 16;
+$assert Plane::alignment == 4;
 
 struct CosSin {
     float cosine;
     float sine;
 }
 $assert CosSin::size == 8;
+$assert CosSin::alignment == 4;
 
 struct SegmentDistanceResult {
     Vec3 point1;
@@ -101,11 +111,16 @@ struct SegmentDistanceResult {
     float fraction2;
 }
 $assert SegmentDistanceResult::size == 32;
+$assert SegmentDistanceResult::alignment == 4;
 
 $assert Vec3::size == 12;
+$assert Vec3::alignment == 4;
 $assert Pos::size == 12;
+$assert Pos::alignment == 4;
 $assert Quat::size == 16;
+$assert Quat::alignment == 4;
 $assert Matrix3::size == 36;
+$assert Matrix3::alignment == 4;
 
 extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
 extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
@@ -127,14 +142,15 @@ struct Version {
     int revision;
 }
 $assert Version::size == 12;
+$assert Version::alignment == 4;
 
-extern fn Version get_version() @cname("b3GetVersion");
+extern fn Version version() @cname("b3GetVersion");
 extern fn bool is_double_precision() @cname("b3IsDoublePrecision");
 extern fn int byte_count() @cname("b3GetByteCount");
 extern fn void set_allocator(AllocFn alloc_fn, FreeFn free_fn) @cname("b3SetAllocator");
 extern fn void set_assert_fn(AssertFn assert_fn) @cname("b3SetAssertFcn");
 extern fn void set_log_fn(LogFn log_fn) @cname("b3SetLogFcn");
-extern fn ulong get_ticks() @cname("b3GetTicks");
+extern fn ulong ticks() @cname("b3GetTicks");
 extern fn float milliseconds(ulong ticks) @cname("b3GetMilliseconds");
 extern fn void yield() @cname("b3Yield");
 extern fn void sleep(int milliseconds) @cname("b3Sleep");
@@ -143,3 +159,181 @@ extern fn void set_length_units_per_meter(float length_units) @cname("b3SetLengt
 extern fn float stall_threshold() @cname("b3GetStallThreshold");
 extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
 extern fn uint hash_bytes(uint hash, char* data, int count) @cname("b3Hash");
+
+alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float friction_b, ulong user_material_id_b);
+alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, float restitution_b, ulong user_material_id_b);
+alias TaskFn = fn void(void* task_context);
+alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, char* task_name);
+alias FinishTaskFn = fn void(void* user_task, void* user_context);
+alias CreateDebugShapeFn = fn void*(void* debug_shape, void* user_context);
+alias DestroyDebugShapeFn = fn void(void* user_shape, void* user_context);
+
+<*
+ The number of worlds box3d can hold at once. Mirrors B3_MAX_WORLDS in constants.h, which the C API
+ does not expose as a function.
+*>
+const int MAX_WORLDS = 128;
+
+struct Capacity {
+    int static_shape_count;
+    int dynamic_shape_count;
+    int static_body_count;
+    int dynamic_body_count;
+    int contact_count;
+}
+$assert Capacity::size == 20;
+$assert Capacity::alignment == 4;
+$assert Capacity::members[0].offset == 0 && Capacity::members[0].name == "static_shape_count";
+$assert Capacity::members[1].offset == 4 && Capacity::members[1].name == "dynamic_shape_count";
+$assert Capacity::members[2].offset == 8 && Capacity::members[2].name == "static_body_count";
+$assert Capacity::members[3].offset == 12 && Capacity::members[3].name == "dynamic_body_count";
+$assert Capacity::members[4].offset == 16 && Capacity::members[4].name == "contact_count";
+
+struct WorldDef {
+    Vec3 gravity;
+    float restitution_threshold;
+    float hit_event_threshold;
+    float contact_hertz;
+    float contact_damping_ratio;
+    float contact_speed;
+    float maximum_linear_speed;
+    FrictionFn friction_callback;
+    RestitutionFn restitution_callback;
+    bool enable_sleep;
+    bool enable_continuous;
+    uint worker_count;
+    EnqueueTaskFn enqueue_task;
+    FinishTaskFn finish_task;
+    void* user_task_context;
+    void* user_data;
+    CreateDebugShapeFn create_debug_shape;
+    DestroyDebugShapeFn destroy_debug_shape;
+    void* user_debug_shape_context;
+    Capacity capacity;
+    int internal_value;
+}
+$assert WorldDef::size == 144;
+$assert WorldDef::alignment == 8;
+$assert WorldDef::members[0].offset == 0 && WorldDef::members[0].name == "gravity";
+$assert WorldDef::members[1].offset == 12 && WorldDef::members[1].name == "restitution_threshold";
+$assert WorldDef::members[2].offset == 16 && WorldDef::members[2].name == "hit_event_threshold";
+$assert WorldDef::members[3].offset == 20 && WorldDef::members[3].name == "contact_hertz";
+$assert WorldDef::members[4].offset == 24 && WorldDef::members[4].name == "contact_damping_ratio";
+$assert WorldDef::members[5].offset == 28 && WorldDef::members[5].name == "contact_speed";
+$assert WorldDef::members[6].offset == 32 && WorldDef::members[6].name == "maximum_linear_speed";
+$assert WorldDef::members[7].offset == 40 && WorldDef::members[7].name == "friction_callback";
+$assert WorldDef::members[8].offset == 48 && WorldDef::members[8].name == "restitution_callback";
+$assert WorldDef::members[9].offset == 56 && WorldDef::members[9].name == "enable_sleep";
+$assert WorldDef::members[10].offset == 57 && WorldDef::members[10].name == "enable_continuous";
+$assert WorldDef::members[11].offset == 60 && WorldDef::members[11].name == "worker_count";
+$assert WorldDef::members[12].offset == 64 && WorldDef::members[12].name == "enqueue_task";
+$assert WorldDef::members[13].offset == 72 && WorldDef::members[13].name == "finish_task";
+$assert WorldDef::members[14].offset == 80 && WorldDef::members[14].name == "user_task_context";
+$assert WorldDef::members[15].offset == 88 && WorldDef::members[15].name == "user_data";
+$assert WorldDef::members[16].offset == 96 && WorldDef::members[16].name == "create_debug_shape";
+$assert WorldDef::members[17].offset == 104 && WorldDef::members[17].name == "destroy_debug_shape";
+$assert WorldDef::members[18].offset == 112 && WorldDef::members[18].name == "user_debug_shape_context";
+$assert WorldDef::members[19].offset == 120 && WorldDef::members[19].name == "capacity";
+$assert WorldDef::members[20].offset == 140 && WorldDef::members[20].name == "internal_value";
+
+struct Profile {
+    float step;
+    float pairs;
+    float collide;
+    float solve;
+    float solver_setup;
+    float constraints;
+    float prepare_constraints;
+    float integrate_velocities;
+    float warm_start;
+    float solve_impulses;
+    float integrate_positions;
+    float relax_impulses;
+    float apply_restitution;
+    float store_impulses;
+    float split_islands;
+    float transforms;
+    float sensor_hits;
+    float joint_events;
+    float hit_events;
+    float refit;
+    float bullets;
+    float sleep_islands;
+    float sensors;
+}
+$assert Profile::size == 92;
+$assert Profile::alignment == 4;
+
+struct Counters {
+    int body_count;
+    int shape_count;
+    int contact_count;
+    int joint_count;
+    int island_count;
+    int stack_used;
+    int arena_capacity;
+    int static_tree_height;
+    int tree_height;
+    int sat_call_count;
+    int sat_cache_hit_count;
+    int byte_count;
+    int task_count;
+    int[24] color_counts;
+    int[8] manifold_counts;
+    int awake_contact_count;
+    int recycled_contact_count;
+    int distance_iterations;
+    int push_back_iterations;
+    int root_iterations;
+}
+$assert Counters::size == 200;
+$assert Counters::alignment == 4;
+
+extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");
+
+<*
+ Raw world constructor. Bypasses create_world's definition-cookie guard, so it is private to the
+ module — box3d_world.c3's create_world is the only caller and is the only public way to a live
+ world.
+*>
+extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld") @private;
+extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
+extern fn void WorldId.step(self, float time_step, int sub_step_count) @cname("b3World_Step");
+extern fn bool WorldId.is_valid(self) @cname("b3World_IsValid");
+extern fn int world_count() @cname("b3GetWorldCount");
+
+<*
+ The high-water mark of worlds that have existed at once since the process started — not a limit.
+ `MAX_WORLDS` is the actual ceiling box3d enforces; this can read anywhere at or below it and never
+ tells a caller how many more worlds they are allowed to create.
+*>
+extern fn int max_world_count() @cname("b3GetMaxWorldCount");
+
+extern fn Vec3 WorldId.gravity(self) @cname("b3World_GetGravity");
+extern fn void WorldId.set_gravity(self, Vec3 gravity) @cname("b3World_SetGravity");
+extern fn float WorldId.restitution_threshold(self) @cname("b3World_GetRestitutionThreshold");
+extern fn void WorldId.set_restitution_threshold(self, float value) @cname("b3World_SetRestitutionThreshold");
+extern fn float WorldId.hit_event_threshold(self) @cname("b3World_GetHitEventThreshold");
+extern fn void WorldId.set_hit_event_threshold(self, float value) @cname("b3World_SetHitEventThreshold");
+extern fn float WorldId.maximum_linear_speed(self) @cname("b3World_GetMaximumLinearSpeed");
+extern fn void WorldId.set_maximum_linear_speed(self, float maximum_linear_speed) @cname("b3World_SetMaximumLinearSpeed");
+extern fn float WorldId.contact_recycle_distance(self) @cname("b3World_GetContactRecycleDistance");
+extern fn void WorldId.set_contact_recycle_distance(self, float recycle_distance) @cname("b3World_SetContactRecycleDistance");
+extern fn void WorldId.set_contact_tuning(self, float hertz, float damping_ratio, float contact_speed) @cname("b3World_SetContactTuning");
+extern fn void WorldId.enable_sleeping(self, bool flag) @cname("b3World_EnableSleeping");
+extern fn bool WorldId.is_sleeping_enabled(self) @cname("b3World_IsSleepingEnabled");
+extern fn void WorldId.enable_continuous(self, bool flag) @cname("b3World_EnableContinuous");
+extern fn bool WorldId.is_continuous_enabled(self) @cname("b3World_IsContinuousEnabled");
+extern fn void WorldId.enable_warm_starting(self, bool flag) @cname("b3World_EnableWarmStarting");
+extern fn bool WorldId.is_warm_starting_enabled(self) @cname("b3World_IsWarmStartingEnabled");
+extern fn void WorldId.enable_speculative(self, bool flag) @cname("b3World_EnableSpeculative");
+extern fn int WorldId.worker_count(self) @cname("b3World_GetWorkerCount");
+extern fn void WorldId.set_worker_count(self, int count) @cname("b3World_SetWorkerCount");
+extern fn int WorldId.awake_body_count(self) @cname("b3World_GetAwakeBodyCount");
+extern fn Profile WorldId.profile(self) @cname("b3World_GetProfile");
+extern fn Counters WorldId.counters(self) @cname("b3World_GetCounters");
+extern fn Capacity WorldId.max_capacity(self) @cname("b3World_GetMaxCapacity");
+extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
+extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
+extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
+extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");

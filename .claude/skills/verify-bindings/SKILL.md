@@ -9,11 +9,11 @@ This package has no `project.json` and no standalone build, so verification is f
 
 ## 1. Compile-check the binding package
 
-`module b3` spans `box3d.c3i`, `box3d.c3`, and `box3d_check.c3`, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation.
+`module b3` spans every `.c3`/`.c3i` file at the package root, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation, with a glob so the next file added is never silently skipped.
 
 ```sh
 cd /home/fesol/source/repos/box3d.c3l
-c3c compile-only --no-obj box3d.c3i box3d.c3 box3d_check.c3
+c3c compile-only --no-obj *.c3i *.c3
 rm -rf obj
 ```
 
@@ -39,7 +39,7 @@ c3c test unit
 c3c test unit-checked
 ```
 
-This is the real linkage gate: `test/tests/**` calls into bound functions, so `unit` cannot link without every `@cname` resolving to the real symbol in `linked-libs/linux-x64/libbox3d.a`. `unit-checked` builds the same tests with the `BOX3D_CHECKED` feature on, exercising the `.checked()` path. Neither step 1 nor step 2 catches a wrong `@cname` or a mismatched ABI — only this step does.
+This gates every `@cname` that a test actually calls — `unit` cannot link if a called binding's `@cname` fails to resolve to the real symbol in `linked-libs/linux-x64/libbox3d.a`. It does *not* gate a `@cname` nothing calls: an `extern fn` linked but never invoked emits no undefined reference, so a wrong symbol on an uncalled binding still links and still passes. The rule that keeps this gate meaningful: every bound symbol should be called by at least one test. `unit-checked` builds the same tests with the `BOX3D_CHECKED` feature on, exercising the `.checked()` path. Neither step 1 nor step 2 catches a wrong `@cname` — only a test that calls the binding does.
 
 ## 4. Check the ABI pins
 

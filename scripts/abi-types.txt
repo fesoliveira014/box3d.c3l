@@ -14,3 +14,7 @@ b3Plane
 b3Version
 b3CosSin
 b3SegmentDistanceResult
+b3Capacity staticShapeCount,dynamicShapeCount,staticBodyCount,dynamicBodyCount,contactCount
+b3WorldDef gravity,restitutionThreshold,hitEventThreshold,contactHertz,contactDampingRatio,contactSpeed,maximumLinearSpeed,frictionCallback,restitutionCallback,enableSleep,enableContinuous,workerCount,enqueueTask,finishTask,userTaskContext,userData,createDebugShape,destroyDebugShape,userDebugShapeContext,capacity,internalValue
+b3Profile
+b3Counters

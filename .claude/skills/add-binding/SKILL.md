@@ -25,10 +25,12 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 - **Functions** → `snake_case`. A `b3Type_Method` C name becomes method syntax on that type; a bare `b3Verb...` constructor/destructor becomes a method on the type it produces or consumes where that reads naturally, otherwise a free function.
 
   ```c3
-  extern fn WorldId create_world(WorldDef* def) @cname("b3CreateWorld");
+  extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld") @private;
   extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
   extern fn void BodyId.set_transform(self, Pos position, Quat rotation) @cname("b3Body_SetTransform");
   ```
+
+  When a wrapper in `box3d.c3`/`box3d_world.c3` takes the plain name a C symbol maps to (`create_world`), the extern it wraps takes a `_raw` suffix (`create_world_raw`) and is marked `@private` — the wrapper is the only public way to reach it, so a consumer cannot go around whatever validation the wrapper does.
 
 - **Types** → `PascalCase`, `b3` stripped. The IDs (`b3WorldId`, `b3BodyId`, `b3ShapeId`, `b3JointId`, `b3ContactId`) are **value structs passed and returned by value**, not opaque pointers — declare their fields exactly as the header has them. Use `@opaque` or `inline void*` only for a type that genuinely is a pointer handle in C (`b3RecPlayer*` and the like), and only after confirming it in the header.
 - **Structs C3 reads** are declared in full, field for field, in header order.
@@ -46,9 +48,11 @@ Add `$assert T::size == N;` immediately after each fully-declared struct (0.8.x 
 
 A mismatch here is exactly the silent-corruption bug the assert exists to catch. Never guess `N`.
 
-## 4. Add the wrapper in `box3d.c3` — this is where errors become faults
+## 4. Add the wrapper — this is where errors become faults
 
-Callers use the wrapper layer, not the externs. It must not leak C's error conventions:
+Callers use the wrapper layer, not the externs. Each area keeps its own wrapper file: `box3d.c3`
+holds the base hooks, `box3d_world.c3` the world wrapper; a new area gets its own
+`box3d_<area>.c3`, following `box3d_world.c3`. The wrapper must not leak C's error conventions:
 
 - Fallible operations return an optional (`?`) with a named fault. **Never** return null-as-error, a sentinel, or a raw status code.
 - An invalid or zero ID coming back from C becomes a fault, not a value the caller has to test. Route it through that type's `.checked()` macro in `box3d_check.c3` (add one, following `WorldId.checked()`/`BodyId.checked()`, if the type doesn't have one yet); add a new `faultdef` there (one fault per line) when no existing one fits.
@@ -59,10 +63,10 @@ Struct initializers use `.field = value` for every supplied field; calls with �
 
 ## 5. Verify
 
-`module b3` spans `box3d.c3i`, `box3d.c3`, and `box3d_check.c3`, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation.
+`module b3` spans every `.c3`/`.c3i` file at the package root, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation.
 
 ```sh
-c3c compile-only --no-obj box3d.c3i box3d.c3 box3d_check.c3
+c3c compile-only --no-obj *.c3i *.c3
 ```
 
 Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.3 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.

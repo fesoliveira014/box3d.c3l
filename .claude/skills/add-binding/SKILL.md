@@ -1,6 +1,6 @@
 ---
 name: add-binding
-description: Bind a box3d C symbol into the b3 C3 module across the three layers (extern in box3d.c3i, optional-returning wrapper in box3d.c3, faults in box3d_check.c3). Use when binding a new box3d function, ID type, struct, or enum — e.g. "bind b3CreateWorld", "/add-binding b3Body_SetTransform", "bind the shape API". Reads the real box3d header for exact signatures, then applies this repo's prefix-stripping, method-syntax, @cname, $assert layout-pin, and error-as-fault rules.
+description: Bind a box3d C symbol into the b3 C3 module across the three layers (extern in box3d.c3i, optional-returning wrapper in box3d.c3 or a per-area file like box3d_body.c3, faults in box3d_check.c3). Use when binding a new box3d function, ID type, struct, or enum — e.g. "bind b3CreateWorld", "/add-binding b3Body_SetTransform", "bind the shape API". Reads the real box3d header for exact signatures, then applies this repo's prefix-stripping, method-syntax, @cname, $assert layout-pin, and error-as-fault rules.
 ---
 
 # Add a box3d binding
@@ -36,7 +36,7 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 - **Structs C3 reads** are declared in full, field for field, in header order.
 - **Constants / enum values** → `SCREAMING_SNAKE_CASE`, prefix stripped. A closed C set becomes a C3 `enum`; a flag-bits set becomes a `bitstruct X : uint { bool field : 0; ... }`.
 - Keep the extern layer faithful to C: raw return types, raw out-parameters, no interpretation. No `@builtin` on any declaration.
-- File order per `docs/style.md`: typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions.
+- File order per `docs/style.md`: typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions — except within `box3d.c3i` itself, where `CLAUDE.md`'s carve-out applies instead: declarations are grouped by area (math, base hooks, world, body, …), not by declaration kind.
 
 ## 3. Pin every declared struct's layout
 
@@ -57,7 +57,7 @@ holds the base hooks, `box3d_world.c3` the world wrapper; a new area gets its ow
 - Fallible operations return an optional (`?`) with a named fault. **Never** return null-as-error, a sentinel, or a raw status code.
 - An invalid or zero ID coming back from C becomes a fault, not a value the caller has to test. Route it through that type's `.checked()` macro in `box3d_check.c3` (add one, following `WorldId.checked()`/`BodyId.checked()`, if the type doesn't have one yet); add a new `faultdef` there (one fault per line) when no existing one fits.
 - Out-parameters become return values. A `pointer + count` pair becomes a slice.
-- Ownership follows `docs/style.md` §6: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup.
+- Ownership follows `docs/style.md` §6: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup — except where `CLAUDE.md`'s carve-outs apply: a constructor with a natural receiver already at hand (`world.create_body(def)`) is a method, not a free function; only a constructor with no existing receiver, like `create_world`, stays free.
 
 Struct initializers use `.field = value` for every supplied field; calls with ≥4 arguments use named arguments, one per line, trailing comma.
 

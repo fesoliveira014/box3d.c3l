@@ -9,7 +9,7 @@ b3Quat 16 4
 b3Matrix3 36 4
 b3Transform 28 4
 b3WorldTransform 28 4 p=0 q=12
-b3AABB 24 4
+b3AABB 24 4 lowerBound=0 upperBound=12
 b3Plane 16 4
 b3Version 12 4
 b3CosSin 8 4

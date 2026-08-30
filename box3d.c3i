@@ -89,6 +89,8 @@ struct Aabb {
 }
 $assert Aabb::size == 24;
 $assert Aabb::alignment == 4;
+$assert Aabb::members[0].offset == 0 && Aabb::members[0].name == "lower_bound";
+$assert Aabb::members[1].offset == 12 && Aabb::members[1].name == "upper_bound";
 
 struct Plane {
     Vec3 normal;

@@ -542,3 +542,15 @@ extern fn void ShapeId.enable_pre_solve_events(self, bool flag) @cname("b3Shape_
 extern fn bool ShapeId.are_pre_solve_events_enabled(self) @cname("b3Shape_ArePreSolveEventsEnabled");
 extern fn void ShapeId.enable_hit_events(self, bool flag) @cname("b3Shape_EnableHitEvents");
 extern fn bool ShapeId.are_hit_events_enabled(self) @cname("b3Shape_AreHitEventsEnabled");
+
+<*
+ Raw geometry accessors. Each reads or writes a union member box3d selects by shape type and
+ asserts, in a debug build, that the type matches; that assertion is compiled out here, so the
+ checked wrappers in box3d_shape.c3 are the only public way in.
+*>
+extern fn Sphere sphere_raw(ShapeId shape_id) @cname("b3Shape_GetSphere") @private;
+extern fn Capsule capsule_raw(ShapeId shape_id) @cname("b3Shape_GetCapsule") @private;
+extern fn HullData* hull_raw(ShapeId shape_id) @cname("b3Shape_GetHull") @private;
+extern fn void set_sphere_raw(ShapeId shape_id, Sphere* sphere) @cname("b3Shape_SetSphere") @private;
+extern fn void set_capsule_raw(ShapeId shape_id, Capsule* capsule) @cname("b3Shape_SetCapsule") @private;
+extern fn void set_hull_raw(ShapeId shape_id, HullData* hull) @cname("b3Shape_SetHull") @private;

@@ -4,7 +4,8 @@ faultdef
     WORLD_LIMIT_REACHED,
     INVALID_DEFINITION,
     INVALID_HANDLE,
-    DOUBLE_PRECISION_LIBRARY;
+    DOUBLE_PRECISION_LIBRARY,
+    WRONG_SHAPE_TYPE;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
 macro bool BodyId.is_null(self) => self.index1 == 0;

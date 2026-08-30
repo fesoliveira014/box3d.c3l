@@ -65,3 +65,66 @@ fn ShapeId? BodyId.create_transformed_hull_shape(self, ShapeDef* def, HullData* 
       scale: scale,
     ).checked();
 }
+
+<*
+ @return "the sphere geometry, or WRONG_SHAPE_TYPE when this shape is not a sphere"
+*>
+fn Sphere? ShapeId.sphere(self) {
+    if (self.type() != ShapeType.SPHERE) return WRONG_SHAPE_TYPE~;
+    return sphere_raw(self);
+}
+
+<*
+ @return "the capsule geometry, or WRONG_SHAPE_TYPE when this shape is not a capsule"
+*>
+fn Capsule? ShapeId.capsule(self) {
+    if (self.type() != ShapeType.CAPSULE) return WRONG_SHAPE_TYPE~;
+    return capsule_raw(self);
+}
+
+<*
+ The hull belongs to the world and stays valid until the shape is destroyed or given other
+ geometry.
+
+ @return "the hull, or WRONG_SHAPE_TYPE when this shape is not a hull"
+*>
+fn HullData*? ShapeId.hull(self) {
+    if (self.type() != ShapeType.HULL) return WRONG_SHAPE_TYPE~;
+    return hull_raw(self);
+}
+
+<*
+ Replaces this shape's sphere. The body's mass is not recomputed — call
+ BodyId.apply_mass_from_shapes afterwards if the new geometry should change it.
+
+ @param [&in] sphere : "the replacement sphere in body-local space"
+ @return "WRONG_SHAPE_TYPE when this shape is not a sphere"
+*>
+fn void? ShapeId.set_sphere(self, Sphere* sphere) {
+    if (self.type() != ShapeType.SPHERE) return WRONG_SHAPE_TYPE~;
+    set_sphere_raw(self, sphere);
+}
+
+<*
+ Replaces this shape's capsule. The body's mass is not recomputed — call
+ BodyId.apply_mass_from_shapes afterwards if the new geometry should change it.
+
+ @param [&in] capsule : "the replacement capsule in body-local space"
+ @return "WRONG_SHAPE_TYPE when this shape is not a capsule"
+*>
+fn void? ShapeId.set_capsule(self, Capsule* capsule) {
+    if (self.type() != ShapeType.CAPSULE) return WRONG_SHAPE_TYPE~;
+    set_capsule_raw(self, capsule);
+}
+
+<*
+ Replaces this shape's hull. box3d clones the hull. The body's mass is not recomputed — call
+ BodyId.apply_mass_from_shapes afterwards if the new geometry should change it.
+
+ @param [&in] hull : "the replacement hull, usually the base of a BoxHull"
+ @return "WRONG_SHAPE_TYPE when this shape is not a hull"
+*>
+fn void? ShapeId.set_hull(self, HullData* hull) {
+    if (self.type() != ShapeType.HULL) return WRONG_SHAPE_TYPE~;
+    set_hull_raw(self, hull);
+}

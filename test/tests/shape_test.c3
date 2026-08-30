@@ -303,3 +303,123 @@ fn void the_shape_event_flags_start_disabled_and_round_trip() @test {
     shape.enable_contact_events(false);
     assert(!shape.are_contact_events_enabled());
 }
+
+fn void a_sphere_round_trips_its_geometry() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.25, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+
+    b3::Sphere back = shape.sphere()!!;
+    assert(back.center.x == 0.25);
+    assert(back.radius == 0.5);
+
+    b3::Sphere bigger = { .center = { 0.0, 0.0, 0.0 }, .radius = 1.0 };
+    shape.set_sphere(&bigger)!!;
+    assert(shape.sphere()!!.radius == 1.0);
+}
+
+fn void a_capsule_round_trips_its_geometry() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Capsule capsule = { .center1 = { 0.0, -0.5, 0.0 }, .center2 = { 0.0, 0.5, 0.0 }, .radius = 0.25 };
+    b3::ShapeId shape = body.create_capsule_shape(&def, &capsule)!!;
+
+    b3::Capsule back = shape.capsule()!!;
+    assert(back.radius == 0.25);
+    assert(back.center2.y == 0.5);
+
+    b3::Capsule longer = { .center1 = { 0.0, -1.0, 0.0 }, .center2 = { 0.0, 1.0, 0.0 }, .radius = 0.25 };
+    shape.set_capsule(&longer)!!;
+    assert(shape.capsule()!!.center2.y == 1.0);
+}
+
+fn void a_hull_round_trips_its_geometry() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::BoxHull unit = b3::make_box_hull(0.5, 0.5, 0.5);
+    b3::ShapeId shape = body.create_hull_shape(&def, &unit.base)!!;
+
+    assert(shape.hull()!!.volume == 1.0);
+    assert(shape.hull()!!.vertex_count == 8);
+
+    b3::BoxHull wide = b3::make_box_hull(1.0, 1.0, 1.0);
+    shape.set_hull(&wide.base)!!;
+    assert(shape.hull()!!.volume == 8.0);
+}
+
+fn void replacing_a_shape_geometry_leaves_the_body_mass_alone() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+    float before = body.mass();
+
+    b3::Sphere bigger = { .center = { 0.0, 0.0, 0.0 }, .radius = 1.0 };
+    shape.set_sphere(&bigger)!!;
+    assert(body.mass() == before, "box3d recomputes body mass only when asked");
+
+    body.apply_mass_from_shapes();
+    assert(body.mass() > before * 7.0, "eight times the volume once the body is told to recompute");
+}
+
+fn void asking_a_shape_for_geometry_it_does_not_have_is_a_fault() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Capsule capsule = { .center1 = { 0.0, -0.5, 0.0 }, .center2 = { 0.0, 0.5, 0.0 }, .radius = 0.25 };
+    b3::ShapeId shape = body.create_capsule_shape(&def, &capsule)!!;
+
+    if (catch err = shape.sphere()) {
+        assert(err == b3::WRONG_SHAPE_TYPE);
+    } else {
+        assert(false, "a capsule must not answer a sphere query");
+    }
+
+    if (catch err = shape.hull()) {
+        assert(err == b3::WRONG_SHAPE_TYPE);
+    } else {
+        assert(false, "a capsule must not answer a hull query");
+    }
+
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    if (catch err = shape.set_sphere(&sphere)) {
+        assert(err == b3::WRONG_SHAPE_TYPE);
+        return;
+    }
+    assert(false, "a capsule must not accept sphere geometry");
+}

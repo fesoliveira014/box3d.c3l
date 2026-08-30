@@ -16,43 +16,24 @@ struct WorldId {
     ushort index1;
     ushort generation;
 }
-$assert WorldId::size == 4;
-$assert WorldId::alignment == 2;
-$assert WorldId::members[0].offset == 0 && WorldId::members[0].name == "index1";
-$assert WorldId::members[1].offset == 2 && WorldId::members[1].name == "generation";
 
 struct BodyId {
     int index1;
     ushort world0;
     ushort generation;
 }
-$assert BodyId::size == 8;
-$assert BodyId::alignment == 4;
-$assert BodyId::members[0].offset == 0 && BodyId::members[0].name == "index1";
-$assert BodyId::members[1].offset == 4 && BodyId::members[1].name == "world0";
-$assert BodyId::members[2].offset == 6 && BodyId::members[2].name == "generation";
 
 struct ShapeId {
     int index1;
     ushort world0;
     ushort generation;
 }
-$assert ShapeId::size == 8;
-$assert ShapeId::alignment == 4;
-$assert ShapeId::members[0].offset == 0 && ShapeId::members[0].name == "index1";
-$assert ShapeId::members[1].offset == 4 && ShapeId::members[1].name == "world0";
-$assert ShapeId::members[2].offset == 6 && ShapeId::members[2].name == "generation";
 
 struct JointId {
     int index1;
     ushort world0;
     ushort generation;
 }
-$assert JointId::size == 8;
-$assert JointId::alignment == 4;
-$assert JointId::members[0].offset == 0 && JointId::members[0].name == "index1";
-$assert JointId::members[1].offset == 4 && JointId::members[1].name == "world0";
-$assert JointId::members[2].offset == 6 && JointId::members[2].name == "generation";
 
 struct ContactId {
     int index1;
@@ -60,51 +41,31 @@ struct ContactId {
     short padding;
     uint generation;
 }
-$assert ContactId::size == 12;
-$assert ContactId::alignment == 4;
-$assert ContactId::members[0].offset == 0 && ContactId::members[0].name == "index1";
-$assert ContactId::members[1].offset == 4 && ContactId::members[1].name == "world0";
-$assert ContactId::members[2].offset == 6 && ContactId::members[2].name == "padding";
-$assert ContactId::members[3].offset == 8 && ContactId::members[3].name == "generation";
 
 struct Transform {
     Vec3 p;
     Quat q;
 }
-$assert Transform::size == 28;
-$assert Transform::alignment == 4;
 
 struct WorldTransform {
     Pos p;
     Quat q;
 }
-$assert WorldTransform::size == 28;
-$assert WorldTransform::alignment == 4;
-$assert WorldTransform::members[0].offset == 0 && WorldTransform::members[0].name == "p";
-$assert WorldTransform::members[1].offset == 12 && WorldTransform::members[1].name == "q";
 
 struct Aabb {
     Vec3 lower_bound;
     Vec3 upper_bound;
 }
-$assert Aabb::size == 24;
-$assert Aabb::alignment == 4;
-$assert Aabb::members[0].offset == 0 && Aabb::members[0].name == "lower_bound";
-$assert Aabb::members[1].offset == 12 && Aabb::members[1].name == "upper_bound";
 
 struct Plane {
     Vec3 normal;
     float offset;
 }
-$assert Plane::size == 16;
-$assert Plane::alignment == 4;
 
 struct CosSin {
     float cosine;
     float sine;
 }
-$assert CosSin::size == 8;
-$assert CosSin::alignment == 4;
 
 struct SegmentDistanceResult {
     Vec3 point1;
@@ -112,17 +73,6 @@ struct SegmentDistanceResult {
     Vec3 point2;
     float fraction2;
 }
-$assert SegmentDistanceResult::size == 32;
-$assert SegmentDistanceResult::alignment == 4;
-
-$assert Vec3::size == 12;
-$assert Vec3::alignment == 4;
-$assert Pos::size == 12;
-$assert Pos::alignment == 4;
-$assert Quat::size == 16;
-$assert Quat::alignment == 4;
-$assert Matrix3::size == 36;
-$assert Matrix3::alignment == 4;
 
 extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
 extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
@@ -143,8 +93,6 @@ struct Version {
     int minor;
     int revision;
 }
-$assert Version::size == 12;
-$assert Version::alignment == 4;
 
 extern fn Version version() @cname("b3GetVersion");
 extern fn bool is_double_precision() @cname("b3IsDoublePrecision");
@@ -183,13 +131,6 @@ struct Capacity {
     int dynamic_body_count;
     int contact_count;
 }
-$assert Capacity::size == 20;
-$assert Capacity::alignment == 4;
-$assert Capacity::members[0].offset == 0 && Capacity::members[0].name == "static_shape_count";
-$assert Capacity::members[1].offset == 4 && Capacity::members[1].name == "dynamic_shape_count";
-$assert Capacity::members[2].offset == 8 && Capacity::members[2].name == "static_body_count";
-$assert Capacity::members[3].offset == 12 && Capacity::members[3].name == "dynamic_body_count";
-$assert Capacity::members[4].offset == 16 && Capacity::members[4].name == "contact_count";
 
 struct WorldDef {
     Vec3 gravity;
@@ -214,29 +155,6 @@ struct WorldDef {
     Capacity capacity;
     int internal_value;
 }
-$assert WorldDef::size == 144;
-$assert WorldDef::alignment == 8;
-$assert WorldDef::members[0].offset == 0 && WorldDef::members[0].name == "gravity";
-$assert WorldDef::members[1].offset == 12 && WorldDef::members[1].name == "restitution_threshold";
-$assert WorldDef::members[2].offset == 16 && WorldDef::members[2].name == "hit_event_threshold";
-$assert WorldDef::members[3].offset == 20 && WorldDef::members[3].name == "contact_hertz";
-$assert WorldDef::members[4].offset == 24 && WorldDef::members[4].name == "contact_damping_ratio";
-$assert WorldDef::members[5].offset == 28 && WorldDef::members[5].name == "contact_speed";
-$assert WorldDef::members[6].offset == 32 && WorldDef::members[6].name == "maximum_linear_speed";
-$assert WorldDef::members[7].offset == 40 && WorldDef::members[7].name == "friction_callback";
-$assert WorldDef::members[8].offset == 48 && WorldDef::members[8].name == "restitution_callback";
-$assert WorldDef::members[9].offset == 56 && WorldDef::members[9].name == "enable_sleep";
-$assert WorldDef::members[10].offset == 57 && WorldDef::members[10].name == "enable_continuous";
-$assert WorldDef::members[11].offset == 60 && WorldDef::members[11].name == "worker_count";
-$assert WorldDef::members[12].offset == 64 && WorldDef::members[12].name == "enqueue_task";
-$assert WorldDef::members[13].offset == 72 && WorldDef::members[13].name == "finish_task";
-$assert WorldDef::members[14].offset == 80 && WorldDef::members[14].name == "user_task_context";
-$assert WorldDef::members[15].offset == 88 && WorldDef::members[15].name == "user_data";
-$assert WorldDef::members[16].offset == 96 && WorldDef::members[16].name == "create_debug_shape";
-$assert WorldDef::members[17].offset == 104 && WorldDef::members[17].name == "destroy_debug_shape";
-$assert WorldDef::members[18].offset == 112 && WorldDef::members[18].name == "user_debug_shape_context";
-$assert WorldDef::members[19].offset == 120 && WorldDef::members[19].name == "capacity";
-$assert WorldDef::members[20].offset == 140 && WorldDef::members[20].name == "internal_value";
 
 struct Profile {
     float step;
@@ -263,8 +181,6 @@ struct Profile {
     float sleep_islands;
     float sensors;
 }
-$assert Profile::size == 92;
-$assert Profile::alignment == 4;
 
 struct Counters {
     int body_count;
@@ -288,8 +204,6 @@ struct Counters {
     int push_back_iterations;
     int root_iterations;
 }
-$assert Counters::size == 200;
-$assert Counters::alignment == 4;
 
 extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");
 
@@ -345,7 +259,6 @@ enum BodyType : int {
     KINEMATIC,
     DYNAMIC,
 }
-$assert BodyType::size == 4;
 
 struct MotionLocks {
     bool linear_x;
@@ -355,25 +268,12 @@ struct MotionLocks {
     bool angular_y;
     bool angular_z;
 }
-$assert MotionLocks::size == 6;
-$assert MotionLocks::alignment == 1;
-$assert MotionLocks::members[0].offset == 0 && MotionLocks::members[0].name == "linear_x";
-$assert MotionLocks::members[1].offset == 1 && MotionLocks::members[1].name == "linear_y";
-$assert MotionLocks::members[2].offset == 2 && MotionLocks::members[2].name == "linear_z";
-$assert MotionLocks::members[3].offset == 3 && MotionLocks::members[3].name == "angular_x";
-$assert MotionLocks::members[4].offset == 4 && MotionLocks::members[4].name == "angular_y";
-$assert MotionLocks::members[5].offset == 5 && MotionLocks::members[5].name == "angular_z";
 
 struct MassData {
     float mass;
     Vec3 center;
     Matrix3 inertia;
 }
-$assert MassData::size == 52;
-$assert MassData::alignment == 4;
-$assert MassData::members[0].offset == 0 && MassData::members[0].name == "mass";
-$assert MassData::members[1].offset == 4 && MassData::members[1].name == "center";
-$assert MassData::members[2].offset == 16 && MassData::members[2].name == "inertia";
 
 <*
  A body definition. Must come from default_body_def() — see create_body.
@@ -399,27 +299,6 @@ struct BodyDef {
     bool enable_contact_recycling;
     int internal_value;
 }
-$assert BodyDef::size == 104;
-$assert BodyDef::alignment == 8;
-$assert BodyDef::members[0].offset == 0 && BodyDef::members[0].name == "type";
-$assert BodyDef::members[1].offset == 4 && BodyDef::members[1].name == "position";
-$assert BodyDef::members[2].offset == 16 && BodyDef::members[2].name == "rotation";
-$assert BodyDef::members[3].offset == 32 && BodyDef::members[3].name == "linear_velocity";
-$assert BodyDef::members[4].offset == 44 && BodyDef::members[4].name == "angular_velocity";
-$assert BodyDef::members[5].offset == 56 && BodyDef::members[5].name == "linear_damping";
-$assert BodyDef::members[6].offset == 60 && BodyDef::members[6].name == "angular_damping";
-$assert BodyDef::members[7].offset == 64 && BodyDef::members[7].name == "gravity_scale";
-$assert BodyDef::members[8].offset == 68 && BodyDef::members[8].name == "sleep_threshold";
-$assert BodyDef::members[9].offset == 72 && BodyDef::members[9].name == "name";
-$assert BodyDef::members[10].offset == 80 && BodyDef::members[10].name == "user_data";
-$assert BodyDef::members[11].offset == 88 && BodyDef::members[11].name == "motion_locks";
-$assert BodyDef::members[12].offset == 94 && BodyDef::members[12].name == "enable_sleep";
-$assert BodyDef::members[13].offset == 95 && BodyDef::members[13].name == "is_awake";
-$assert BodyDef::members[14].offset == 96 && BodyDef::members[14].name == "is_bullet";
-$assert BodyDef::members[15].offset == 97 && BodyDef::members[15].name == "is_enabled";
-$assert BodyDef::members[16].offset == 98 && BodyDef::members[16].name == "allow_fast_rotation";
-$assert BodyDef::members[17].offset == 99 && BodyDef::members[17].name == "enable_contact_recycling";
-$assert BodyDef::members[18].offset == 100 && BodyDef::members[18].name == "internal_value";
 
 extern fn BodyDef default_body_def() @cname("b3DefaultBodyDef");
 

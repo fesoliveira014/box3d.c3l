@@ -40,11 +40,13 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 
 ## 3. Pin every declared struct's layout
 
-Add `$assert T::size == N;` immediately after each fully-declared struct (0.8.x syntax — `::size`, not `.sizeof`). Get `N` from `scripts/build-box3d.sh`, never from an ad-hoc probe, so later drift is caught by `--check`:
+Layout pins are generated, never hand-written, and they live in `box3d_layout.c3` rather than beside the struct — writing one by hand puts a number in the repository that nothing measured.
 
-1. Add the C type name to `scripts/abi-types.txt` (one type per line; append a comma-separated field list — `b3WorldDef fieldA,fieldB` — only if the binding also needs individual field offsets pinned, e.g. for a struct nothing bound reads field-by-field).
-2. Run `./scripts/build-box3d.sh --update` from the repository root.
-3. Read the size (and any field offsets) for the type out of `scripts/abi-sizes.txt`.
+1. Add the C type name to `scripts/abi-types.txt`, one per line. Append a comma-separated field list — `b3WorldDef fieldA,fieldB` — to pin individual field offsets as well; list every field of the struct, not a subset, since the generated pins are positional.
+2. Run `./scripts/build-box3d.sh --update` from the repository root. It probes the real headers, rewrites `scripts/abi-sizes.txt`, and regenerates `box3d_layout.c3` with a size, alignment and per-field pin for every listed type, converting each C name to its C3 spelling.
+3. Check the generated pins compile: a failure means the C3 struct disagrees with the header, which is the whole point.
+
+`./scripts/build-box3d.sh --check` then fails if the built library drifts from the recorded sizes, or if `box3d_layout.c3` is stale relative to the probe.
 
 A mismatch here is exactly the silent-corruption bug the assert exists to catch. Never guess `N`.
 

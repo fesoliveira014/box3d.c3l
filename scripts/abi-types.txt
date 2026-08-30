@@ -18,6 +18,7 @@ b3Capacity staticShapeCount,dynamicShapeCount,staticBodyCount,dynamicBodyCount,c
 b3WorldDef gravity,restitutionThreshold,hitEventThreshold,contactHertz,contactDampingRatio,contactSpeed,maximumLinearSpeed,frictionCallback,restitutionCallback,enableSleep,enableContinuous,workerCount,enqueueTask,finishTask,userTaskContext,userData,createDebugShape,destroyDebugShape,userDebugShapeContext,capacity,internalValue
 b3Profile
 b3Counters
+b3BodyType
 b3MotionLocks linearX,linearY,linearZ,angularX,angularY,angularZ
 b3MassData mass,center,inertia
 b3BodyDef type,position,rotation,linearVelocity,angularVelocity,linearDamping,angularDamping,gravityScale,sleepThreshold,name,userData,motionLocks,enableSleep,isAwake,isBullet,isEnabled,allowFastRotation,enableContactRecycling,internalValue

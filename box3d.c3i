@@ -420,3 +420,13 @@ $assert BodyDef::members[17].offset == 99 && BodyDef::members[17].name == "enabl
 $assert BodyDef::members[18].offset == 100 && BodyDef::members[18].name == "internal_value";
 
 extern fn BodyDef default_body_def() @cname("b3DefaultBodyDef");
+
+extern fn BodyId create_body_raw(WorldId world_id, BodyDef* def) @cname("b3CreateBody") @private;
+extern fn void BodyId.destroy(self) @cname("b3DestroyBody");
+extern fn bool BodyId.is_valid(self) @cname("b3Body_IsValid");
+extern fn BodyType BodyId.type(self) @cname("b3Body_GetType");
+extern fn void BodyId.set_type(self, BodyType type) @cname("b3Body_SetType");
+extern fn WorldId BodyId.world(self) @cname("b3Body_GetWorld");
+extern fn bool BodyId.is_enabled(self) @cname("b3Body_IsEnabled");
+extern fn void BodyId.disable(self) @cname("b3Body_Disable");
+extern fn void BodyId.enable(self) @cname("b3Body_Enable");

@@ -18,3 +18,6 @@ b3Capacity 20 4 staticShapeCount=0 dynamicShapeCount=4 staticBodyCount=8 dynamic
 b3WorldDef 144 8 gravity=0 restitutionThreshold=12 hitEventThreshold=16 contactHertz=20 contactDampingRatio=24 contactSpeed=28 maximumLinearSpeed=32 frictionCallback=40 restitutionCallback=48 enableSleep=56 enableContinuous=57 workerCount=60 enqueueTask=64 finishTask=72 userTaskContext=80 userData=88 createDebugShape=96 destroyDebugShape=104 userDebugShapeContext=112 capacity=120 internalValue=140
 b3Profile 92 4
 b3Counters 200 4
+b3MotionLocks 6 1 linearX=0 linearY=1 linearZ=2 angularX=3 angularY=4 angularZ=5
+b3MassData 52 4 mass=0 center=4 inertia=16
+b3BodyDef 104 8 type=0 position=4 rotation=16 linearVelocity=32 angularVelocity=44 linearDamping=56 angularDamping=60 gravityScale=64 sleepThreshold=68 name=72 userData=80 motionLocks=88 enableSleep=94 isAwake=95 isBullet=96 isEnabled=97 allowFastRotation=98 enableContactRecycling=99 internalValue=100

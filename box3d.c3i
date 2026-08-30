@@ -337,3 +337,86 @@ extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
 extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
 extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
 extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");
+
+enum BodyType : int {
+    STATIC,
+    KINEMATIC,
+    DYNAMIC,
+}
+$assert BodyType::size == 4;
+
+struct MotionLocks {
+    bool linear_x;
+    bool linear_y;
+    bool linear_z;
+    bool angular_x;
+    bool angular_y;
+    bool angular_z;
+}
+$assert MotionLocks::size == 6;
+$assert MotionLocks::alignment == 1;
+$assert MotionLocks::members[0].offset == 0 && MotionLocks::members[0].name == "linear_x";
+$assert MotionLocks::members[1].offset == 1 && MotionLocks::members[1].name == "linear_y";
+$assert MotionLocks::members[2].offset == 2 && MotionLocks::members[2].name == "linear_z";
+$assert MotionLocks::members[3].offset == 3 && MotionLocks::members[3].name == "angular_x";
+$assert MotionLocks::members[4].offset == 4 && MotionLocks::members[4].name == "angular_y";
+$assert MotionLocks::members[5].offset == 5 && MotionLocks::members[5].name == "angular_z";
+
+struct MassData {
+    float mass;
+    Vec3 center;
+    Matrix3 inertia;
+}
+$assert MassData::size == 52;
+$assert MassData::alignment == 4;
+$assert MassData::members[0].offset == 0 && MassData::members[0].name == "mass";
+$assert MassData::members[1].offset == 4 && MassData::members[1].name == "center";
+$assert MassData::members[2].offset == 16 && MassData::members[2].name == "inertia";
+
+<*
+ A body definition. Must come from default_body_def() — see create_body.
+*>
+struct BodyDef {
+    BodyType type;
+    Pos position;
+    Quat rotation;
+    Vec3 linear_velocity;
+    Vec3 angular_velocity;
+    float linear_damping;
+    float angular_damping;
+    float gravity_scale;
+    float sleep_threshold;
+    ZString name;
+    void* user_data;
+    MotionLocks motion_locks;
+    bool enable_sleep;
+    bool is_awake;
+    bool is_bullet;
+    bool is_enabled;
+    bool allow_fast_rotation;
+    bool enable_contact_recycling;
+    int internal_value;
+}
+$assert BodyDef::size == 104;
+$assert BodyDef::alignment == 8;
+$assert BodyDef::members[0].offset == 0 && BodyDef::members[0].name == "type";
+$assert BodyDef::members[1].offset == 4 && BodyDef::members[1].name == "position";
+$assert BodyDef::members[2].offset == 16 && BodyDef::members[2].name == "rotation";
+$assert BodyDef::members[3].offset == 32 && BodyDef::members[3].name == "linear_velocity";
+$assert BodyDef::members[4].offset == 44 && BodyDef::members[4].name == "angular_velocity";
+$assert BodyDef::members[5].offset == 56 && BodyDef::members[5].name == "linear_damping";
+$assert BodyDef::members[6].offset == 60 && BodyDef::members[6].name == "angular_damping";
+$assert BodyDef::members[7].offset == 64 && BodyDef::members[7].name == "gravity_scale";
+$assert BodyDef::members[8].offset == 68 && BodyDef::members[8].name == "sleep_threshold";
+$assert BodyDef::members[9].offset == 72 && BodyDef::members[9].name == "name";
+$assert BodyDef::members[10].offset == 80 && BodyDef::members[10].name == "user_data";
+$assert BodyDef::members[11].offset == 88 && BodyDef::members[11].name == "motion_locks";
+$assert BodyDef::members[12].offset == 94 && BodyDef::members[12].name == "enable_sleep";
+$assert BodyDef::members[13].offset == 95 && BodyDef::members[13].name == "is_awake";
+$assert BodyDef::members[14].offset == 96 && BodyDef::members[14].name == "is_bullet";
+$assert BodyDef::members[15].offset == 97 && BodyDef::members[15].name == "is_enabled";
+$assert BodyDef::members[16].offset == 98 && BodyDef::members[16].name == "allow_fast_rotation";
+$assert BodyDef::members[17].offset == 99 && BodyDef::members[17].name == "enable_contact_recycling";
+$assert BodyDef::members[18].offset == 100 && BodyDef::members[18].name == "internal_value";
+
+extern fn BodyDef default_body_def() @cname("b3DefaultBodyDef");

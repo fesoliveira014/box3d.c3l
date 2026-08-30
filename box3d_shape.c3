@@ -21,7 +21,8 @@ fn ShapeId? BodyId.create_sphere_shape(self, ShapeDef* def, Sphere* sphere) {
 
 <*
  Attaches a capsule to this body. The definition must come from default_shape_def() — see
- create_sphere_shape.
+ create_sphere_shape. box3d substitutes a sphere when the two centres fall within its linear
+ slop of each other, so the returned shape's type() may be SPHERE rather than CAPSULE.
 
  @param [&in] def : "a definition obtained from default_shape_def()"
  @param [&in] capsule : "the capsule in body-local space; box3d clones it"
@@ -91,40 +92,4 @@ fn Capsule? ShapeId.capsule(self) {
 fn HullData*? ShapeId.hull(self) {
     if (self.type() != ShapeType.HULL) return WRONG_SHAPE_TYPE~;
     return hull_raw(self);
-}
-
-<*
- Replaces this shape's sphere. The body's mass is not recomputed — call
- BodyId.apply_mass_from_shapes afterwards if the new geometry should change it.
-
- @param [&in] sphere : "the replacement sphere in body-local space"
- @return "WRONG_SHAPE_TYPE when this shape is not a sphere"
-*>
-fn void? ShapeId.set_sphere(self, Sphere* sphere) {
-    if (self.type() != ShapeType.SPHERE) return WRONG_SHAPE_TYPE~;
-    set_sphere_raw(self, sphere);
-}
-
-<*
- Replaces this shape's capsule. The body's mass is not recomputed — call
- BodyId.apply_mass_from_shapes afterwards if the new geometry should change it.
-
- @param [&in] capsule : "the replacement capsule in body-local space"
- @return "WRONG_SHAPE_TYPE when this shape is not a capsule"
-*>
-fn void? ShapeId.set_capsule(self, Capsule* capsule) {
-    if (self.type() != ShapeType.CAPSULE) return WRONG_SHAPE_TYPE~;
-    set_capsule_raw(self, capsule);
-}
-
-<*
- Replaces this shape's hull. box3d clones the hull. The body's mass is not recomputed — call
- BodyId.apply_mass_from_shapes afterwards if the new geometry should change it.
-
- @param [&in] hull : "the replacement hull, usually the base of a BoxHull"
- @return "WRONG_SHAPE_TYPE when this shape is not a hull"
-*>
-fn void? ShapeId.set_hull(self, HullData* hull) {
-    if (self.type() != ShapeType.HULL) return WRONG_SHAPE_TYPE~;
-    set_hull_raw(self, hull);
 }

@@ -15,7 +15,7 @@ fn void the_shape_types_match_the_c_layout() @test {
     assert(b3::BoxHull::size == 640);
 }
 
-fn void the_shape_type_values_match_the_c_enum() @test {
+fn void the_shape_type_values_are_contiguous_from_zero() @test {
     assert((int)b3::ShapeType.CAPSULE == 0);
     assert((int)b3::ShapeType.COMPOUND == 1);
     assert((int)b3::ShapeType.HEIGHT_FIELD == 2);
@@ -99,13 +99,23 @@ fn void a_box_hull_crosses_the_abi_by_value() @test {
     b3::BoxHull cube = b3::make_cube_hull(0.5);
     assert(cube.base.volume == box.base.volume);
 
-    b3::BoxHull offset = b3::make_offset_box_hull(0.5, 0.5, 0.5, { 1.0, 2.0, 3.0 });
+    b3::BoxHull offset = b3::make_offset_box_hull(
+      hx: 0.5,
+      hy: 0.5,
+      hz: 0.5,
+      offset: { 1.0, 2.0, 3.0 },
+    );
     assert(offset.base.center.x == 1.0);
     assert(offset.base.center.y == 2.0);
     assert(offset.base.center.z == 3.0);
 
     b3::Transform local = { .p = { 2.0, 0.0, 0.0 }, .q = { 0.0, 0.0, 0.0, 1.0 } };
-    b3::BoxHull transformed = b3::make_transformed_box_hull(0.5, 0.5, 0.5, local);
+    b3::BoxHull transformed = b3::make_transformed_box_hull(
+      hx: 0.5,
+      hy: 0.5,
+      hz: 0.5,
+      transform: local,
+    );
     assert(transformed.base.center.x == 2.0);
     assert(transformed.base.volume == 1.0);
 
@@ -322,7 +332,7 @@ fn void a_sphere_round_trips_its_geometry() @test {
     assert(back.radius == 0.5);
 
     b3::Sphere bigger = { .center = { 0.0, 0.0, 0.0 }, .radius = 1.0 };
-    shape.set_sphere(&bigger)!!;
+    shape.set_sphere(&bigger);
     assert(shape.sphere()!!.radius == 1.0);
 }
 
@@ -344,7 +354,7 @@ fn void a_capsule_round_trips_its_geometry() @test {
     assert(back.center2.y == 0.5);
 
     b3::Capsule longer = { .center1 = { 0.0, -1.0, 0.0 }, .center2 = { 0.0, 1.0, 0.0 }, .radius = 0.25 };
-    shape.set_capsule(&longer)!!;
+    shape.set_capsule(&longer);
     assert(shape.capsule()!!.center2.y == 1.0);
 }
 
@@ -365,7 +375,7 @@ fn void a_hull_round_trips_its_geometry() @test {
     assert(shape.hull()!!.vertex_count == 8);
 
     b3::BoxHull wide = b3::make_box_hull(1.0, 1.0, 1.0);
-    shape.set_hull(&wide.base)!!;
+    shape.set_hull(&wide.base);
     assert(shape.hull()!!.volume == 8.0);
 }
 
@@ -384,11 +394,12 @@ fn void replacing_a_shape_geometry_leaves_the_body_mass_alone() @test {
     float before = body.mass();
 
     b3::Sphere bigger = { .center = { 0.0, 0.0, 0.0 }, .radius = 1.0 };
-    shape.set_sphere(&bigger)!!;
+    shape.set_sphere(&bigger);
     assert(body.mass() == before, "box3d recomputes body mass only when asked");
 
     body.apply_mass_from_shapes();
-    assert(body.mass() > before * 7.0, "eight times the volume once the body is told to recompute");
+    float expected = before * 8.0;
+    assert(math::abs(body.mass() - expected) < expected * 0.01, "eight times the volume once the body is told to recompute");
 }
 
 fn void asking_a_shape_for_geometry_it_does_not_have_is_a_fault() @test {
@@ -415,13 +426,26 @@ fn void asking_a_shape_for_geometry_it_does_not_have_is_a_fault() @test {
     } else {
         assert(false, "a capsule must not answer a hull query");
     }
+}
+
+fn void setting_a_capsule_shape_to_sphere_geometry_turns_it_into_a_sphere() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Capsule capsule = { .center1 = { 0.0, -0.5, 0.0 }, .center2 = { 0.0, 0.5, 0.0 }, .radius = 0.25 };
+    b3::ShapeId shape = body.create_capsule_shape(&def, &capsule)!!;
 
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-    if (catch err = shape.set_sphere(&sphere)) {
-        assert(err == b3::WRONG_SHAPE_TYPE);
-        return;
-    }
-    assert(false, "a capsule must not accept sphere geometry");
+    shape.set_sphere(&sphere);
+
+    assert(shape.type() == b3::ShapeType.SPHERE);
+    assert(shape.sphere()!!.radius == 0.5);
 }
 
 fn void a_sphere_gives_its_body_the_mass_and_inertia_its_density_implies() @test {

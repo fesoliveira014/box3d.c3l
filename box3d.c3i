@@ -554,3 +554,8 @@ extern fn HullData* hull_raw(ShapeId shape_id) @cname("b3Shape_GetHull") @privat
 extern fn void set_sphere_raw(ShapeId shape_id, Sphere* sphere) @cname("b3Shape_SetSphere") @private;
 extern fn void set_capsule_raw(ShapeId shape_id, Capsule* capsule) @cname("b3Shape_SetCapsule") @private;
 extern fn void set_hull_raw(ShapeId shape_id, HullData* hull) @cname("b3Shape_SetHull") @private;
+
+extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
+extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");
+extern fn Vec3 ShapeId.closest_point(self, Vec3 target) @cname("b3Shape_GetClosestPoint");
+extern fn void ShapeId.apply_wind(self, Vec3 wind, float drag, float lift, float max_speed, bool wake) @cname("b3Shape_ApplyWind");

@@ -423,3 +423,127 @@ fn void asking_a_shape_for_geometry_it_does_not_have_is_a_fault() @test {
     }
     assert(false, "a capsule must not accept sphere geometry");
 }
+
+fn void a_sphere_gives_its_body_the_mass_and_inertia_its_density_implies() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+
+    float expected = (float)(1000.0 * 4.0 / 3.0 * math::PI * 0.125);
+    assert(math::abs(body.mass() - expected) < 0.001);
+
+    b3::MassData mass_data = shape.compute_mass_data();
+    float inertia = (float)(0.4 * expected * 0.25);
+    assert(math::abs(mass_data.mass - expected) < 0.001);
+    assert(math::abs(mass_data.inertia[0].x - inertia) < 0.001);
+    assert(math::abs(mass_data.inertia[1].y - inertia) < 0.001);
+    assert(math::abs(mass_data.inertia[2].z - inertia) < 0.001);
+}
+
+fn void a_capsule_gives_its_body_the_mass_of_a_cylinder_and_two_hemispheres() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Capsule capsule = { .center1 = { 0.0, -0.5, 0.0 }, .center2 = { 0.0, 0.5, 0.0 }, .radius = 0.25 };
+    b3::ShapeId shape = body.create_capsule_shape(&def, &capsule)!!;
+    assert(shape.is_valid());
+
+    float expected = (float)(1000.0 * (math::PI * 0.0625 + 4.0 / 3.0 * math::PI * 0.015625));
+    assert(math::abs(body.mass() - expected) < 0.001);
+}
+
+fn void the_shape_bounds_carry_the_speculative_margin() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+
+    b3::Aabb bounds = shape.aabb();
+    float margin = -bounds.lower_bound.x - 0.5f;
+    assert(margin > 0.0 && margin < 0.1, "box3d fattens shape bounds by a small speculative margin");
+    assert(bounds.upper_bound.x == -bounds.lower_bound.x);
+
+    b3::Vec3 closest = shape.closest_point({ 0.0, 20.0, 0.0 });
+    assert(math::abs(closest.y - 0.5) < 0.001, "the closest point to a distant target lies on the surface");
+}
+
+fn void wind_pushes_a_shape_downwind() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = { 0.0, 50.0, 0.0 };
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::ShapeId shape = body.create_sphere_shape(&def, &sphere)!!;
+
+    for (int i = 0; i < 60; i++) {
+        shape.apply_wind(
+          wind: { 20.0, 0.0, 0.0 },
+          drag: 1.0,
+          lift: 0.0,
+          max_speed: 100.0,
+          wake: true,
+        );
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    assert(body.linear_velocity().x > 0.1, "a second of wind moves a falling sphere downwind");
+}
+
+fn void a_box_comes_to_rest_on_static_ground() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BoxHull ground_hull = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeDef ground_shape_def = b3::default_shape_def();
+    b3::ShapeId ground_shape = ground.create_hull_shape(&ground_shape_def, &ground_hull.base)!!;
+    assert(ground_shape.type() == b3::ShapeType.HULL);
+
+    b3::BodyDef crate_def = b3::default_body_def();
+    crate_def.type = b3::BodyType.DYNAMIC;
+    crate_def.position = { 0.0, 5.0, 0.0 };
+    b3::BodyId crate = world.create_body(&crate_def)!!;
+    b3::BoxHull crate_hull = b3::make_box_hull(0.5, 0.5, 0.5);
+    b3::ShapeDef crate_shape_def = b3::default_shape_def();
+    b3::ShapeId crate_shape = crate.create_hull_shape(&crate_shape_def, &crate_hull.base)!!;
+    assert(math::abs(crate.mass() - 1000.0) < 0.001);
+
+    for (int i = 0; i < 240; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    b3::Pos resting = crate.position();
+    assert(math::abs(resting.y - 1.0) < 0.01, "a unit box on half-metre-thick ground rests one metre up");
+    assert(math::abs(resting.x) < 0.01);
+    assert(!crate.is_awake(), "a box at rest falls asleep");
+    assert(crate_shape.is_valid());
+}

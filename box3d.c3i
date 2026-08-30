@@ -89,6 +89,8 @@ struct Aabb {
 }
 $assert Aabb::size == 24;
 $assert Aabb::alignment == 4;
+$assert Aabb::members[0].offset == 0 && Aabb::members[0].name == "lower_bound";
+$assert Aabb::members[1].offset == 12 && Aabb::members[1].name == "upper_bound";
 
 struct Plane {
     Vec3 normal;
@@ -337,3 +339,159 @@ extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
 extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
 extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
 extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");
+
+enum BodyType : int {
+    STATIC,
+    KINEMATIC,
+    DYNAMIC,
+}
+$assert BodyType::size == 4;
+
+struct MotionLocks {
+    bool linear_x;
+    bool linear_y;
+    bool linear_z;
+    bool angular_x;
+    bool angular_y;
+    bool angular_z;
+}
+$assert MotionLocks::size == 6;
+$assert MotionLocks::alignment == 1;
+$assert MotionLocks::members[0].offset == 0 && MotionLocks::members[0].name == "linear_x";
+$assert MotionLocks::members[1].offset == 1 && MotionLocks::members[1].name == "linear_y";
+$assert MotionLocks::members[2].offset == 2 && MotionLocks::members[2].name == "linear_z";
+$assert MotionLocks::members[3].offset == 3 && MotionLocks::members[3].name == "angular_x";
+$assert MotionLocks::members[4].offset == 4 && MotionLocks::members[4].name == "angular_y";
+$assert MotionLocks::members[5].offset == 5 && MotionLocks::members[5].name == "angular_z";
+
+struct MassData {
+    float mass;
+    Vec3 center;
+    Matrix3 inertia;
+}
+$assert MassData::size == 52;
+$assert MassData::alignment == 4;
+$assert MassData::members[0].offset == 0 && MassData::members[0].name == "mass";
+$assert MassData::members[1].offset == 4 && MassData::members[1].name == "center";
+$assert MassData::members[2].offset == 16 && MassData::members[2].name == "inertia";
+
+<*
+ A body definition. Must come from default_body_def() — see create_body.
+*>
+struct BodyDef {
+    BodyType type;
+    Pos position;
+    Quat rotation;
+    Vec3 linear_velocity;
+    Vec3 angular_velocity;
+    float linear_damping;
+    float angular_damping;
+    float gravity_scale;
+    float sleep_threshold;
+    ZString name;
+    void* user_data;
+    MotionLocks motion_locks;
+    bool enable_sleep;
+    bool is_awake;
+    bool is_bullet;
+    bool is_enabled;
+    bool allow_fast_rotation;
+    bool enable_contact_recycling;
+    int internal_value;
+}
+$assert BodyDef::size == 104;
+$assert BodyDef::alignment == 8;
+$assert BodyDef::members[0].offset == 0 && BodyDef::members[0].name == "type";
+$assert BodyDef::members[1].offset == 4 && BodyDef::members[1].name == "position";
+$assert BodyDef::members[2].offset == 16 && BodyDef::members[2].name == "rotation";
+$assert BodyDef::members[3].offset == 32 && BodyDef::members[3].name == "linear_velocity";
+$assert BodyDef::members[4].offset == 44 && BodyDef::members[4].name == "angular_velocity";
+$assert BodyDef::members[5].offset == 56 && BodyDef::members[5].name == "linear_damping";
+$assert BodyDef::members[6].offset == 60 && BodyDef::members[6].name == "angular_damping";
+$assert BodyDef::members[7].offset == 64 && BodyDef::members[7].name == "gravity_scale";
+$assert BodyDef::members[8].offset == 68 && BodyDef::members[8].name == "sleep_threshold";
+$assert BodyDef::members[9].offset == 72 && BodyDef::members[9].name == "name";
+$assert BodyDef::members[10].offset == 80 && BodyDef::members[10].name == "user_data";
+$assert BodyDef::members[11].offset == 88 && BodyDef::members[11].name == "motion_locks";
+$assert BodyDef::members[12].offset == 94 && BodyDef::members[12].name == "enable_sleep";
+$assert BodyDef::members[13].offset == 95 && BodyDef::members[13].name == "is_awake";
+$assert BodyDef::members[14].offset == 96 && BodyDef::members[14].name == "is_bullet";
+$assert BodyDef::members[15].offset == 97 && BodyDef::members[15].name == "is_enabled";
+$assert BodyDef::members[16].offset == 98 && BodyDef::members[16].name == "allow_fast_rotation";
+$assert BodyDef::members[17].offset == 99 && BodyDef::members[17].name == "enable_contact_recycling";
+$assert BodyDef::members[18].offset == 100 && BodyDef::members[18].name == "internal_value";
+
+extern fn BodyDef default_body_def() @cname("b3DefaultBodyDef");
+
+<*
+ Raw body constructor. Bypasses WorldId.create_body's definition-cookie guard, so it is private
+ to the module — box3d_body.c3's WorldId.create_body is the only caller and is the only public
+ way to a live body.
+*>
+extern fn BodyId create_body_raw(WorldId world_id, BodyDef* def) @cname("b3CreateBody") @private;
+extern fn void BodyId.destroy(self) @cname("b3DestroyBody");
+extern fn bool BodyId.is_valid(self) @cname("b3Body_IsValid");
+extern fn BodyType BodyId.type(self) @cname("b3Body_GetType");
+extern fn void BodyId.set_type(self, BodyType type) @cname("b3Body_SetType");
+extern fn WorldId BodyId.world(self) @cname("b3Body_GetWorld");
+extern fn bool BodyId.is_enabled(self) @cname("b3Body_IsEnabled");
+extern fn void BodyId.disable(self) @cname("b3Body_Disable");
+extern fn void BodyId.enable(self) @cname("b3Body_Enable");
+
+extern fn Pos BodyId.position(self) @cname("b3Body_GetPosition");
+extern fn Quat BodyId.rotation(self) @cname("b3Body_GetRotation");
+extern fn WorldTransform BodyId.transform(self) @cname("b3Body_GetTransform");
+extern fn void BodyId.set_transform(self, Pos position, Quat rotation) @cname("b3Body_SetTransform");
+extern fn void BodyId.set_target_transform(self, WorldTransform target, float time_step, bool wake) @cname("b3Body_SetTargetTransform");
+extern fn Vec3 BodyId.local_point(self, Pos world_point) @cname("b3Body_GetLocalPoint");
+extern fn Pos BodyId.world_point(self, Vec3 local_point) @cname("b3Body_GetWorldPoint");
+extern fn Vec3 BodyId.local_vector(self, Vec3 world_vector) @cname("b3Body_GetLocalVector");
+extern fn Vec3 BodyId.world_vector(self, Vec3 local_vector) @cname("b3Body_GetWorldVector");
+extern fn Vec3 BodyId.linear_velocity(self) @cname("b3Body_GetLinearVelocity");
+extern fn void BodyId.set_linear_velocity(self, Vec3 linear_velocity) @cname("b3Body_SetLinearVelocity");
+extern fn Vec3 BodyId.angular_velocity(self) @cname("b3Body_GetAngularVelocity");
+extern fn void BodyId.set_angular_velocity(self, Vec3 angular_velocity) @cname("b3Body_SetAngularVelocity");
+extern fn Vec3 BodyId.local_point_velocity(self, Vec3 local_point) @cname("b3Body_GetLocalPointVelocity");
+extern fn Vec3 BodyId.world_point_velocity(self, Pos world_point) @cname("b3Body_GetWorldPointVelocity");
+extern fn void BodyId.apply_force(self, Vec3 force, Pos point, bool wake) @cname("b3Body_ApplyForce");
+extern fn void BodyId.apply_force_to_center(self, Vec3 force, bool wake) @cname("b3Body_ApplyForceToCenter");
+extern fn void BodyId.apply_torque(self, Vec3 torque, bool wake) @cname("b3Body_ApplyTorque");
+extern fn void BodyId.apply_linear_impulse(self, Vec3 impulse, Pos point, bool wake) @cname("b3Body_ApplyLinearImpulse");
+extern fn void BodyId.apply_linear_impulse_to_center(self, Vec3 impulse, bool wake) @cname("b3Body_ApplyLinearImpulseToCenter");
+extern fn void BodyId.apply_angular_impulse(self, Vec3 impulse, bool wake) @cname("b3Body_ApplyAngularImpulse");
+extern fn float BodyId.mass(self) @cname("b3Body_GetMass");
+extern fn float BodyId.inverse_mass(self) @cname("b3Body_GetInverseMass");
+extern fn Matrix3 BodyId.local_rotational_inertia(self) @cname("b3Body_GetLocalRotationalInertia");
+extern fn Matrix3 BodyId.world_inverse_rotational_inertia(self) @cname("b3Body_GetWorldInverseRotationalInertia");
+extern fn Vec3 BodyId.local_center(self) @cname("b3Body_GetLocalCenter");
+extern fn Pos BodyId.world_center(self) @cname("b3Body_GetWorldCenter");
+extern fn void BodyId.set_mass_data(self, MassData mass_data) @cname("b3Body_SetMassData");
+extern fn MassData BodyId.mass_data(self) @cname("b3Body_GetMassData");
+extern fn void BodyId.apply_mass_from_shapes(self) @cname("b3Body_ApplyMassFromShapes");
+extern fn void BodyId.set_linear_damping(self, float linear_damping) @cname("b3Body_SetLinearDamping");
+extern fn float BodyId.linear_damping(self) @cname("b3Body_GetLinearDamping");
+extern fn void BodyId.set_angular_damping(self, float angular_damping) @cname("b3Body_SetAngularDamping");
+extern fn float BodyId.angular_damping(self) @cname("b3Body_GetAngularDamping");
+extern fn void BodyId.set_gravity_scale(self, float gravity_scale) @cname("b3Body_SetGravityScale");
+extern fn float BodyId.gravity_scale(self) @cname("b3Body_GetGravityScale");
+extern fn Aabb BodyId.compute_aabb(self) @cname("b3Body_ComputeAABB");
+
+extern fn void BodyId.set_name(self, ZString name) @cname("b3Body_SetName");
+extern fn ZString BodyId.name(self) @cname("b3Body_GetName");
+extern fn void BodyId.set_user_data(self, void* user_data) @cname("b3Body_SetUserData");
+extern fn void* BodyId.user_data(self) @cname("b3Body_GetUserData");
+extern fn bool BodyId.is_awake(self) @cname("b3Body_IsAwake");
+extern fn void BodyId.set_awake(self, bool awake) @cname("b3Body_SetAwake");
+extern fn void BodyId.enable_sleep(self, bool enable_sleep) @cname("b3Body_EnableSleep");
+extern fn bool BodyId.is_sleep_enabled(self) @cname("b3Body_IsSleepEnabled");
+extern fn void BodyId.set_sleep_threshold(self, float sleep_threshold) @cname("b3Body_SetSleepThreshold");
+extern fn float BodyId.sleep_threshold(self) @cname("b3Body_GetSleepThreshold");
+extern fn void BodyId.set_motion_locks(self, MotionLocks locks) @cname("b3Body_SetMotionLocks");
+extern fn MotionLocks BodyId.motion_locks(self) @cname("b3Body_GetMotionLocks");
+extern fn void BodyId.set_bullet(self, bool flag) @cname("b3Body_SetBullet");
+extern fn bool BodyId.is_bullet(self) @cname("b3Body_IsBullet");
+extern fn void BodyId.allow_fast_rotation(self, bool flag) @cname("b3Body_AllowFastRotation");
+extern fn bool BodyId.is_fast_rotation_allowed(self) @cname("b3Body_IsFastRotationAllowed");
+extern fn void BodyId.enable_contact_recycling(self, bool flag) @cname("b3Body_EnableContactRecycling");
+extern fn bool BodyId.is_contact_recycling_enabled(self) @cname("b3Body_IsContactRecyclingEnabled");
+extern fn void BodyId.enable_hit_events(self, bool flag) @cname("b3Body_EnableHitEvents");

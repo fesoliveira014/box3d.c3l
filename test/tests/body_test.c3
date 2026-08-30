@@ -219,3 +219,102 @@ fn void damping_round_trips() @test {
     assert(body.linear_damping() == 0.25);
     assert(body.angular_damping() == 0.75);
 }
+
+fn void a_body_name_round_trips() @test {
+    b3::WorldDef wd = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&wd)!!;
+    defer world.destroy();
+
+    b3::BodyDef bd = b3::default_body_def();
+    b3::BodyId body = world.create_body(&bd)!!;
+
+    assert(body.name().str_view() == "", "an unnamed body reports an empty name, never null");
+
+    body.set_name("anvil");
+    assert(body.name().str_view() == "anvil");
+}
+
+fn void user_data_round_trips_on_a_body() @test {
+    b3::WorldDef wd = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&wd)!!;
+    defer world.destroy();
+
+    b3::BodyDef bd = b3::default_body_def();
+    b3::BodyId body = world.create_body(&bd)!!;
+
+    int sentinel = 7;
+    body.set_user_data(&sentinel);
+    assert(body.user_data() == &sentinel);
+}
+
+fn void motion_locks_round_trip() @test {
+    b3::WorldDef wd = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&wd)!!;
+    defer world.destroy();
+
+    b3::BodyDef bd = b3::default_body_def();
+    bd.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&bd)!!;
+
+    b3::MotionLocks locks = { .linear_x = true, .angular_z = true };
+    body.set_motion_locks(locks);
+
+    b3::MotionLocks got = body.motion_locks();
+    assert(got.linear_x);
+    assert(!got.linear_y);
+    assert(!got.linear_z);
+    assert(!got.angular_x);
+    assert(!got.angular_y);
+    assert(got.angular_z);
+}
+
+fn void each_body_flag_moves_only_itself() @test {
+    b3::WorldDef wd = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&wd)!!;
+    defer world.destroy();
+
+    b3::BodyDef bd = b3::default_body_def();
+    bd.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&bd)!!;
+
+    assert(body.is_sleep_enabled());
+    assert(!body.is_bullet());
+    assert(!body.is_fast_rotation_allowed());
+
+    body.set_bullet(true);
+    assert(body.is_bullet());
+    assert(body.is_sleep_enabled(), "setting bullet must not touch sleep");
+    assert(!body.is_fast_rotation_allowed(), "setting bullet must not touch fast rotation");
+
+    body.allow_fast_rotation(true);
+    assert(body.is_fast_rotation_allowed());
+    assert(body.is_bullet(), "allowing fast rotation must not clear bullet");
+
+    body.enable_sleep(false);
+    assert(!body.is_sleep_enabled());
+    assert(body.is_bullet(), "disabling sleep must not clear bullet");
+
+    body.set_sleep_threshold(0.25);
+    assert(body.sleep_threshold() == 0.25);
+
+    body.enable_contact_recycling(false);
+    assert(!body.is_contact_recycling_enabled());
+
+    body.enable_hit_events(true);
+}
+
+fn void a_sleeping_body_wakes_when_told() @test {
+    b3::WorldDef wd = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&wd)!!;
+    defer world.destroy();
+
+    b3::BodyDef bd = b3::default_body_def();
+    bd.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&bd)!!;
+
+    assert(body.is_awake());
+    body.set_awake(false);
+    assert(!body.is_awake());
+    body.set_awake(true);
+    assert(body.is_awake());
+}

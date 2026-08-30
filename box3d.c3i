@@ -374,3 +374,127 @@ extern fn bool BodyId.is_fast_rotation_allowed(self) @cname("b3Body_IsFastRotati
 extern fn void BodyId.enable_contact_recycling(self, bool flag) @cname("b3Body_EnableContactRecycling");
 extern fn bool BodyId.is_contact_recycling_enabled(self) @cname("b3Body_IsContactRecyclingEnabled");
 extern fn void BodyId.enable_hit_events(self, bool flag) @cname("b3Body_EnableHitEvents");
+
+struct Filter {
+    ulong category_bits;
+    ulong mask_bits;
+    int group_index;
+}
+
+extern fn Filter default_filter() @cname("b3DefaultFilter");
+
+struct SurfaceMaterial {
+    float friction;
+    float restitution;
+    float rolling_resistance;
+    Vec3 tangent_velocity;
+    ulong user_material_id;
+    uint custom_color;
+    uint padding;
+}
+
+extern fn SurfaceMaterial default_surface_material() @cname("b3DefaultSurfaceMaterial");
+
+enum ShapeType : int {
+    CAPSULE,
+    COMPOUND,
+    HEIGHT_FIELD,
+    HULL,
+    MESH,
+    SPHERE,
+}
+
+<*
+ A shape definition. Must come from default_shape_def() — see BodyId.create_sphere_shape.
+*>
+struct ShapeDef {
+    ZString name;
+    void* user_data;
+    SurfaceMaterial* materials;
+    int material_count;
+    SurfaceMaterial base_material;
+    float density;
+    float explosion_scale;
+    Filter filter;
+    bool enable_custom_filtering;
+    bool is_sensor;
+    bool enable_sensor_events;
+    bool enable_contact_events;
+    bool enable_hit_events;
+    bool enable_pre_solve_events;
+    bool invoke_contact_creation;
+    bool update_body_mass;
+    bool enable_speculative_contact;
+    int internal_value;
+}
+
+extern fn ShapeDef default_shape_def() @cname("b3DefaultShapeDef");
+
+struct Sphere {
+    Vec3 center;
+    float radius;
+}
+
+struct Capsule {
+    Vec3 center1;
+    Vec3 center2;
+    float radius;
+}
+
+struct HullVertex {
+    char edge;
+}
+
+struct HullHalfEdge {
+    char next;
+    char twin;
+    char origin;
+    char face;
+}
+
+struct HullFace {
+    char edge;
+}
+
+<*
+ A convex hull. The arrays live past the end of the struct and are reached through the byte
+ offsets it carries, so a bare HullData must never be copied — only a BoxHull, which embeds
+ one together with its storage, copies correctly.
+*>
+struct HullData {
+    ulong version;
+    ulong hash;
+    Aabb aabb;
+    float surface_area;
+    float volume;
+    float inner_radius;
+    Vec3 center;
+    Matrix3 central_inertia;
+    int vertex_count;
+    int vertex_offset;
+    int point_offset;
+    int edge_count;
+    int edge_offset;
+    int face_count;
+    int plane_offset;
+    int face_offset;
+    int soa_vertex_offset;
+    int soa_normal_offset;
+    int byte_count;
+}
+
+struct BoxHull {
+    HullData base;
+    HullVertex[8] box_vertices;
+    Vec3[8] box_points;
+    HullHalfEdge[24] box_edges;
+    Plane[6] box_planes;
+    HullFace[6] box_faces;
+    char[2] padding;
+    float[8] vx;
+    float[8] vy;
+    float[8] vz;
+    float[8] nx;
+    float[8] ny;
+    float[8] nz;
+}

@@ -22,3 +22,14 @@ b3BodyType
 b3MotionLocks linearX,linearY,linearZ,angularX,angularY,angularZ
 b3MassData mass,center,inertia
 b3BodyDef type,position,rotation,linearVelocity,angularVelocity,linearDamping,angularDamping,gravityScale,sleepThreshold,name,userData,motionLocks,enableSleep,isAwake,isBullet,isEnabled,allowFastRotation,enableContactRecycling,internalValue
+b3Filter categoryBits,maskBits,groupIndex
+b3SurfaceMaterial friction,restitution,rollingResistance,tangentVelocity,userMaterialId,customColor,padding
+b3ShapeType
+b3ShapeDef name,userData,materials,materialCount,baseMaterial,density,explosionScale,filter,enableCustomFiltering,isSensor,enableSensorEvents,enableContactEvents,enableHitEvents,enablePreSolveEvents,invokeContactCreation,updateBodyMass,enableSpeculativeContact,internalValue
+b3Sphere center,radius
+b3Capsule center1,center2,radius
+b3HullVertex
+b3HullHalfEdge
+b3HullFace
+b3HullData version,hash,aabb,surfaceArea,volume,innerRadius,center,centralInertia,vertexCount,vertexOffset,pointOffset,edgeCount,edgeOffset,faceCount,planeOffset,faceOffset,soaVertexOffset,soaNormalOffset,byteCount
+b3BoxHull base,boxVertices,boxPoints,boxEdges,boxPlanes,boxFaces,padding,vx,vy,vz,nx,ny,nz

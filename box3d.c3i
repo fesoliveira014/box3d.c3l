@@ -498,3 +498,27 @@ struct BoxHull {
     float[8] ny;
     float[8] nz;
 }
+
+extern fn BoxHull make_cube_hull(float half_width) @cname("b3MakeCubeHull");
+extern fn BoxHull make_box_hull(float hx, float hy, float hz) @cname("b3MakeBoxHull");
+extern fn BoxHull make_offset_box_hull(float hx, float hy, float hz, Vec3 offset) @cname("b3MakeOffsetBoxHull");
+extern fn BoxHull make_transformed_box_hull(float hx, float hy, float hz, Transform transform) @cname("b3MakeTransformedBoxHull");
+extern fn BoxHull make_scaled_box_hull(Vec3 half_widths, Transform transform, Vec3 post_scale) @cname("b3MakeScaledBoxHull");
+
+<*
+ Raw shape constructors. Each bypasses the definition-cookie guard its wrapper in
+ box3d_shape.c3 applies, so they are private to the module.
+*>
+extern fn ShapeId create_sphere_shape_raw(BodyId body_id, ShapeDef* def, Sphere* sphere) @cname("b3CreateSphereShape") @private;
+extern fn ShapeId create_capsule_shape_raw(BodyId body_id, ShapeDef* def, Capsule* capsule) @cname("b3CreateCapsuleShape") @private;
+extern fn ShapeId create_hull_shape_raw(BodyId body_id, ShapeDef* def, HullData* hull) @cname("b3CreateHullShape") @private;
+extern fn ShapeId create_transformed_hull_shape_raw(BodyId body_id, ShapeDef* def, HullData* hull, Transform transform, Vec3 scale) @cname("b3CreateTransformedHullShape") @private;
+
+extern fn void ShapeId.destroy(self, bool update_body_mass) @cname("b3DestroyShape");
+extern fn bool ShapeId.is_valid(self) @cname("b3Shape_IsValid");
+extern fn ShapeType ShapeId.type(self) @cname("b3Shape_GetType");
+extern fn BodyId ShapeId.body(self) @cname("b3Shape_GetBody");
+extern fn WorldId ShapeId.world(self) @cname("b3Shape_GetWorld");
+extern fn bool ShapeId.is_sensor(self) @cname("b3Shape_IsSensor");
+extern fn void ShapeId.enable_sensor_events(self, bool flag) @cname("b3Shape_EnableSensorEvents");
+extern fn bool ShapeId.are_sensor_events_enabled(self) @cname("b3Shape_AreSensorEventsEnabled");

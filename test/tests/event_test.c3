@@ -407,3 +407,144 @@ fn void a_world_with_nothing_moving_reports_empty_sensor_and_move_slices() @test
     assert(world.sensor_end_touch_events().len == 0);
     assert(world.body_move_events().len == 0);
 }
+
+int pre_solve_calls;
+int pre_solve_context_calls;
+
+fn bool count_pre_solve(b3::ShapeId shape_id_a, b3::ShapeId shape_id_b, b3::Pos point, b3::Vec3 normal, void* context) {
+    pre_solve_calls++;
+    int* seen = (int*)context;
+    (*seen)++;
+    return true;
+}
+
+fn bool refuse_pre_solve(b3::ShapeId shape_id_a, b3::ShapeId shape_id_b, b3::Pos point, b3::Vec3 normal, void* context) {
+    return false;
+}
+
+int custom_filter_calls;
+
+fn bool refuse_pair(b3::ShapeId shape_id_a, b3::ShapeId shape_id_b, void* context) {
+    custom_filter_calls++;
+    return false;
+}
+
+fn void a_world_without_joints_reports_no_joint_events() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    world.step(1.0f / 60.0f, 4);
+
+    assert(world.joint_events().len == 0);
+}
+
+fn void a_joint_identifier_that_names_nothing_is_not_valid() @test {
+    b3::JointId nothing;
+
+    assert(!nothing.is_valid(), "a zeroed joint identifier names no joint");
+}
+
+fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    int seen;
+    pre_solve_calls = 0;
+    world.set_pre_solve_callback(&count_pre_solve, &seen);
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, -0.5, 0.0};
+    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeDef ground_shape_def = b3::default_shape_def();
+    ground_shape_def.enable_pre_solve_events = true;
+    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 1.0, 0.0};
+    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    shape_def.enable_pre_solve_events = true;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    ball.create_sphere_shape(&shape_def, &sphere)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    assert(pre_solve_calls >= 1, "a contact between two shapes that asked for pre-solve events reaches the callback");
+    assert(seen == pre_solve_calls, "the callback receives the context it was registered with");
+}
+
+fn void a_pre_solve_callback_that_refuses_a_contact_lets_the_body_fall_through() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    world.set_pre_solve_callback(&refuse_pre_solve, null);
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, -0.5, 0.0};
+    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeDef ground_shape_def = b3::default_shape_def();
+    ground_shape_def.enable_pre_solve_events = true;
+    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 1.0, 0.0};
+    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    shape_def.enable_pre_solve_events = true;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    ball.create_sphere_shape(&shape_def, &sphere)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    assert(ball.position().y < -5.0f, "a contact the callback refuses does not hold the body up");
+}
+
+fn void a_custom_filter_that_refuses_a_pair_lets_the_body_fall_through() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    custom_filter_calls = 0;
+    world.set_custom_filter_callback(&refuse_pair, null);
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, -0.5, 0.0};
+    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeDef ground_shape_def = b3::default_shape_def();
+    ground_shape_def.enable_custom_filtering = true;
+    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 1.0, 0.0};
+    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    shape_def.enable_custom_filtering = true;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    ball.create_sphere_shape(&shape_def, &sphere)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    assert(custom_filter_calls >= 1, "a pair of shapes that asked for custom filtering reaches the callback");
+    assert(ball.position().y < -5.0f, "a pair the filter refuses never collides");
+}

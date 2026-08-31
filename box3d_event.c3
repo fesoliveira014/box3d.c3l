@@ -76,3 +76,16 @@ fn BodyMoveEvent[] WorldId.body_move_events(self) {
     BodyEvents events = body_events_raw(self);
     return events.move_events[:events.move_count];
 }
+
+<*
+ The awake joints whose force or torque exceeded their threshold during the last step. The
+ forces themselves are not reported. A joint here may already have been destroyed —
+ JointId.is_valid() is the check. The array belongs to the world and the next step() overwrites
+ it.
+
+ @return "the joint events from the last step, empty when no joint exceeded its threshold"
+*>
+fn JointEvent[] WorldId.joint_events(self) {
+    JointEvents events = joint_events_raw(self);
+    return events.joint_events[:events.count];
+}

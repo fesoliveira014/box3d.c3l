@@ -688,3 +688,28 @@ extern fn SensorEvents sensor_events_raw(WorldId world_id) @cname("b3World_GetSe
  Raw body-event accessor. Private for the same reason as contact_events_raw.
 *>
 extern fn BodyEvents body_events_raw(WorldId world_id) @cname("b3World_GetBodyEvents") @private;
+
+<*
+ Raw joint-event accessor. Private for the same reason as contact_events_raw.
+*>
+extern fn JointEvents joint_events_raw(WorldId world_id) @cname("b3World_GetJointEvents") @private;
+
+extern fn bool JointId.is_valid(self) @cname("b3Joint_IsValid");
+
+<*
+ Called for each contact point between two shapes that both asked for pre-solve events, before
+ the solver runs. Returning false discards the contact for that step, so the two shapes pass
+ through each other. box3d may call this from a worker thread, and the world must not be
+ modified from inside it.
+*>
+alias PreSolveFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, Pos point, Vec3 normal, void* context);
+
+<*
+ Called when two shapes whose definitions enabled custom filtering are about to begin colliding.
+ Returning false stops the pair from colliding at all. Only one of the two shapes needs to have
+ enabled it.
+*>
+alias CustomFilterFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, void* context);
+
+extern fn void WorldId.set_pre_solve_callback(self, PreSolveFn fcn, void* context) @cname("b3World_SetPreSolveCallback");
+extern fn void WorldId.set_custom_filter_callback(self, CustomFilterFn fcn, void* context) @cname("b3World_SetCustomFilterCallback");

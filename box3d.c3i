@@ -707,7 +707,8 @@ alias PreSolveFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, Pos point, Ve
 <*
  Called when two shapes whose definitions enabled custom filtering are about to begin colliding.
  Returning false stops the pair from colliding at all. Only one of the two shapes needs to have
- enabled it.
+ enabled it. box3d may call this from a worker thread, and the world must not be modified from
+ inside it.
 *>
 alias CustomFilterFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, void* context);
 

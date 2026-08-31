@@ -409,9 +409,18 @@ fn void a_world_with_nothing_moving_reports_empty_sensor_and_move_slices() @test
 }
 
 int pre_solve_calls;
-int pre_solve_context_calls;
+b3::ShapeId captured_shape_id_a;
+b3::ShapeId captured_shape_id_b;
+b3::Pos captured_point;
+b3::Vec3 captured_normal;
 
 fn bool count_pre_solve(b3::ShapeId shape_id_a, b3::ShapeId shape_id_b, b3::Pos point, b3::Vec3 normal, void* context) {
+    if (pre_solve_calls == 0) {
+        captured_shape_id_a = shape_id_a;
+        captured_shape_id_b = shape_id_b;
+        captured_point = point;
+        captured_normal = normal;
+    }
     pre_solve_calls++;
     int* seen = (int*)context;
     (*seen)++;
@@ -461,7 +470,7 @@ fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @te
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
     ground_shape_def.enable_pre_solve_events = true;
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::ShapeId ground_shape = ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
@@ -471,7 +480,7 @@ fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @te
     shape_def.density = 1.0;
     shape_def.enable_pre_solve_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId ball_shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
 
     for (int i = 0; i < 120; i++) {
         world.step(1.0f / 60.0f, 4);
@@ -479,6 +488,17 @@ fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @te
 
     assert(pre_solve_calls >= 1, "a contact between two shapes that asked for pre-solve events reaches the callback");
     assert(seen == pre_solve_calls, "the callback receives the context it was registered with");
+
+    bool ground_first = captured_shape_id_a.index1 == ground_shape.index1
+                     && captured_shape_id_b.index1 == ball_shape.index1;
+    bool ball_first = captured_shape_id_a.index1 == ball_shape.index1
+                   && captured_shape_id_b.index1 == ground_shape.index1;
+    assert(ground_first || ball_first, "the pre-solve callback names the ball and the ground shape, in either order");
+
+    assert(math::abs(captured_normal.y) > 0.99 && math::abs(captured_normal.y) < 1.01, "a flat ground contact reports a normal of unit length pointing along y");
+    assert(math::abs(captured_normal.x) < 0.01, "a flat ground contact reports a normal with no x component");
+    assert(math::abs(captured_normal.z) < 0.01, "a flat ground contact reports a normal with no z component");
+    assert(math::abs(captured_point.y) < 0.6, "the contact point sits near the surface, not at the unit normal's magnitude");
 }
 
 fn void a_pre_solve_callback_that_refuses_a_contact_lets_the_body_fall_through() @test {

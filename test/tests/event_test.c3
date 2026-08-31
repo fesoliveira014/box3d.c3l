@@ -136,7 +136,7 @@ fn void a_sphere_driven_into_the_ground_reports_the_speed_it_arrived_at() @test 
         b3::ContactHitEvent hit = hits[0];
         // The sphere is driven at 30 m/s into static ground, so it arrives at 30 m/s.
         assert(hit.approach_speed > 29.0 && hit.approach_speed < 31.0, "the hit reports the speed the shapes closed at");
-        assert(math::abs(hit.normal.y) > 0.99, "a head-on vertical impact has a vertical normal");
+        assert(math::abs(hit.normal.y) > 0.99 && math::abs(hit.normal.y) < 1.01, "a head-on vertical impact has a vertical normal");
         assert(math::abs(hit.normal.x) < 0.01 && math::abs(hit.normal.z) < 0.01);
         assert(hit.user_material_id_a == 7 || hit.user_material_id_b == 7, "one side of the hit carries the sphere's material");
         saw_hit = true;

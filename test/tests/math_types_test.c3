@@ -85,3 +85,11 @@ fn void is_valid_transform_accepts_a_nonsymmetric_position_and_identity_rotation
 
     assert(b3::is_valid_transform(xf));
 }
+
+fn void is_valid_quat_separates_a_unit_rotation_from_a_zero_one() @test {
+    b3::Quat identity = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 };
+    b3::Quat zeroed;
+
+    assert(b3::is_valid_quat(identity));
+    assert(!b3::is_valid_quat(zeroed), "a zero quaternion has no rotation to represent");
+}

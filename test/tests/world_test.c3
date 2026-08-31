@@ -244,3 +244,26 @@ fn void set_contact_tuning_takes_named_arguments() @test {
     // parameter order load-bearing at the call site instead of a silent positional assumption.
     world.set_contact_tuning(hertz: 30.0, damping_ratio: 10.0, contact_speed: 3.0);
 }
+
+fn void the_world_bounds_enclose_the_shapes_it_holds() @test {
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::BoxHull hull = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeId shape = ground.create_hull_shape(&shape_def, &hull.base)!!;
+    world.step(1.0f / 60.0f, 4);
+
+    b3::Aabb bounds = world.bounds();
+    b3::Aabb shape_bounds = shape.aabb();
+
+    assert(bounds.lower_bound.x <= shape_bounds.lower_bound.x);
+    assert(bounds.lower_bound.y <= shape_bounds.lower_bound.y);
+    assert(bounds.lower_bound.z <= shape_bounds.lower_bound.z);
+    assert(bounds.upper_bound.x >= shape_bounds.upper_bound.x);
+    assert(bounds.upper_bound.y >= shape_bounds.upper_bound.y);
+    assert(bounds.upper_bound.z >= shape_bounds.upper_bound.z);
+}

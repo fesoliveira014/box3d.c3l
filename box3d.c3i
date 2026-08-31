@@ -677,3 +677,14 @@ struct JointEvents {
 extern fn ContactEvents contact_events_raw(WorldId world_id) @cname("b3World_GetContactEvents") @private;
 
 extern fn bool ContactId.is_valid(self) @cname("b3Contact_IsValid");
+
+<*
+ Raw sensor-event accessor. Private for the same reason as contact_events_raw: the two slice
+ wrappers in box3d_event.c3 are the public way to these arrays.
+*>
+extern fn SensorEvents sensor_events_raw(WorldId world_id) @cname("b3World_GetSensorEvents") @private;
+
+<*
+ Raw body-event accessor. Private for the same reason as contact_events_raw.
+*>
+extern fn BodyEvents body_events_raw(WorldId world_id) @cname("b3World_GetBodyEvents") @private;

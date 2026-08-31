@@ -231,3 +231,179 @@ fn void a_contact_reports_itself_invalid_once_one_of_its_bodies_is_gone() @test 
     ball.destroy();
     assert(!touched.is_valid(), "a contact whose body is gone must not report itself valid");
 }
+
+fn void a_sensor_reports_the_shape_that_entered_and_left_it() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {1.5, 11.0, 0.0};
+    b3::BodyId wall = world.create_body(&body_def)!!;
+    b3::BoxHull wall_box = b3::make_box_hull(0.5, 10.0, 1.0);
+    b3::ShapeDef wall_shape_def = b3::default_shape_def();
+    wall_shape_def.enable_sensor_events = true;
+    b3::ShapeId wall_shape = wall.create_hull_shape(&wall_shape_def, &wall_box.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.is_bullet = true;
+    body_def.gravity_scale = 0.0;
+    body_def.position = {7.39814, 4.0, 0.0};
+    body_def.linear_velocity = {-20.0, 0.0, 0.0};
+    b3::BodyId bullet = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.is_sensor = true;
+    shape_def.enable_sensor_events = true;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.1};
+    b3::ShapeId bullet_shape = bullet.create_sphere_shape(&shape_def, &sphere)!!;
+
+    int begin_total;
+    int end_total;
+    for (int i = 0; i < 200; i++) {
+        world.step(1.0f / 60.0f, 4);
+
+        foreach (entered : world.sensor_begin_touch_events()) {
+            begin_total++;
+            assert(entered.sensor_shape_id.index1 == bullet_shape.index1, "the sensor is the shape that declared itself one");
+            assert(entered.visitor_shape_id.index1 == wall_shape.index1, "the visitor is the shape that passed through it");
+        }
+        foreach (left : world.sensor_end_touch_events()) {
+            end_total++;
+            assert(left.sensor_shape_id.index1 == bullet_shape.index1);
+            assert(left.visitor_shape_id.index1 == wall_shape.index1);
+        }
+
+        if (bullet.position().x < -1.0f) break;
+    }
+
+    assert(begin_total == 1, "a sensor swept once through a wall enters it once");
+    assert(end_total == 1, "and leaves it once");
+}
+
+fn void a_visitor_that_did_not_ask_for_sensor_events_is_never_reported() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {1.5, 11.0, 0.0};
+    b3::BodyId wall = world.create_body(&body_def)!!;
+    b3::BoxHull wall_box = b3::make_box_hull(0.5, 10.0, 1.0);
+    b3::ShapeDef wall_shape_def = b3::default_shape_def();
+    wall.create_hull_shape(&wall_shape_def, &wall_box.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.is_bullet = true;
+    body_def.gravity_scale = 0.0;
+    body_def.position = {7.39814, 4.0, 0.0};
+    body_def.linear_velocity = {-20.0, 0.0, 0.0};
+    b3::BodyId bullet = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.is_sensor = true;
+    shape_def.enable_sensor_events = true;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.1};
+    bullet.create_sphere_shape(&shape_def, &sphere)!!;
+
+    int begin_total;
+    for (int i = 0; i < 200; i++) {
+        world.step(1.0f / 60.0f, 4);
+        begin_total += world.sensor_begin_touch_events().len;
+        if (bullet.position().x < -1.0f) break;
+    }
+
+    assert(begin_total == 0, "a sensor overlap is reported only when the visitor asked for sensor events too");
+}
+
+fn void a_moving_body_reports_the_transform_it_reached() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, -0.5, 0.0};
+    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeDef ground_shape_def = b3::default_shape_def();
+    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+
+    int marker = 42;
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 2.0, 0.0};
+    body_def.user_data = &marker;
+    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    ball.create_sphere_shape(&shape_def, &sphere)!!;
+
+    bool saw_move;
+    for (int i = 0; i < 30; i++) {
+        world.step(1.0f / 60.0f, 4);
+
+        foreach (moved : world.body_move_events()) {
+            if (moved.body_id.index1 != ball.index1) continue;
+
+            b3::WorldTransform pose = ball.transform();
+            assert(moved.transform.p.x == pose.p.x, "the move event carries the pose the body ended the step at");
+            assert(moved.transform.p.y == pose.p.y);
+            assert(moved.transform.p.z == pose.p.z);
+            assert(moved.user_data == &marker, "the move event carries the body's own user data");
+            saw_move = true;
+        }
+    }
+
+    assert(saw_move, "a falling body reports that it moved");
+}
+
+fn void a_body_that_settles_says_so_once_and_then_goes_quiet() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, -0.5, 0.0};
+    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
+    b3::ShapeDef ground_shape_def = b3::default_shape_def();
+    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 2.0, 0.0};
+    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    ball.create_sphere_shape(&shape_def, &sphere)!!;
+
+    int fell_asleep_total;
+    for (int i = 0; i < 400; i++) {
+        world.step(1.0f / 60.0f, 4);
+
+        foreach (moved : world.body_move_events()) {
+            if (moved.fell_asleep) fell_asleep_total++;
+        }
+    }
+
+    assert(fell_asleep_total == 1, "a body that comes to rest reports falling asleep exactly once");
+    assert(world.body_move_events().len == 0, "a sleeping body reports no movement");
+}
+
+fn void a_world_with_nothing_moving_reports_empty_sensor_and_move_slices() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    world.step(1.0f / 60.0f, 4);
+
+    assert(world.sensor_begin_touch_events().len == 0);
+    assert(world.sensor_end_touch_events().len == 0);
+    assert(world.body_move_events().len == 0);
+}

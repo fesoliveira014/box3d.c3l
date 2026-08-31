@@ -10,3 +10,6 @@ linked-libs/**/*.a
 linked-libs/**/*.so
 linked-libs/**/*.lib
 linked-libs/**/*.dll
+
+# Local working notes
+.dev/

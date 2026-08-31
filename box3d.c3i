@@ -85,8 +85,8 @@ extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");
 
 alias AllocFn = fn void*(int size, int alignment);
 alias FreeFn = fn void(void* mem);
-alias AssertFn = fn int(char* condition, char* file_name, int line_number);
-alias LogFn = fn void(char* message);
+alias AssertFn = fn int(ZString condition, ZString file_name, int line_number);
+alias LogFn = fn void(ZString message);
 
 struct Version {
     int major;
@@ -108,12 +108,15 @@ extern fn float length_units_per_meter() @cname("b3GetLengthUnitsPerMeter");
 extern fn void set_length_units_per_meter(float length_units) @cname("b3SetLengthUnitsPerMeter");
 extern fn float stall_threshold() @cname("b3GetStallThreshold");
 extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
-extern fn uint hash_bytes(uint hash, char* data, int count) @cname("b3Hash");
+<*
+ Raw hash. Takes a pointer and a count where hash() takes a slice, so it is private to the module.
+*>
+extern fn uint hash_raw(uint seed, char* data, int count) @cname("b3Hash") @private;
 
 alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float friction_b, ulong user_material_id_b);
 alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, float restitution_b, ulong user_material_id_b);
 alias TaskFn = fn void(void* task_context);
-alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, char* task_name);
+alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, ZString task_name);
 alias FinishTaskFn = fn void(void* user_task, void* user_context);
 alias CreateDebugShapeFn = fn void*(void* debug_shape, void* user_context);
 alias DestroyDebugShapeFn = fn void(void* user_shape, void* user_context);

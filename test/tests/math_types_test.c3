@@ -49,7 +49,12 @@ fn void segment_distance_reports_each_field_of_two_skew_segments() @test {
     b3::Vec3 p2 = { 1.0, -3.0, 1.0 };
     b3::Vec3 q2 = { 1.0, 9.0, 1.0 };
 
-    b3::SegmentDistanceResult result = b3::segment_distance(p1, q1, p2, q2);
+    b3::SegmentDistanceResult result = b3::segment_distance(
+      p1: p1,
+      q1: q1,
+      p2: p2,
+      q2: q2,
+    );
 
     assert(result.point1.x == 1.0);
     assert(result.point1.y == 0.0);

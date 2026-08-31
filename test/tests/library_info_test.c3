@@ -11,7 +11,7 @@ fn void the_vendored_library_is_the_expected_version() @test {
 
 fn void the_library_was_built_for_the_float_abi() @test {
     assert(!b3::is_double_precision());
-    b3::assert_float_abi()!!;
+    b3::require_float_abi()!!;
 }
 
 // c3c runs tests in alphabetical order by name across the whole target, so this name is chosen to

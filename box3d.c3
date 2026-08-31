@@ -6,7 +6,7 @@ const uint HASH_INIT = 5381;
  The djb2 hash box3d uses for determinism checks.
 *>
 fn uint hash(char[] data, uint seed = HASH_INIT) {
-    return hash_bytes(seed, data.ptr, (int)data.len);
+    return hash_raw(seed, data.ptr, (int)data.len);
 }
 
 <*
@@ -15,6 +15,6 @@ fn uint hash(char[] data, uint seed = HASH_INIT) {
 
  @return "void, or DOUBLE_PRECISION_LIBRARY when the linked library uses double precision"
 *>
-fn void? assert_float_abi() {
+fn void? require_float_abi() {
     if (is_double_precision()) return DOUBLE_PRECISION_LIBRARY~;
 }

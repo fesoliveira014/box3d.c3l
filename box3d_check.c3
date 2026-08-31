@@ -14,8 +14,9 @@ macro bool JointId.is_null(self) => self.index1 == 0;
 macro bool ContactId.is_null(self) => self.index1 == 0;
 
 <*
- True when the package was compiled with the BOX3D_CHECKED feature, in which case wrappers
- validate every identifier they are handed.
+ True when the package was compiled with the BOX3D_CHECKED feature. The feature gates nothing on
+ its own — validity checking is opt-in per call site through the .checked() macros — so this
+ reports the build's intent for a caller that wants to branch on it.
 *>
 macro bool checked_access() {
     $if $feat(BOX3D_CHECKED):

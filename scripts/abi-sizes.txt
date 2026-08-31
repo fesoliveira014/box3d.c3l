@@ -22,3 +22,14 @@ b3BodyType 4 4
 b3MotionLocks 6 1 linearX=0 linearY=1 linearZ=2 angularX=3 angularY=4 angularZ=5
 b3MassData 52 4 mass=0 center=4 inertia=16
 b3BodyDef 104 8 type=0 position=4 rotation=16 linearVelocity=32 angularVelocity=44 linearDamping=56 angularDamping=60 gravityScale=64 sleepThreshold=68 name=72 userData=80 motionLocks=88 enableSleep=94 isAwake=95 isBullet=96 isEnabled=97 allowFastRotation=98 enableContactRecycling=99 internalValue=100
+b3Filter 24 8 categoryBits=0 maskBits=8 groupIndex=16
+b3SurfaceMaterial 40 8 friction=0 restitution=4 rollingResistance=8 tangentVelocity=12 userMaterialId=24 customColor=32 padding=36
+b3ShapeType 4 4
+b3ShapeDef 120 8 name=0 userData=8 materials=16 materialCount=24 baseMaterial=32 density=72 explosionScale=76 filter=80 enableCustomFiltering=104 isSensor=105 enableSensorEvents=106 enableContactEvents=107 enableHitEvents=108 enablePreSolveEvents=109 invokeContactCreation=110 updateBodyMass=111 enableSpeculativeContact=112 internalValue=116
+b3Sphere 16 4 center=0 radius=12
+b3Capsule 28 4 center1=0 center2=12 radius=24
+b3HullVertex 1 1
+b3HullHalfEdge 4 1 next=0 twin=1 origin=2 face=3
+b3HullFace 1 1
+b3HullData 144 8 version=0 hash=8 aabb=16 surfaceArea=40 volume=44 innerRadius=48 center=52 centralInertia=64 vertexCount=100 vertexOffset=104 pointOffset=108 edgeCount=112 edgeOffset=116 faceCount=120 planeOffset=124 faceOffset=128 soaVertexOffset=132 soaNormalOffset=136 byteCount=140
+b3BoxHull 640 8 base=0 boxVertices=144 boxPoints=152 boxEdges=248 boxPlanes=344 boxFaces=440 padding=446 vx=448 vy=480 vz=512 nx=544 ny=576 nz=608

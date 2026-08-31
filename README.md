@@ -3,8 +3,8 @@
 C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rigid body physics
 library written in C17.
 
-Status: early. The package structure, native build, and design are in place; the API surface is
-being bound incrementally.
+Status: early. Worlds, bodies, and the sphere, capsule and convex-hull shapes are bound; the rest
+of the API surface follows incrementally.
 
 ## Using it
 
@@ -55,10 +55,11 @@ receiver already at hand becomes a method rather than a free function: `world.cr
 method on the world, not `create_body(world, def)`, because the world already exists at the call
 site; `create_world` stays free because there is no world yet to own that call.
 Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
-sentinel. `create_world` and `world.create_body` in particular validate that their definition came
-from `default_world_def()`/`default_body_def()` before calling into box3d — a behaviour they have
-that calling C directly does not, since a release build of box3d compiles out its own check for this
-and would otherwise construct silently with a garbage definition.
+sentinel. `create_world`, `world.create_body`, and the four shape constructors
+(`body.create_sphere_shape` and friends) in particular validate that their definition came from the
+matching `default_*_def()` before calling into box3d — a behaviour they have that calling C directly
+does not, since a release build of box3d compiles out its own check for this and would otherwise
+construct silently with a garbage definition.
 
 box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
 operators and vector methods work directly on values that cross the ABI. Matrices are a plain

@@ -33,3 +33,14 @@ b3HullHalfEdge next,twin,origin,face
 b3HullFace
 b3HullData version,hash,aabb,surfaceArea,volume,innerRadius,center,centralInertia,vertexCount,vertexOffset,pointOffset,edgeCount,edgeOffset,faceCount,planeOffset,faceOffset,soaVertexOffset,soaNormalOffset,byteCount
 b3BoxHull base,boxVertices,boxPoints,boxEdges,boxPlanes,boxFaces,padding,vx,vy,vz,nx,ny,nz
+b3SensorBeginTouchEvent sensorShapeId,visitorShapeId
+b3SensorEndTouchEvent sensorShapeId,visitorShapeId
+b3SensorEvents beginEvents,endEvents,beginCount,endCount
+b3ContactBeginTouchEvent shapeIdA,shapeIdB,contactId
+b3ContactEndTouchEvent shapeIdA,shapeIdB,contactId
+b3ContactHitEvent shapeIdA,shapeIdB,contactId,point,normal,approachSpeed,userMaterialIdA,userMaterialIdB
+b3ContactEvents beginEvents,endEvents,hitEvents,beginCount,endCount,hitCount
+b3BodyMoveEvent userData,transform,bodyId,fellAsleep
+b3BodyEvents moveEvents,moveCount
+b3JointEvent jointId,userData
+b3JointEvents jointEvents,count

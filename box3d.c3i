@@ -567,3 +567,104 @@ extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
 extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");
 extern fn Vec3 ShapeId.closest_point(self, Vec3 target) @cname("b3Shape_GetClosestPoint");
 extern fn void ShapeId.apply_wind(self, Vec3 wind, float drag, float lift, float max_speed, bool wake) @cname("b3Shape_ApplyWind");
+
+<*
+ A shape began overlapping a sensor shape during the last step. Both shapes must have asked for
+ sensor events in their definition — the visitor as well as the sensor.
+*>
+struct SensorBeginTouchEvent {
+    ShapeId sensor_shape_id;
+    ShapeId visitor_shape_id;
+}
+
+<*
+ A shape stopped overlapping a sensor shape. Either identifier may already be dead: destroying a
+ body or shape, moving it, or changing its filter all end an overlap, so check them with
+ ShapeId.is_valid() before use.
+*>
+struct SensorEndTouchEvent {
+    ShapeId sensor_shape_id;
+    ShapeId visitor_shape_id;
+}
+
+struct SensorEvents {
+    SensorBeginTouchEvent* begin_events;
+    SensorEndTouchEvent* end_events;
+    int begin_count;
+    int end_count;
+}
+
+<*
+ Two shapes began touching during the last step.
+*>
+struct ContactBeginTouchEvent {
+    ShapeId shape_id_a;
+    ShapeId shape_id_b;
+    ContactId contact_id;
+}
+
+<*
+ Two shapes stopped touching. Every identifier here may already be dead — see
+ SensorEndTouchEvent — and the contact itself is checked with ContactId.is_valid().
+*>
+struct ContactEndTouchEvent {
+    ShapeId shape_id_a;
+    ShapeId shape_id_b;
+    ContactId contact_id;
+}
+
+<*
+ Two shapes collided faster than the world's hit event threshold. The normal points from shape A
+ to shape B, and the point is the mid-point between the two surfaces at the start of the step,
+ which may be a speculative point at which the shapes were not yet touching.
+*>
+struct ContactHitEvent {
+    ShapeId shape_id_a;
+    ShapeId shape_id_b;
+    ContactId contact_id;
+    Pos point;
+    Vec3 normal;
+    float approach_speed;
+    ulong user_material_id_a;
+    ulong user_material_id_b;
+}
+
+struct ContactEvents {
+    ContactBeginTouchEvent* begin_events;
+    ContactEndTouchEvent* end_events;
+    ContactHitEvent* hit_events;
+    int begin_count;
+    int end_count;
+    int hit_count;
+}
+
+<*
+ A body moved under simulation during the last step. Bodies the caller moved itself are not
+ reported. The transform is the pose the body ended the step at, so a caller updating render
+ transforms reads it here instead of calling BodyId.transform() per body.
+*>
+struct BodyMoveEvent {
+    void* user_data;
+    WorldTransform transform;
+    BodyId body_id;
+    bool fell_asleep;
+}
+
+struct BodyEvents {
+    BodyMoveEvent* move_events;
+    int move_count;
+}
+
+<*
+ An awake joint whose force or torque exceeded its threshold. The forces themselves are not
+ reported.
+*>
+struct JointEvent {
+    JointId joint_id;
+    void* user_data;
+}
+
+struct JointEvents {
+    JointEvent* joint_events;
+    int count;
+}

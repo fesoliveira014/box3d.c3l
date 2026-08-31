@@ -6,18 +6,13 @@ import std::math;
 fn void the_event_types_match_the_c_layout() @test {
     assert(b3::SensorBeginTouchEvent::size == 16);
     assert(b3::SensorEndTouchEvent::size == 16);
-    assert(b3::SensorEvents::size == 24);
-    assert(b3::SensorEvents::alignment == 8);
     assert(b3::ContactBeginTouchEvent::size == 28);
     assert(b3::ContactEndTouchEvent::size == 28);
     assert(b3::ContactHitEvent::size == 72);
     assert(b3::ContactHitEvent::alignment == 8);
-    assert(b3::ContactEvents::size == 40);
     assert(b3::BodyMoveEvent::size == 48);
     assert(b3::BodyMoveEvent::alignment == 8);
-    assert(b3::BodyEvents::size == 16);
     assert(b3::JointEvent::size == 16);
-    assert(b3::JointEvents::size == 16);
 }
 
 fn void two_bodies_that_collide_report_the_shapes_that_began_touching() @test {
@@ -75,7 +70,7 @@ fn void a_bouncing_sphere_reports_that_it_stopped_touching_the_ground() @test {
     b3::BodyId ground = world.create_body(&body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::ShapeId ground_shape = ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
@@ -86,18 +81,31 @@ fn void a_bouncing_sphere_reports_that_it_stopped_touching_the_ground() @test {
     shape_def.enable_contact_events = true;
     shape_def.base_material.restitution = 0.6;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId ball_shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
 
     int begin_total;
     int end_total;
+    bool saw_end;
     for (int i = 0; i < 120; i++) {
         world.step(1.0f / 60.0f, 4);
         begin_total += world.contact_begin_touch_events().len;
-        end_total += world.contact_end_touch_events().len;
+
+        b3::ContactEndTouchEvent[] ends = world.contact_end_touch_events();
+        end_total += ends.len;
+        if (!saw_end && ends.len > 0) {
+            b3::ContactEndTouchEvent stop = ends[0];
+            bool ground_first = stop.shape_id_a.index1 == ground_shape.index1
+                             && stop.shape_id_b.index1 == ball_shape.index1;
+            bool ball_first = stop.shape_id_a.index1 == ball_shape.index1
+                           && stop.shape_id_b.index1 == ground_shape.index1;
+            assert(ground_first || ball_first, "an end-touch event names the ball and the ground shape, in either order");
+            saw_end = true;
+        }
     }
 
     assert(begin_total >= 1, "the sphere must reach the ground");
     assert(end_total >= 1, "a sphere that bounces off the ground stops touching it");
+    assert(saw_end, "the first end-touch event was captured and checked against the shapes");
 }
 
 fn void a_sphere_driven_into_the_ground_reports_the_speed_it_arrived_at() @test {

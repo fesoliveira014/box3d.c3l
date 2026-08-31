@@ -587,7 +587,7 @@ struct SensorEndTouchEvent {
     ShapeId visitor_shape_id;
 }
 
-struct SensorEvents {
+struct SensorEvents @private {
     SensorBeginTouchEvent* begin_events;
     SensorEndTouchEvent* end_events;
     int begin_count;
@@ -629,7 +629,7 @@ struct ContactHitEvent {
     ulong user_material_id_b;
 }
 
-struct ContactEvents {
+struct ContactEvents @private {
     ContactBeginTouchEvent* begin_events;
     ContactEndTouchEvent* end_events;
     ContactHitEvent* hit_events;
@@ -650,7 +650,7 @@ struct BodyMoveEvent {
     bool fell_asleep;
 }
 
-struct BodyEvents {
+struct BodyEvents @private {
     BodyMoveEvent* move_events;
     int move_count;
 }
@@ -664,7 +664,7 @@ struct JointEvent {
     void* user_data;
 }
 
-struct JointEvents {
+struct JointEvents @private {
     JointEvent* joint_events;
     int count;
 }
@@ -697,10 +697,11 @@ extern fn JointEvents joint_events_raw(WorldId world_id) @cname("b3World_GetJoin
 extern fn bool JointId.is_valid(self) @cname("b3Joint_IsValid");
 
 <*
- Called for each contact point between two shapes that both asked for pre-solve events, before
- the solver runs. Returning false discards the contact for that step, so the two shapes pass
- through each other. box3d may call this from a worker thread, and the world must not be
- modified from inside it.
+ Called for each contact point between two shapes, at least one of which asked for pre-solve
+ events, before the solver runs. Returning false discards the contact for that step, so the two
+ shapes pass through each other. box3d may call this from a worker thread, and the world must not
+ be modified from inside it. The context pointer is stored in the world and dereferenced on every
+ call, so it must outlive the world.
 *>
 alias PreSolveFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, Pos point, Vec3 normal, void* context);
 
@@ -708,9 +709,10 @@ alias PreSolveFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, Pos point, Ve
  Called when two shapes whose definitions enabled custom filtering are about to begin colliding.
  Returning false stops the pair from colliding at all. Only one of the two shapes needs to have
  enabled it. box3d may call this from a worker thread, and the world must not be modified from
- inside it.
+ inside it. The context pointer is stored in the world and dereferenced on every call, so it must
+ outlive the world.
 *>
 alias CustomFilterFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, void* context);
 
-extern fn void WorldId.set_pre_solve_callback(self, PreSolveFn fcn, void* context) @cname("b3World_SetPreSolveCallback");
-extern fn void WorldId.set_custom_filter_callback(self, CustomFilterFn fcn, void* context) @cname("b3World_SetCustomFilterCallback");
+extern fn void WorldId.set_pre_solve_callback(self, PreSolveFn pre_solve_fn, void* context) @cname("b3World_SetPreSolveCallback");
+extern fn void WorldId.set_custom_filter_callback(self, CustomFilterFn custom_filter_fn, void* context) @cname("b3World_SetCustomFilterCallback");

@@ -3,8 +3,9 @@
 C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rigid body physics
 library written in C17.
 
-Status: early. Worlds, bodies, and the sphere, capsule and convex-hull shapes are bound; the rest
-of the API surface follows incrementally.
+Status: early. Worlds, bodies, the sphere, capsule and convex-hull shapes, the world's event
+arrays, and the pre-solve and custom-filter callbacks are bound; the rest of the API surface
+follows incrementally.
 
 ## Using it
 

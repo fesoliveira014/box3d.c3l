@@ -33,3 +33,14 @@ b3HullHalfEdge 4 1 next=0 twin=1 origin=2 face=3
 b3HullFace 1 1
 b3HullData 144 8 version=0 hash=8 aabb=16 surfaceArea=40 volume=44 innerRadius=48 center=52 centralInertia=64 vertexCount=100 vertexOffset=104 pointOffset=108 edgeCount=112 edgeOffset=116 faceCount=120 planeOffset=124 faceOffset=128 soaVertexOffset=132 soaNormalOffset=136 byteCount=140
 b3BoxHull 640 8 base=0 boxVertices=144 boxPoints=152 boxEdges=248 boxPlanes=344 boxFaces=440 padding=446 vx=448 vy=480 vz=512 nx=544 ny=576 nz=608
+b3SensorBeginTouchEvent 16 4 sensorShapeId=0 visitorShapeId=8
+b3SensorEndTouchEvent 16 4 sensorShapeId=0 visitorShapeId=8
+b3SensorEvents 24 8 beginEvents=0 endEvents=8 beginCount=16 endCount=20
+b3ContactBeginTouchEvent 28 4 shapeIdA=0 shapeIdB=8 contactId=16
+b3ContactEndTouchEvent 28 4 shapeIdA=0 shapeIdB=8 contactId=16
+b3ContactHitEvent 72 8 shapeIdA=0 shapeIdB=8 contactId=16 point=28 normal=40 approachSpeed=52 userMaterialIdA=56 userMaterialIdB=64
+b3ContactEvents 40 8 beginEvents=0 endEvents=8 hitEvents=16 beginCount=24 endCount=28 hitCount=32
+b3BodyMoveEvent 48 8 userData=0 transform=8 bodyId=36 fellAsleep=44
+b3BodyEvents 16 8 moveEvents=0 moveCount=8
+b3JointEvent 16 8 jointId=0 userData=8
+b3JointEvents 16 8 jointEvents=0 count=8

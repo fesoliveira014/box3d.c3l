@@ -1325,3 +1325,21 @@ extern fn void JointId.set_torque_threshold(self, float threshold) @cname("b3Joi
  built from a default definition.
 *>
 extern fn float JointId.torque_threshold(self) @cname("b3Joint_GetTorqueThreshold");
+
+<*
+ The number of joints linked to this body. Exact, unlike the contact capacities, and it keeps
+ counting while the world is locked: box3d reaches the world here without the locked check, the
+ same exception shape_count() is, rather than reporting zero the way the contact and sensor
+ capacities do.
+*>
+extern fn int BodyId.joint_count(self) @cname("b3Body_GetJointCount");
+
+<*
+ Raw body joint filler. Private because it reports its count through a return value;
+ BodyId.joints() returns the filled prefix instead.
+*>
+extern fn int body_joints_raw(
+  BodyId body_id,
+  JointId* joint_array,
+  int capacity,
+) @cname("b3Body_GetJoints") @private;

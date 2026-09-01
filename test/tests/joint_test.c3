@@ -594,3 +594,89 @@ fn void a_joint_holds_both_event_thresholds_out_of_reach_until_they_are_set() @t
     assert(thresholds.force_after == 0.0, "a zero threshold arms the check on every awake step");
     assert(thresholds.torque_after == 7.5, "and each threshold takes its own value, so a swap fails");
 }
+
+struct BodyJoints {
+    int count_fresh;
+    int count_with_one_joint;
+    int count_with_two_joints;
+    int count_after_destroy;
+    b3::JointId first;
+    b3::JointId second;
+    int filled_roomy;
+    b3::JointId[4] roomy;
+    int filled_cramped;
+    b3::JointId[1] cramped;
+    int filled_empty;
+}
+
+// The buffers are copied out whole rather than returned as slices: a slice out of this helper
+// would point into a stack frame that ends with it, so the caller reads the copies and the
+// recorded lengths instead.
+fn BodyJoints the_joints_of_a_body_linked_to_two_others() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId shared = a_dynamic_sphere_at(world, 0.0);
+    b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
+
+    int count_fresh = shared.joint_count();
+    b3::JointId first = link_with_a_filter_joint(world, shared, a);
+    int count_with_one_joint = shared.joint_count();
+    b3::JointId second = link_with_a_filter_joint(world, shared, b);
+    int count_with_two_joints = shared.joint_count();
+
+    b3::JointId[4] roomy;
+    b3::JointId[1] cramped;
+    int filled_roomy = shared.joints(roomy[..]).len;
+    int filled_cramped = shared.joints(cramped[..]).len;
+    int filled_empty = shared.joints(roomy[:0]).len;
+
+    first.destroy(false);
+    second.destroy(false);
+
+    return {
+        .count_fresh = count_fresh,
+        .count_with_one_joint = count_with_one_joint,
+        .count_with_two_joints = count_with_two_joints,
+        .count_after_destroy = shared.joint_count(),
+        .first = first,
+        .second = second,
+        .filled_roomy = filled_roomy,
+        .roomy = roomy,
+        .filled_cramped = filled_cramped,
+        .cramped = cramped,
+        .filled_empty = filled_empty,
+    };
+}
+
+fn void a_body_counts_the_joints_linked_to_it() @test {
+    BodyJoints joints = the_joints_of_a_body_linked_to_two_others();
+
+    assert(joints.count_fresh == 0, "a body carries no joints until one links it");
+    assert(joints.count_with_one_joint == 1);
+    assert(joints.count_with_two_joints == 2, "and every further joint adds one more");
+    assert(joints.count_after_destroy == 0, "destroying both takes the count back to none");
+}
+
+fn void a_body_reports_the_joints_linked_to_it_most_recently_created_first() @test {
+    BodyJoints joints = the_joints_of_a_body_linked_to_two_others();
+
+    assert(joints.first.index1 != joints.second.index1, "the two joints must differ for the order to mean anything");
+    assert(joints.filled_roomy == 2, "a buffer longer than the count comes back as the filled prefix");
+    assert(joints.roomy[0].index1 == joints.second.index1,
+        "box3d walks a head-inserted list, so the joint created last is reported first");
+    assert(joints.roomy[0].generation == joints.second.generation);
+    assert(joints.roomy[1].index1 == joints.first.index1, "and the joint created first is reported last");
+    assert(joints.roomy[1].generation == joints.first.generation);
+}
+
+fn void a_buffer_takes_only_the_joints_that_fit_in_it() @test {
+    BodyJoints joints = the_joints_of_a_body_linked_to_two_others();
+
+    assert(joints.filled_cramped == 1, "a buffer of one is filled to its length and no further");
+    assert(joints.cramped[0].index1 == joints.second.index1, "and takes the joint the walk reaches first");
+    assert(joints.cramped[0].generation == joints.second.generation);
+    assert(joints.filled_empty == 0, "a buffer with no room at all takes nothing");
+}

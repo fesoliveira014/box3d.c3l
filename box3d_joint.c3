@@ -45,3 +45,16 @@ fn ConstraintTuning JointId.constraint_tuning(self) {
     constraint_tuning_raw(self, &tuning.hertz, &tuning.damping_ratio);
     return tuning;
 }
+
+<*
+ Writes the joints linked to this body into the caller's buffer, most recently created first:
+ box3d walks a list each new joint is inserted at the head of, so a body linked by one joint and
+ then another reports the second before the first. joint_count() is exact, so a buffer that long
+ is never truncated, and a buffer with no room at all takes nothing.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn JointId[] BodyId.joints(self, JointId[] buffer) {
+    int written = body_joints_raw(self, buffer.ptr, (int)buffer.len);
+    return buffer[:written];
+}

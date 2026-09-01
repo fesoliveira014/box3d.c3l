@@ -1,5 +1,15 @@
 module b3;
 
+struct CastCollector @private {
+    CastHit[] buffer;
+    usz count;
+}
+
+struct OverlapCollector @private {
+    ShapeId[] buffer;
+    usz count;
+}
+
 <*
  Fires a ray into the world and reports the closest shape it struck.
 
@@ -29,8 +39,8 @@ fn RayResult? WorldId.cast_ray_closest(self, Pos origin, Vec3 translation, Query
 
  @return "the hit, or NO_HIT when the ray missed the shape"
 *>
-fn CastOutput? ShapeId.ray_cast(self, Pos origin, Vec3 translation) {
-    CastOutput result = shape_ray_cast_raw(self, origin, translation);
+fn WorldCastOutput? ShapeId.ray_cast(self, Pos origin, Vec3 translation) {
+    WorldCastOutput result = shape_ray_cast_raw(self, origin, translation);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -108,53 +118,6 @@ fn ClosestPoint BodyId.closest_point(self, Vec3 target) {
     Vec3 point;
     float distance = body_closest_point_raw(self, &point, target);
     return { .point = point, .distance = distance };
-}
-
-struct CastCollector @private {
-    CastHit[] buffer;
-    usz count;
-}
-
-struct OverlapCollector @private {
-    ShapeId[] buffer;
-    usz count;
-}
-
-fn float collect_cast_hit(
-  ShapeId shape_id,
-  Pos point,
-  Vec3 normal,
-  float fraction,
-  ulong user_material_id,
-  int triangle_index,
-  int child_index,
-  void* context,
-) @private {
-    CastCollector* collector = (CastCollector*)context;
-    if (collector.count >= collector.buffer.len) return 0.0f;
-
-    collector.buffer[collector.count] = {
-      .shape_id = shape_id,
-      .point = point,
-      .normal = normal,
-      .fraction = fraction,
-      .user_material_id = user_material_id,
-      .triangle_index = triangle_index,
-      .child_index = child_index,
-    };
-    collector.count++;
-
-    return collector.count < collector.buffer.len ? 1.0f : 0.0f;
-}
-
-fn bool collect_overlap(ShapeId shape_id, void* context) @private {
-    OverlapCollector* collector = (OverlapCollector*)context;
-    if (collector.count >= collector.buffer.len) return false;
-
-    collector.buffer[collector.count] = shape_id;
-    collector.count++;
-
-    return collector.count < collector.buffer.len;
 }
 
 <*
@@ -272,6 +235,10 @@ fn Manifold[] ContactData.contact_manifolds(self) {
 <*
  The valid contact points of this manifold — the first point_count of its four slots.
 
+ The slice points into the manifold it was called on and lives exactly as long as that manifold
+ does, so iterating with `foreach (&m : contact.contact_manifolds())` borrows box3d's own manifold
+ rather than a copy that dies at the next iteration.
+
  @return "the points that carry contact geometry, between none and MAX_MANIFOLD_POINTS of them"
 *>
 fn ManifoldPoint[] Manifold.contact_points(&self) {
@@ -326,4 +293,41 @@ fn ShapeId[] BodyId.shapes(self, ShapeId[] buffer) {
 fn ShapeId[] ShapeId.sensor_data(self, ShapeId[] buffer) {
     int written = shape_sensor_data_raw(self, buffer.ptr, (int)buffer.len);
     return buffer[:written];
+}
+
+fn float collect_cast_hit(
+  ShapeId shape_id,
+  Pos point,
+  Vec3 normal,
+  float fraction,
+  ulong user_material_id,
+  int triangle_index,
+  int child_index,
+  void* context,
+) @private {
+    CastCollector* collector = (CastCollector*)context;
+    if (collector.count >= collector.buffer.len) return 0.0f;
+
+    collector.buffer[collector.count] = {
+      .shape_id = shape_id,
+      .point = point,
+      .normal = normal,
+      .fraction = fraction,
+      .user_material_id = user_material_id,
+      .triangle_index = triangle_index,
+      .child_index = child_index,
+    };
+    collector.count++;
+
+    return collector.count < collector.buffer.len ? 1.0f : 0.0f;
+}
+
+fn bool collect_overlap(ShapeId shape_id, void* context) @private {
+    OverlapCollector* collector = (OverlapCollector*)context;
+    if (collector.count >= collector.buffer.len) return false;
+
+    collector.buffer[collector.count] = shape_id;
+    collector.count++;
+
+    return collector.count < collector.buffer.len;
 }

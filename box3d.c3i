@@ -879,7 +879,7 @@ extern fn RayResult cast_ray_closest_raw(
 <*
  Raw single-shape ray cast. Private because a miss comes back as a struct of undefined fields.
 *>
-extern fn CastOutput shape_ray_cast_raw(
+extern fn WorldCastOutput shape_ray_cast_raw(
   ShapeId shape_id,
   Pos origin,
   Vec3 translation,
@@ -933,8 +933,8 @@ extern fn float body_closest_point_raw(
  Called once for each shape a cast finds along its path, in no particular order. The return value
  steers the cast: -1 rejects this shape and continues, 0 ends the cast, 1 continues without
  clipping, and any fraction between them clips the cast to that point so later shapes are only
- reported if they are nearer. box3d may call this from a worker thread, and the world must not be
- modified from inside it.
+ reported if they are nearer. The query runs synchronously on the calling thread, and the world
+ must not be modified from inside it.
 *>
 alias CastResultFn = fn float(
   ShapeId shape_id,
@@ -948,11 +948,16 @@ alias CastResultFn = fn float(
 );
 
 <*
- Called once for each shape an overlap query finds. Returning false ends the query. box3d may
- call this from a worker thread, and the world must not be modified from inside it.
+ Called once for each shape an overlap query finds. Returning false ends the query. The query
+ runs synchronously on the calling thread, and the world must not be modified from inside it.
 *>
 alias OverlapResultFn = fn bool(ShapeId shape_id, void* context);
 
+<*
+ Fires a ray from origin to origin + translation and calls fcn once per shape found along it, in
+ no particular order. The callback's return value steers the cast — see CastResultFn. Returns the
+ broad-phase traversal counters.
+*>
 extern fn TreeStats WorldId.cast_ray(
   self,
   Pos origin,
@@ -962,6 +967,12 @@ extern fn TreeStats WorldId.cast_ray(
   void* context,
 ) @cname("b3World_CastRay");
 
+<*
+ Sweeps a convex proxy instead of a point, calling fcn once per shape it reaches. The proxy's
+ points are borrowed for the duration of the call and its count must not exceed
+ MAX_SHAPE_CAST_POINTS. Reported fractions stop short of true contact by box3d's speculative
+ margin.
+*>
 extern fn TreeStats WorldId.cast_shape(
   self,
   Pos origin,
@@ -984,6 +995,10 @@ extern fn TreeStats WorldId.overlap_aabb(
   void* context,
 ) @cname("b3World_OverlapAABB");
 
+<*
+ Calls fcn once per shape overlapping a convex proxy placed at origin. The proxy's points are
+ borrowed for the duration of the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
+*>
 extern fn TreeStats WorldId.overlap_shape(
   self,
   Pos origin,

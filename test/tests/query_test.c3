@@ -218,6 +218,22 @@ fn bool log_overlap(b3::ShapeId shape_id, void* context) {
     return true;
 }
 
+fn bool hits_match_the_expected_fractions(b3::CastHit[] hits, float[3] expected) {
+    bool[3] matched;
+    foreach (hit : hits) {
+        bool found = false;
+        for (int j = 0; j < 3; j++) {
+            if (!matched[j] && math::is_approx(hit.fraction, expected[j], 0.001f)) {
+                matched[j] = true;
+                found = true;
+                break;
+            }
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
 fn b3::WorldId a_world_holding_three_spheres_in_a_line() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
@@ -251,7 +267,8 @@ fn void a_cast_callback_controls_how_far_the_ray_goes() @test {
       context: &every,
     );
     assert(every.calls == 3, "returning one visits every sphere along the ray");
-    assert(stats.node_visits > 0 && stats.leaf_visits > 0, "the traversal counters are reported");
+    assert(stats.node_visits > 0, "the node traversal counter is reported");
+    assert(stats.leaf_visits == 3, "one leaf per sphere along the unclipped ray");
 
     RayVisitLog stopped = { .calls = 0, .stop_after = 1 };
     world.cast_ray(
@@ -325,7 +342,9 @@ fn void collecting_a_cast_fills_the_caller_buffer() @test {
       buffer: roomy[..],
     );
     assert(all.len == 3, "a buffer with room collects every sphere");
-    assert(all[0].fraction > 0.0f && all[0].fraction < 1.0f, "each hit carries its fraction");
+    float[3] expected_fractions = { 0.291667f, 0.458333f, 0.625f };
+    assert(hits_match_the_expected_fractions(all, expected_fractions),
+        "the three collected fractions match the three spheres' fractions, each exactly once");
 
     b3::CastHit[2] cramped;
     b3::CastHit[] some = world.cast_ray_all(
@@ -403,4 +422,6 @@ fn void collecting_a_shape_cast_reports_the_swept_fraction() @test {
     assert(hits[0].fraction > 0.4055f && hits[0].fraction < 0.4075f,
         "stopping a quarter unit early, less box3d's speculative margin");
     assert(hits[0].shape_id.index1 == sphere_shape.index1, "and names the shape it reached");
+    assert(hits[0].point.y > 0.49f && hits[0].point.y < 0.51f, "the hit point is on the resting sphere's surface");
+    assert(hits[0].normal.y > 0.99f && hits[0].normal.y < 1.01f, "and the surface normal points back along the sweep");
 }

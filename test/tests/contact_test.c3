@@ -95,7 +95,8 @@ fn void a_contact_carries_its_manifold_geometry() @test {
     b3::ManifoldPoint[] points = manifold.contact_points();
     assert(points.len == (usz)manifold.point_count, "the point slice spans exactly point_count");
     assert(points.len >= 1 && points.len <= 4, "a manifold carries between one and four points");
-    assert(points[0].separation < 0.01f, "a resting sphere is touching, not far away");
+    assert(points[0].separation > -0.01f && points[0].separation < 0.01f,
+        "a resting sphere sits within a hair of the ground, neither overlapping nor floating");
 }
 
 fn void a_shape_reports_the_same_contact_as_its_body() @test {

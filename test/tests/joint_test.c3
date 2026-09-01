@@ -465,11 +465,16 @@ fn void waking_a_joint_wakes_both_of_the_bodies_it_links() @test {
     assert(outcome.awake_a && outcome.awake_b, "the wake reaches both bodies the joint links");
 }
 
+// A third of a turn about the diagonal. Every component is 0.5, so the quaternion is exactly a
+// unit one and the integrator hands it back unchanged on a body nothing is rotating.
+const b3::Quat BODY_B_TILT = { .i = 0.5, .j = 0.5, .k = 0.5, .l = 0.5 };
+
 struct JointReaction {
     b3::Vec3 force;
     b3::Vec3 torque;
     float linear_separation;
     float angular_separation;
+    b3::Quat rotation_b;
 }
 
 fn JointReaction the_reaction_of_a_filter_joint_anchored_off_centre() {
@@ -479,6 +484,7 @@ fn JointReaction the_reaction_of_a_filter_joint_anchored_off_centre() {
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
+    b.set_transform(b.position(), BODY_B_TILT);
 
     b3::FilterJointDef joint_def = b3::default_filter_joint_def();
     joint_def.body_id_a = a;
@@ -496,20 +502,25 @@ fn JointReaction the_reaction_of_a_filter_joint_anchored_off_centre() {
         .torque = joint.constraint_torque(),
         .linear_separation = joint.linear_separation(),
         .angular_separation = joint.angular_separation(),
+        .rotation_b = b.rotation(),
     };
 }
 
-// The two anchors are offset and their bodies are six apart, so a separation measured from them
-// would be nowhere near zero. box3d answers zero from a branch on the joint's type instead: the
-// zero belongs to the type, not to a joint that happens to be sitting unloaded.
+// Each zero is made discriminating by its own half of the setup: the anchors are offset and their
+// bodies six apart, so a linear separation read off them would be nowhere near zero, and body B is
+// turned a third of the way round, so an angular separation — which box3d takes from the two body
+// rotations, never from the anchors — would be nowhere near zero either.
 fn void a_filter_joint_reports_no_force_no_torque_and_no_separation() @test {
     JointReaction reaction = the_reaction_of_a_filter_joint_anchored_off_centre();
 
+    assert(reaction.rotation_b.i == BODY_B_TILT.i && reaction.rotation_b.j == BODY_B_TILT.j
+        && reaction.rotation_b.k == BODY_B_TILT.k && reaction.rotation_b.l == BODY_B_TILT.l,
+        "body B is still turned away from body A when the separations are read");
     assert(reaction.force.x == 0.0 && reaction.force.y == 0.0 && reaction.force.z == 0.0,
         "a joint type that enforces nothing reports no force, whatever its anchors");
     assert(reaction.torque.x == 0.0 && reaction.torque.y == 0.0 && reaction.torque.z == 0.0);
     assert(reaction.linear_separation == 0.0, "and no separation, though its anchors are metres apart");
-    assert(reaction.angular_separation == 0.0);
+    assert(reaction.angular_separation == 0.0, "nor any angle, though its bodies are turned apart");
 }
 
 struct JointTuning {

@@ -1238,36 +1238,44 @@ extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");
 <*
  The force this joint is applying to hold its constraint, in newtons.
 
- What comes back describes the constraint, not how hard the joint is working: box3d answers each
- joint type from a branch of its own, and a type that enforces nothing gets the zero vector as
- that type's fixed answer. A filter joint therefore reports no force permanently — it is not
- reporting that it happens to be unloaded, it can report nothing else.
+ box3d answers this and the three accessors that follow from a branch on the joint's own type, so
+ a zero says nothing until it is read against that type. It can be a joint that is genuinely
+ unloaded. It can be a channel the type never measures, which a parallel joint's force and a
+ distance joint's torque both are however hard either joint is working. It can be a channel the
+ type measures only in some of its states, which ordinary runtime setters turn on and off. And a
+ wheel joint's angular separation is a case upstream has left unwritten, handed back as a zero
+ rather than refused. A filter joint enforces nothing and reports zero from all four permanently,
+ but it is one instance of the second reason, not the rule the other eight types follow.
 *>
 extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce");
 
 <*
- The torque this joint is applying to hold its constraint, in newton-metres. Zero for a joint
- type that enforces nothing, by type and permanently rather than by state — see constraint_force.
+ The torque this joint is applying to hold its constraint, in newton-metres. A zero is read
+ against the joint's type rather than taken for an idle joint — see constraint_force.
 *>
 extern fn Vec3 JointId.constraint_torque(self) @cname("b3Joint_GetConstraintTorque");
 
 <*
- How far apart this joint's two anchors have drifted, usually in metres. Zero for a joint type
- that constrains no distance, by type and permanently rather than by state — see
- constraint_force, and note that the zero holds however far the anchors really are.
+ How far this joint is from the placement it holds its two bodies in, usually in metres. Some
+ types measure the world-space distance between the two anchors, others the error left in the
+ translation they constrain. A zero is read against the joint's type rather than taken for a
+ joint resting where it wants to be — see constraint_force.
 *>
 extern fn float JointId.linear_separation(self) @cname("b3Joint_GetLinearSeparation");
 
 <*
- How far this joint's two anchors have twisted out of alignment, usually in radians. Zero for a
- joint type that constrains no angle, by type and permanently rather than by state — see
- constraint_force.
+ How far this joint's two bodies have turned out of the relative orientation it holds them in,
+ usually in radians. box3d builds this from the two body rotations and never reads the joint's
+ anchors, so moving an anchor does not move the reading. A zero is read against the joint's type
+ rather than taken for two bodies in alignment — see constraint_force.
 *>
 extern fn float JointId.angular_separation(self) @cname("b3Joint_GetAngularSeparation");
 
 <*
  Retunes the soft constraint this joint is solved with, which box3d calls an advanced feature. A
- joint built from a default definition carries 60 hertz and a damping ratio of 2.
+ joint built from a default definition carries 60 hertz and a damping ratio of 2. box3d asserts
+ both values are finite and non-negative; this package links a release build where that assertion
+ is compiled out, and the wrappers do not restore it.
 
  @param hertz : "the stiffness in cycles per second"
  @param damping_ratio : "the non-dimensional damping ratio, one for critical damping"
@@ -1287,12 +1295,15 @@ extern fn void constraint_tuning_raw(
 <*
  Sets the force at which this joint starts appearing in WorldId.joint_events(), in newtons.
 
- One check covers both thresholds, and it is armed only while at least one of the two is below
- float::max — so a joint stays out of the events only while both keep the default. Once armed,
- the joint is reported on any step where its force reaches this threshold or its torque reaches
- the torque threshold, which makes a threshold of zero report the joint on every step it is
- awake. box3d asserts the value is finite and non-negative; this package links a release build
- where that assertion is compiled out, and the wrappers do not restore it.
+ One check covers both thresholds. It is armed only while at least one of the two is below
+ float::max, so a joint whose thresholds both keep the default is never even checked. Being armed
+ is not being reported: an armed joint is reported on the steps where its force reaches this
+ threshold or its torque reaches the torque threshold, so a joint armed by a threshold it never
+ reaches appears in no event, while a threshold of zero reports the joint on every step it is
+ awake. The force compared against this threshold is a reaction force box3d computes inside the
+ solve; it is not the value constraint_force() returns, which is a different per-type computation
+ sharing the same unit. box3d asserts the value is finite and non-negative; this package links a
+ release build where that assertion is compiled out, and the wrappers do not restore it.
 *>
 extern fn void JointId.set_force_threshold(self, float threshold) @cname("b3Joint_SetForceThreshold");
 

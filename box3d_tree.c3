@@ -101,16 +101,14 @@ fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
 }
 
 <*
- Walks the proxies nearest point first, calling fcn for each one still inside the search bound.
+ Offers fcn each proxy the search bound still admits. The order is not a ranking: the tree
+ measures distance to node boxes only, to prune and to order siblings, so a nearer proxy is
+ routinely offered after a farther one. See TreeClosestFn for what fcn's return does, and query()
+ for the mask flags and for the traversal stack's limit, which applies here too.
 
- The tree measures no distance of its own: it prunes a node on the distance from point to that
- node's box against the bound, and the bound narrows only to what fcn returns, so a callback
- handing its argument back prunes nothing and the bound comes out as it went in. The mask flags
- are tested exactly as query() tests them.
-
- @param search_bound : "the squared distance to search within; a large one reaches every proxy"
+ @param search_bound : "the squared distance to search within; a large one reaches every proxy, and 0 admits none of them and reports no error"
 *>
-fn ClosestQueryResult DynamicTree.query_closest(
+fn ClosestSearch DynamicTree.query_closest(
   &self,
   Vec3 point,
   ulong mask_bits,

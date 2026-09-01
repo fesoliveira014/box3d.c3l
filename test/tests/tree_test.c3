@@ -701,6 +701,18 @@ fn bool hits_carry_exactly(QueryHits hits, ulong[] expected) {
     return true;
 }
 
+fn bool hits_carry_exactly_ulongs(ClosestVisits visits, ulong[] expected) {
+    if (visits.count != expected.len) return false;
+    foreach (want : expected) {
+        bool found = false;
+        for (usz i = 0; i < visits.count; i++) {
+            if (visits.user_data[i] == want) found = true;
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
 fn void fill_with_six_proxies(b3::DynamicTree* tree) {
     for (int i = 0; i < 6; i++) {
         tree.create_proxy(
@@ -709,7 +721,7 @@ fn void fill_with_six_proxies(b3::DynamicTree* tree) {
             .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
           },
           category_bits: 1ul << i,
-          user_data: (ulong)i,
+          user_data: (ulong)(i + 1),
         )!!;
     }
 }
@@ -843,7 +855,7 @@ fn void a_query_mask_reports_two_proxies_loosely_and_none_strictly() @test {
 
     assert(hits.unfiltered.count == 6, "every proxy is inside the query box to begin with");
     assert(hits.loose.count == 2, "and two of them carry a bit the mask names");
-    assert(hits_carry_exactly(hits.loose, (ulong[]){ 0, 2 }), "the ones created with bits one and four");
+    assert(hits_carry_exactly(hits.loose, (ulong[]){ 1, 3 }), "the ones created with bits one and four");
     assert(hits.strict.count == 0, "while none of them carries both bits");
 }
 
@@ -931,6 +943,9 @@ fn float visit_and_narrow_to_half(float search_bound, int proxy_id, ulong user_d
 struct ClosestReadings {
     ClosestVisits wide;
     ClosestVisits narrowed;
+    ClosestVisits masked;
+    ClosestVisits near_the_far_end;
+    int strict_leaf_visits;
     float initial_bound;
     float wide_bound;
     float narrowed_bound;
@@ -946,7 +961,7 @@ fn ClosestReadings the_visits_of_two_closest_queries() {
     float initial = 1.0e9f;
 
     ClosestVisits wide;
-    b3::ClosestQueryResult wide_result = tree.query_closest(
+    b3::ClosestSearch wide_result = tree.query_closest(
       point: { 0.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
@@ -956,7 +971,7 @@ fn ClosestReadings the_visits_of_two_closest_queries() {
     );
 
     ClosestVisits narrowed;
-    b3::ClosestQueryResult narrowed_result = tree.query_closest(
+    b3::ClosestSearch narrowed_result = tree.query_closest(
       point: { 0.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
@@ -965,7 +980,42 @@ fn ClosestReadings the_visits_of_two_closest_queries() {
       search_bound: initial,
     );
 
+    // A bound this tight admits only the proxies within it of the point, so the point itself is
+    // what decides the answer rather than merely the order.
+    ClosestVisits near_the_far_end;
+    tree.query_closest(
+      point: { 20.0, 0.0, 0.0 },
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_without_narrowing,
+      context: &near_the_far_end,
+      search_bound: 20.0,
+    );
+
+    ClosestVisits masked;
+    b3::ClosestSearch masked_result = tree.query_closest(
+      point: { 20.0, 0.0, 0.0 },
+      mask_bits: 0x5,
+      require_all_bits: false,
+      fcn: &visit_without_narrowing,
+      context: &masked,
+      search_bound: initial,
+    );
+
+    ClosestVisits strict;
+    b3::ClosestSearch strict_result = tree.query_closest(
+      point: { 20.0, 0.0, 0.0 },
+      mask_bits: 0x5,
+      require_all_bits: true,
+      fcn: &visit_without_narrowing,
+      context: &strict,
+      search_bound: initial,
+    );
+
     return {
+        .near_the_far_end = near_the_far_end,
+        .masked = masked,
+        .strict_leaf_visits = strict_result.stats.leaf_visits,
         .wide = wide,
         .narrowed = narrowed,
         .initial_bound = initial,
@@ -988,7 +1038,7 @@ fn void a_closest_query_narrows_only_through_what_its_callback_returns() @test {
     assert(readings.wide_leaf_visits == 6, "one leaf visit per callback");
     assert(readings.wide_bound == readings.initial_bound, "and the bound comes back as it went in");
     assert(readings.wide.bound_seen[0] == readings.initial_bound, "the first call is handed that same bound");
-    assert(readings.wide.user_data[0] == 0, "and the proxy holding the query point is offered first");
+    assert(readings.wide.user_data[0] != 0, "each visit naming its own proxy, none carrying the array's zero");
 
     assert(readings.narrowed.count == 1, "a callback that narrows cuts off the proxies beyond the bound");
     assert(readings.narrowed_leaf_visits == 1);
@@ -1028,7 +1078,7 @@ fn EmptyTreeAnswers the_answers_an_empty_tree_gives() {
     );
 
     ClosestVisits visits;
-    b3::ClosestQueryResult closest = tree.query_closest(
+    b3::ClosestSearch closest = tree.query_closest(
       point: { 0.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
@@ -1060,4 +1110,20 @@ fn void an_empty_tree_answers_both_traversals_without_a_single_hit() @test {
     assert(answers.closest_visits == 0, "the closest query calls nothing either");
     assert(answers.closest_node_visits == 0);
     assert(answers.closest_bound == answers.initial_bound, "and gives its search bound straight back");
+}
+
+// The closest traversal reads the same mask flags the box query does, and its point is the thing
+// every other reading here holds at the origin. A query from twenty metres out under a two-bit
+// mask separates all three from the defaults a mis-wired forward would fall back to.
+fn void a_closest_query_filters_on_the_mask_and_searches_from_the_point_it_was_given() @test {
+    ClosestReadings readings = the_visits_of_two_closest_queries();
+
+    assert(readings.masked.count == 2, "two proxies carry a bit the mask names");
+    assert(readings.masked.user_data[0] != 0 && readings.masked.user_data[1] != 0,
+        "each naming itself rather than the array's zero");
+    assert(readings.strict_leaf_visits == 0, "and none of them carries both bits");
+
+    assert(readings.near_the_far_end.count == 2, "a tight bound reaches only what is near the point");
+    assert(hits_carry_exactly_ulongs(readings.near_the_far_end, (ulong[]){ 6, 5 }),
+        "the two at the far end, which a query from the origin would never offer");
 }

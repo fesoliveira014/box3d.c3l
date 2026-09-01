@@ -54,3 +54,6 @@ b3TreeStats nodeVisits,leafVisits
 b3ContactData contactId,shapeIdA,shapeIdB,manifolds,manifoldCount
 b3ManifoldPoint anchorA,anchorB,separation,baseSeparation,normalImpulse,totalNormalImpulse,normalVelocity,featureId,triangleIndex,persisted
 b3Manifold points,normal,twistImpulse,frictionImpulse,rollingImpulse,pointCount
+b3JointType
+b3JointDef userData,bodyIdA,bodyIdB,localFrameA,localFrameB,forceThreshold,torqueThreshold,constraintHertz,constraintDampingRatio,drawScale,collideConnected,internalValue
+b3FilterJointDef base

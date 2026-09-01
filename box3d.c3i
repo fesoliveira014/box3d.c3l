@@ -641,7 +641,8 @@ struct ContactEvents @private {
 <*
  A body moved under simulation during the last step. Bodies the caller moved itself are not
  reported. The transform is the pose the body ended the step at, so a caller updating render
- transforms reads it here instead of calling BodyId.transform() per body.
+ transforms reads it here instead of calling BodyId.transform() per body, and the user data is
+ the pointer BodyId.set_user_data() wrote on that body.
 *>
 struct BodyMoveEvent {
     void* user_data;
@@ -657,7 +658,7 @@ struct BodyEvents @private {
 
 <*
  An awake joint whose force or torque exceeded its threshold. The forces themselves are not
- reported.
+ reported, and the user data is the pointer JointId.set_user_data() wrote on that joint.
 *>
 struct JointEvent {
     JointId joint_id;
@@ -1091,3 +1092,258 @@ extern fn int shape_sensor_data_raw(
   ShapeId* visitor_ids,
   int capacity,
 ) @cname("b3Shape_GetSensorData") @private;
+
+enum JointType : int {
+    PARALLEL,
+    DISTANCE,
+    FILTER,
+    MOTOR,
+    PRISMATIC,
+    REVOLUTE,
+    SPHERICAL,
+    WELD,
+    WHEEL,
+}
+
+<*
+ The definition every joint type builds on. Must come from default_filter_joint_def(), or from
+ another type's default — see WorldId.create_filter_joint. Both local frames are measured from
+ their body's origin rather than its centre of mass, so recomputing a body's mass leaves the
+ joint where it was. default_filter_joint_def() sets force_threshold and torque_threshold to
+ float::max, and a joint whose thresholds both keep that value is never checked at all: either one
+ below it arms the check, and being armed is not being reported — see set_force_threshold.
+*>
+struct JointDef {
+    void* user_data;
+    BodyId body_id_a;
+    BodyId body_id_b;
+    Transform local_frame_a;
+    Transform local_frame_b;
+    float force_threshold;
+    float torque_threshold;
+    float constraint_hertz;
+    float constraint_damping_ratio;
+    float draw_scale;
+    bool collide_connected;
+    int internal_value;
+}
+
+<*
+ A filter joint definition. A filter joint constrains nothing: it exists so the two bodies it
+ links stop colliding, and that suppression lasts only while collide_connected stays false.
+*>
+struct FilterJointDef {
+    inline JointDef base;
+}
+
+extern fn FilterJointDef default_filter_joint_def() @cname("b3DefaultFilterJointDef");
+
+<*
+ The soft-constraint tuning a joint solves with. This is a C3 type with no C counterpart: box3d
+ reports the pair through two out-parameters.
+*>
+struct ConstraintTuning {
+    float hertz;
+    float damping_ratio;
+}
+
+<*
+ Raw filter joint constructor. Bypasses WorldId.create_filter_joint's definition-cookie guard, so
+ it is private to the module — box3d_joint.c3's WorldId.create_filter_joint is the only caller and
+ is the only public way to a live joint.
+*>
+extern fn JointId create_filter_joint_raw(
+  WorldId world_id,
+  FilterJointDef* def,
+) @cname("b3CreateFilterJoint") @private;
+
+<*
+ Removes this joint from its world, dropping whatever it constrained between the two bodies. A
+ collision the joint was suppressing does not return the way set_collide_connected(true) returns
+ one: nothing re-offers the pair to the broad phase, so two settled bodies regain no contact until
+ one of them moves.
+
+ @param wake_attached : "false leaves two sleeping attached bodies asleep; true wakes both"
+*>
+extern fn void JointId.destroy(self, bool wake_attached) @cname("b3DestroyJoint");
+
+<*
+ This joint's type, which box3d fixes when the joint is created and offers no way to change.
+*>
+extern fn JointType JointId.type(self) @cname("b3Joint_GetType");
+
+<*
+ The body this joint's definition named as body_id_a.
+*>
+extern fn BodyId JointId.body_a(self) @cname("b3Joint_GetBodyA");
+
+<*
+ The body this joint's definition named as body_id_b.
+*>
+extern fn BodyId JointId.body_b(self) @cname("b3Joint_GetBodyB");
+
+<*
+ The world that owns this joint.
+*>
+extern fn WorldId JointId.world(self) @cname("b3Joint_GetWorld");
+
+<*
+ Moves this joint's anchor on body A. The frame is measured from that body's origin rather than
+ its centre of mass, so recomputing the body's mass leaves the anchor where it was.
+*>
+extern fn void JointId.set_local_frame_a(self, Transform local_frame) @cname("b3Joint_SetLocalFrameA");
+
+<*
+ This joint's anchor on body A, measured from that body's origin.
+*>
+extern fn Transform JointId.local_frame_a(self) @cname("b3Joint_GetLocalFrameA");
+
+<*
+ Moves this joint's anchor on body B, measured from that body's origin like set_local_frame_a.
+*>
+extern fn void JointId.set_local_frame_b(self, Transform local_frame) @cname("b3Joint_SetLocalFrameB");
+
+<*
+ This joint's anchor on body B, measured from that body's origin.
+*>
+extern fn Transform JointId.local_frame_b(self) @cname("b3Joint_GetLocalFrameB");
+
+<*
+ Lets the two linked bodies collide again, or stops them colliding.
+
+ This flag, not the joint's type, is what suppresses the collision: box3d refuses the pair for any
+ joint linking the two bodies whose collide_connected is false, whatever its type. Turning it on
+ has them colliding again from the next step; turning it off ends the collision at once, dropping
+ the contacts they already had. The effect is observable only while at least one of the two bodies
+ is dynamic — two non-dynamic bodies never collide anyway. Dropping the contacts is reported: each
+ one that was touching and whose shapes asked for contact events pushes an end-touch event, and
+ because it is appended outside a step it surfaces in the batch the next step() fills, not in the
+ one WorldId.contact_end_touch_events() returns beforehand. Silently does nothing while the world
+ is locked, mid WorldId.step or inside a callback box3d runs during one.
+*>
+extern fn void JointId.set_collide_connected(self, bool should_collide) @cname("b3Joint_SetCollideConnected");
+
+<*
+ Whether the two linked bodies are allowed to collide. False on a joint built from a default
+ definition, and that false is what suppresses the collision — see set_collide_connected.
+*>
+extern fn bool JointId.collide_connected(self) @cname("b3Joint_GetCollideConnected");
+
+extern fn void JointId.set_user_data(self, void* user_data) @cname("b3Joint_SetUserData");
+extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
+
+<*
+ Wakes both bodies this joint links, not only one — though two dynamic bodies a joint links share
+ one island, so waking either of them wakes the other anyway. Silently does nothing while the
+ world is locked, mid WorldId.step or inside a callback box3d runs during one.
+*>
+extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");
+
+<*
+ The force this joint is applying to hold its constraint, in newtons.
+
+ box3d answers this and the three accessors that follow from a branch on the joint's own type, so
+ a zero says nothing until it is read against that type. It can be a joint that is genuinely
+ unloaded. It can be a channel the type never measures, which a parallel joint's force and a
+ distance joint's torque both are however hard either joint is working. It can be a channel the
+ type measures only in some of its states, which ordinary runtime setters turn on and off. And a
+ wheel joint's angular separation is a case upstream has left unwritten, handed back as a zero
+ rather than refused. A filter joint enforces nothing and reports zero from all four permanently,
+ but it is one instance of the second reason, not the rule the other eight types follow.
+*>
+extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce");
+
+<*
+ The torque this joint is applying to hold its constraint, in newton-metres. A zero is read
+ against the joint's type rather than taken for an idle joint — see constraint_force.
+*>
+extern fn Vec3 JointId.constraint_torque(self) @cname("b3Joint_GetConstraintTorque");
+
+<*
+ How far this joint is from the placement it holds its two bodies in, usually in metres. Some
+ types measure the world-space distance between the two anchors, others the error left in the
+ translation they constrain. A zero is read against the joint's type rather than taken for a
+ joint resting where it wants to be — see constraint_force.
+*>
+extern fn float JointId.linear_separation(self) @cname("b3Joint_GetLinearSeparation");
+
+<*
+ How far this joint's two bodies have turned out of the relative orientation it holds them in,
+ usually in radians. box3d builds this from the two body rotations and never reads the joint's
+ anchors, so moving an anchor does not move the reading. A zero is read against the joint's type
+ rather than taken for two bodies in alignment — see constraint_force.
+*>
+extern fn float JointId.angular_separation(self) @cname("b3Joint_GetAngularSeparation");
+
+<*
+ Retunes the soft constraint this joint is solved with, which box3d calls an advanced feature. A
+ joint built from a default definition carries 60 hertz and a damping ratio of 2. box3d asserts
+ both values are finite and non-negative; this package links a release build where that assertion
+ is compiled out, and the wrappers do not restore it.
+
+ @param hertz : "the stiffness in cycles per second"
+ @param damping_ratio : "the non-dimensional damping ratio, one for critical damping"
+*>
+extern fn void JointId.set_constraint_tuning(self, float hertz, float damping_ratio) @cname("b3Joint_SetConstraintTuning");
+
+<*
+ Raw constraint tuning accessor. Private because it reports the pair through two out-parameters;
+ box3d_joint.c3's JointId.constraint_tuning() returns them as one value.
+*>
+extern fn void constraint_tuning_raw(
+  JointId joint_id,
+  float* hertz,
+  float* damping_ratio,
+) @cname("b3Joint_GetConstraintTuning") @private;
+
+<*
+ Sets the force at which this joint starts appearing in WorldId.joint_events(), in newtons.
+
+ One check covers both thresholds. It is armed only while at least one of the two is below
+ float::max, so a joint whose thresholds both keep the default is never even checked. Being armed
+ is not being reported: an armed joint is reported on the steps where its force reaches this
+ threshold or its torque reaches the torque threshold, so a joint armed by a threshold it never
+ reaches appears in no event, while a threshold of zero reports the joint on every step it is
+ awake. The force compared against this threshold is a reaction force box3d computes inside the
+ solve; it is not the value constraint_force() returns, which is a different per-type computation
+ sharing the same unit. box3d asserts the value is finite and non-negative; this package links a
+ release build where that assertion is compiled out, and the wrappers do not restore it.
+*>
+extern fn void JointId.set_force_threshold(self, float threshold) @cname("b3Joint_SetForceThreshold");
+
+<*
+ The force at which this joint starts appearing in WorldId.joint_events(), float::max on a joint
+ built from a default definition.
+*>
+extern fn float JointId.force_threshold(self) @cname("b3Joint_GetForceThreshold");
+
+<*
+ Sets the torque at which this joint starts appearing in WorldId.joint_events(), in
+ newton-metres. It shares one check with the force threshold, so the arming rule and the
+ compiled-out assertion described on set_force_threshold govern this one too.
+*>
+extern fn void JointId.set_torque_threshold(self, float threshold) @cname("b3Joint_SetTorqueThreshold");
+
+<*
+ The torque at which this joint starts appearing in WorldId.joint_events(), float::max on a joint
+ built from a default definition.
+*>
+extern fn float JointId.torque_threshold(self) @cname("b3Joint_GetTorqueThreshold");
+
+<*
+ The number of joints linked to this body. Exact, unlike the contact capacities, and it keeps
+ counting while the world is locked: box3d reaches the world here without the locked check, the
+ same exception shape_count() is, rather than reporting zero the way the contact and sensor
+ capacities do.
+*>
+extern fn int BodyId.joint_count(self) @cname("b3Body_GetJointCount");
+
+<*
+ Raw body joint filler. Private because it reports its count through a return value;
+ BodyId.joints() returns the filled prefix instead.
+*>
+extern fn int body_joints_raw(
+  BodyId body_id,
+  JointId* joint_array,
+  int capacity,
+) @cname("b3Body_GetJoints") @private;

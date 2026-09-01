@@ -1162,3 +1162,70 @@ extern fn JointId create_filter_joint_raw(
  @param wake_attached : "false leaves two sleeping attached bodies asleep; true wakes both"
 *>
 extern fn void JointId.destroy(self, bool wake_attached) @cname("b3DestroyJoint");
+
+<*
+ This joint's type, which box3d fixes when the joint is created and offers no way to change.
+*>
+extern fn JointType JointId.type(self) @cname("b3Joint_GetType");
+
+<*
+ The body this joint's definition named as body_id_a.
+*>
+extern fn BodyId JointId.body_a(self) @cname("b3Joint_GetBodyA");
+
+<*
+ The body this joint's definition named as body_id_b.
+*>
+extern fn BodyId JointId.body_b(self) @cname("b3Joint_GetBodyB");
+
+<*
+ The world that owns this joint.
+*>
+extern fn WorldId JointId.world(self) @cname("b3Joint_GetWorld");
+
+<*
+ Moves this joint's anchor on body A. The frame is measured from that body's origin rather than
+ its centre of mass, so recomputing the body's mass leaves the anchor where it was.
+*>
+extern fn void JointId.set_local_frame_a(self, Transform local_frame) @cname("b3Joint_SetLocalFrameA");
+
+<*
+ This joint's anchor on body A, measured from that body's origin.
+*>
+extern fn Transform JointId.local_frame_a(self) @cname("b3Joint_GetLocalFrameA");
+
+<*
+ Moves this joint's anchor on body B, measured from that body's origin like set_local_frame_a.
+*>
+extern fn void JointId.set_local_frame_b(self, Transform local_frame) @cname("b3Joint_SetLocalFrameB");
+
+<*
+ This joint's anchor on body B, measured from that body's origin.
+*>
+extern fn Transform JointId.local_frame_b(self) @cname("b3Joint_GetLocalFrameB");
+
+<*
+ Lets the two linked bodies collide again, or stops them colliding.
+
+ This flag, not the joint's type, is what suppresses the collision: box3d refuses the pair for any
+ joint linking the two bodies whose collide_connected is false, whatever its type. Turning it on
+ has them colliding again from the next step; turning it off ends the collision at once, dropping
+ the contacts they already had. Silently does nothing while the world is locked, mid WorldId.step
+ or inside a callback box3d runs during one.
+*>
+extern fn void JointId.set_collide_connected(self, bool should_collide) @cname("b3Joint_SetCollideConnected");
+
+<*
+ Whether the two linked bodies are allowed to collide. False on a joint built from a default
+ definition, and that false is what suppresses the collision — see set_collide_connected.
+*>
+extern fn bool JointId.collide_connected(self) @cname("b3Joint_GetCollideConnected");
+
+extern fn void JointId.set_user_data(self, void* user_data) @cname("b3Joint_SetUserData");
+extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
+
+<*
+ Wakes both bodies this joint links, not only one. Silently does nothing while the world is
+ locked, mid WorldId.step or inside a callback box3d runs during one.
+*>
+extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");

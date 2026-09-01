@@ -68,3 +68,15 @@ b3WheelJointDef base,enableSuspensionSpring,suspensionHertz,suspensionDampingRat
 b3MeshDef vertices,indices,materialIndices,weldTolerance,vertexCount,triangleCount,weldVertices,useMedianSplit,identifyEdges
 b3HeightFieldDef heights,materialIndices,scale,countX,countZ,globalMinimumHeight,globalMaximumHeight,clockwiseWinding
 b3Mesh data,scale
+b3CompoundSphereDef sphere,material
+b3CompoundCapsuleDef capsule,material
+b3CompoundHullDef hull,transform,material
+b3CompoundMeshDef meshData,transform,scale,materials,materialCount
+b3CompoundDef capsules,capsuleCount,hulls,hullCount,meshes,meshCount,spheres,sphereCount
+b3DynamicTree version,nodes,root,nodeCount,nodeCapacity,proxyCount,freeList,leafIndices,leafBoxes,leafCenters,binIndices,rebuildCapacity
+b3CompoundData version,byteCount,nodeOffset,tree,materialOffset,materialCount,capsuleOffset,capsuleCount,hullOffset,hullCount,sharedHullCount,meshOffset,meshCount,sharedMeshCount,sphereOffset,sphereCount
+b3CompoundCapsule capsule,materialIndex
+b3CompoundHull hull,transform,materialIndex
+b3CompoundMesh meshData,transform,scale,materialIndices
+b3CompoundSphere sphere,materialIndex
+b3ChildShape @capsule,transform,materialIndices,type

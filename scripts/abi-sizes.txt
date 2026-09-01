@@ -68,3 +68,15 @@ b3WheelJointDef 184 8 base=0 enableSuspensionSpring=112 suspensionHertz=116 susp
 b3MeshDef 40 8 vertices=0 indices=8 materialIndices=16 weldTolerance=24 vertexCount=28 triangleCount=32 weldVertices=36 useMedianSplit=37 identifyEdges=38
 b3HeightFieldDef 48 8 heights=0 materialIndices=8 scale=16 countX=28 countZ=32 globalMinimumHeight=36 globalMaximumHeight=40 clockwiseWinding=44
 b3Mesh 24 8 data=0 scale=8
+b3CompoundSphereDef 56 8 sphere=0 material=16
+b3CompoundCapsuleDef 72 8 capsule=0 material=32
+b3CompoundHullDef 80 8 hull=0 transform=8 material=40
+b3CompoundMeshDef 64 8 meshData=0 transform=8 scale=36 materials=48 materialCount=56
+b3CompoundDef 64 8 capsules=0 capsuleCount=8 hulls=16 hullCount=24 meshes=32 meshCount=40 spheres=48 sphereCount=56
+b3DynamicTree 80 8 version=0 nodes=8 root=16 nodeCount=20 nodeCapacity=24 proxyCount=28 freeList=32 leafIndices=40 leafBoxes=48 leafCenters=56 binIndices=64 rebuildCapacity=72
+b3CompoundData 144 8 version=0 byteCount=8 nodeOffset=12 tree=16 materialOffset=96 materialCount=100 capsuleOffset=104 capsuleCount=108 hullOffset=112 hullCount=116 sharedHullCount=120 meshOffset=124 meshCount=128 sharedMeshCount=132 sphereOffset=136 sphereCount=140
+b3CompoundCapsule 32 4 capsule=0 materialIndex=28
+b3CompoundHull 40 8 hull=0 transform=8 materialIndex=36
+b3CompoundMesh 64 8 meshData=0 transform=8 scale=36 materialIndices=48
+b3CompoundSphere 20 4 sphere=0 materialIndex=16
+b3ChildShape 80 8 @capsule=0 transform=32 materialIndices=60 type=76

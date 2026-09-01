@@ -9,6 +9,7 @@ faultdef
     WRONG_JOINT_TYPE,
     DEGENERATE_GEOMETRY,
     INDEX_OUT_OF_RANGE,
+    CHILD_LIMIT_REACHED,
     NO_HIT;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
@@ -81,4 +82,16 @@ macro ContactId? ContactId.checked(self) {
 macro MeshData*? checked_mesh(MeshData* mesh) {
     if (mesh == null) return DEGENERATE_GEOMETRY~;
     return mesh;
+}
+
+<*
+ A null compound is box3d refusing to bake one, which it does for a single reason: a definition
+ naming as many children as its own ceiling allows. A macro rather than a method for the reason
+ checked_mesh() gives.
+
+ @return "the compound, or CHILD_LIMIT_REACHED when box3d returned a null pointer"
+*>
+macro CompoundData*? checked_compound(CompoundData* compound) {
+    if (compound == null) return CHILD_LIMIT_REACHED~;
+    return compound;
 }

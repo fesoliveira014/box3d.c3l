@@ -58,8 +58,12 @@ generate_layout() {
             for (i = 4; i <= NF; i++) {
                 split($i, kv, "=")
                 idx = i - 4
-                printf "$assert %s::members[%d].offset == %s && %s::members[%d].name == \"%s\";\n", \
-                       t, idx, kv[2], t, idx, to_snake(kv[1])
+                if (substr(kv[1], 1, 1) == "@") {
+                    printf "$assert %s::members[%d].offset == %s;\n", t, idx, kv[2]
+                } else {
+                    printf "$assert %s::members[%d].offset == %s && %s::members[%d].name == \"%s\";\n", \
+                           t, idx, kv[2], t, idx, to_snake(kv[1])
+                }
             }
         }
     '
@@ -98,6 +102,11 @@ echo "Installed $OUT/libbox3d.a"
 # comma-separated field list: `b3BodyId index1,world0,generation` (blank lines and # comments
 # ignored). Every struct the binding declares in full belongs here; the $assert size pin in
 # box3d.c3i must match, and a listed field gets its own offsetof pin.
+#
+# A field written `@name` is one C3 gives no name to — the first arm of an anonymous union, which
+# C3 lays out exactly as C does but reports with an empty member name. The offset is probed and
+# pinned from the C name as usual; only the name half of the pin is dropped, so the members after
+# it keep their positions and their own names.
 [ -f "$TYPES" ] || { echo "No $TYPES yet — skipping layout probe."; exit 0; }
 
 PROBE="$VENDOR/build/abi_probe.c"
@@ -118,7 +127,7 @@ PROBE="$VENDOR/build/abi_probe.c"
             saved_ifs="$IFS"
             IFS=,
             for f in $fields; do
-                printf '    printf(" %%s=%%zu", "%s", (size_t)offsetof(%s, %s));\n' "$f" "$t" "$f"
+                printf '    printf(" %%s=%%zu", "%s", (size_t)offsetof(%s, %s));\n' "$f" "$t" "${f#@}"
             done
             IFS="$saved_ifs"
         fi

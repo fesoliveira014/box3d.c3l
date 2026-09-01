@@ -743,6 +743,17 @@ extern fn ShapeId create_height_field_shape_raw(
   HeightFieldData* height_field,
 ) @cname("b3CreateHeightFieldShape") @private;
 
+<*
+ Raw baked compound shape constructor. It reads the compound's version field before it tests
+ anything, so it shares the null hazard of the two above, and the wrapper in box3d_compound.c3
+ carries the same guards. Private for that reason.
+*>
+extern fn ShapeId create_baked_compound_shape_raw(
+  BodyId body_id,
+  ShapeDef* def,
+  CompoundData* compound,
+) @cname("b3CreateBakedCompoundShape") @private;
+
 extern fn void ShapeId.destroy(self, bool update_body_mass) @cname("b3DestroyShape");
 extern fn bool ShapeId.is_valid(self) @cname("b3Shape_IsValid");
 extern fn ShapeType ShapeId.type(self) @cname("b3Shape_GetType");
@@ -765,10 +776,14 @@ extern fn void ShapeId.set_surface_material(self, SurfaceMaterial surface_materi
 extern fn SurfaceMaterial ShapeId.surface_material(self) @cname("b3Shape_GetSurfaceMaterial");
 
 <*
- How many surface materials this shape holds. Despite the name it is not a mesh-only count and it
- is never zero: a shape whose definition named fewer than two materials keeps one inline and
- reports 1 whatever its type, and only a definition naming several — one per material index the
- mesh's triangles carry — makes it larger. Replacing the geometry does not change it.
+ How many surface materials this shape holds. Despite the name it is not a mesh-only count: a
+ shape whose definition named fewer than two materials keeps one inline and reports 1 whatever
+ its type, and only a definition naming several — one per material index the mesh's triangles
+ carry — makes it larger. Replacing the geometry does not change it.
+
+ A compound shape answers from the compound rather than from the definition, and is the one shape
+ that can report 0: box3d copies the compound's materials, one per distinct child material, and a
+ compound with no children has none.
 *>
 extern fn int ShapeId.mesh_material_count(self) @cname("b3Shape_GetMeshMaterialCount");
 

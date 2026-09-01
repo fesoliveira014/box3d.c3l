@@ -1368,3 +1368,324 @@ fn void a_compound_definition_naming_more_children_than_box3d_holds_is_refused()
     assert(refused.refusal == b3::CHILD_LIMIT_REACHED, "the ceiling is on the children together, not per kind");
     assert(refused.after == refused.baseline, "and it is reached before anything is allocated");
 }
+
+// Two spheres that differ in everything a child can differ in: where they sit, how big they are
+// and how rough their surface is. A compound that swapped them would then be caught by the child
+// index, by the material index and by the hit point alike, rather than by none of the three.
+fn b3::CompoundData*? a_compound_of_two_unlike_spheres() {
+    b3::SurfaceMaterial rough = b3::default_surface_material();
+    rough.friction = 0.3;
+    b3::SurfaceMaterial slick = b3::default_surface_material();
+    slick.friction = 0.9;
+
+    b3::CompoundSphereDef[2] spheres = {
+      {
+        .sphere = { .center = { -0.5, 0.0, 0.0 }, .radius = 0.5 },
+        .material = rough,
+      },
+      {
+        .sphere = { .center = { 1.5, 0.0, 0.0 }, .radius = 0.25 },
+        .material = slick,
+      },
+    };
+
+    b3::CompoundDef def;
+    def.spheres = &spheres[0];
+    def.sphere_count = 2;
+
+    return b3::create_compound(&def);
+}
+
+struct AttachedCompound {
+    bool attached;
+    fault refusal;
+    b3::ShapeType type;
+}
+
+fn AttachedCompound the_compound_shape_a_body_of_type_takes(b3::BodyType type) {
+    b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
+    defer compound.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = type;
+    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+
+    b3::ShapeId? shape = body.create_baked_compound_shape(&shape_def, compound);
+    if (catch err = shape) return { .refusal = err };
+    return { .attached = true, .type = shape.type() };
+}
+
+// The three readings differ in the body type and in nothing else, which is what makes the refusal
+// attributable to it. A caller who does not know the constraint gets a null identifier back and
+// nothing else to go on.
+fn void a_baked_compound_shape_is_taken_only_by_a_static_body() @test {
+    AttachedCompound on_static = the_compound_shape_a_body_of_type_takes(b3::BodyType.STATIC);
+    AttachedCompound on_kinematic = the_compound_shape_a_body_of_type_takes(b3::BodyType.KINEMATIC);
+    AttachedCompound on_dynamic = the_compound_shape_a_body_of_type_takes(b3::BodyType.DYNAMIC);
+
+    assert(on_static.attached, "a static body bakes a compound into one shape");
+    assert(!on_kinematic.attached, "a kinematic one is turned away");
+    assert(on_kinematic.refusal == b3::INVALID_HANDLE, "with nothing but a null identifier to say so");
+    assert(!on_dynamic.attached, "and so is a dynamic one, which is how the obvious fixture fails");
+    assert(on_dynamic.refusal == b3::INVALID_HANDLE);
+}
+
+fn void a_baked_compound_shape_reports_its_own_type() @test {
+    AttachedCompound on_static = the_compound_shape_a_body_of_type_takes(b3::BodyType.STATIC);
+
+    assert(on_static.attached);
+    assert(on_static.type == b3::ShapeType.COMPOUND, "one shape, whatever its children are");
+}
+
+struct CompoundCast {
+    bool hit;
+    int child_index;
+    int material_index;
+    float y;
+    float normal_y;
+}
+
+struct CompoundShapeReading {
+    int material_count;
+    float[2] friction;
+    CompoundCast over_the_wide_child;
+    CompoundCast over_the_narrow_child;
+    bool hit_between_them;
+}
+
+fn CompoundCast the_cast_straight_down_at(b3::ShapeId shape, float x) {
+    b3::WorldCastOutput? hit = shape.ray_cast((b3::Pos){ x, 3.0, 0.0 }, (b3::Vec3){ 0.0, -6.0, 0.0 });
+    if (try hit) {
+        return {
+          .hit = true,
+          .child_index = hit.child_index,
+          .material_index = hit.material_index,
+          .y = hit.point.y,
+          .normal_y = hit.normal.y,
+        };
+    }
+    return {};
+}
+
+// Three rays and the shape's own material array. The materials are only read once the count says
+// there are two of them: an index used before its bound is checked is the hazard the index guard
+// exists for, and a helper that asserted instead would strand the compound on byte_count().
+fn CompoundShapeReading the_children_a_compound_shape_reports() {
+    b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
+    defer compound.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::ShapeId shape = ground.create_baked_compound_shape(&shape_def, compound)!!;
+
+    CompoundShapeReading read = {
+      .material_count = shape.mesh_material_count(),
+      .over_the_wide_child = the_cast_straight_down_at(shape, -0.5),
+      .over_the_narrow_child = the_cast_straight_down_at(shape, 1.5),
+      .hit_between_them = the_cast_straight_down_at(shape, 0.5).hit,
+    };
+
+    if (read.material_count == 2) {
+        for (int i = 0; i < 2; i++) {
+            if (try material = shape.mesh_surface_material(i)) read.friction[i] = material.friction;
+        }
+    }
+    return read;
+}
+
+// The closing condition of this slice: a compound shape reports the children it was built from.
+// Each ray is answered by one child and names it, and the gap between the two is answered by
+// neither, so the shape is the pair of children rather than anything covering both.
+fn void a_compound_shape_reports_the_children_it_was_built_from() @test {
+    CompoundShapeReading read = the_children_a_compound_shape_reports();
+
+    assert(read.over_the_wide_child.hit, "a ray dropped over the first sphere meets it");
+    assert(read.over_the_wide_child.child_index == 0, "and is answered by the first child");
+    assert(read.over_the_wide_child.y > 0.49 && read.over_the_wide_child.y < 0.51,
+        "at its own radius above the centre the definition gave it");
+    assert(read.over_the_wide_child.normal_y > 0.99, "square on the top of the sphere");
+
+    assert(read.over_the_narrow_child.hit, "and the second sphere is two metres away");
+    assert(read.over_the_narrow_child.child_index == 1, "answered by the second child");
+    assert(read.over_the_narrow_child.y > 0.24 && read.over_the_narrow_child.y < 0.26,
+        "at half the first one's radius, which a swap of the two would not report");
+    assert(read.over_the_narrow_child.normal_y > 0.99);
+
+    assert(!read.hit_between_them, "and the gap between them belongs to neither child");
+
+    assert(read.material_count == 2, "one material per distinct child surface");
+    assert(read.friction[0] > 0.29 && read.friction[0] < 0.31, "the rough sphere's, first");
+    assert(read.friction[1] > 0.89 && read.friction[1] < 0.91, "and the slick one's after it");
+    assert(read.over_the_wide_child.material_index == 0, "each child naming the index of its own");
+    assert(read.over_the_narrow_child.material_index == 1);
+}
+
+fn fault[2] the_refusals_of_a_baked_compound_shape() {
+    b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
+    defer compound.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+
+    b3::ShapeDef zeroed;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+
+    fault[2] refusals;
+    if (catch err = ground.create_baked_compound_shape(&zeroed, compound)) refusals[0] = err;
+    if (catch err = ground.create_baked_compound_shape(&shape_def, null)) refusals[1] = err;
+    return refusals;
+}
+
+// The body here is a static one, so neither refusal can be the body type's. Without the null
+// guard box3d reads the compound's version field straight through the pointer and the process
+// dies, exactly as it does for a mesh.
+fn void a_baked_compound_shape_without_a_definition_or_a_compound_is_refused() @test {
+    fault[2] refusals = the_refusals_of_a_baked_compound_shape();
+
+    assert(refusals[0] == b3::INVALID_DEFINITION,
+        "box3d accepts a zeroed shape definition in a release build; the binding must not");
+    assert(refusals[1] == b3::INVALID_DEFINITION, "and a compound shape needs a compound");
+}
+
+fn int[5] the_byte_counts_around_a_compound_shape() {
+    int baseline = b3::byte_count();
+
+    b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
+    defer compound.destroy();
+    int with_compound = b3::byte_count();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    int with_world = b3::byte_count();
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    ground.create_baked_compound_shape(&shape_def, compound)!!;
+    int with_shape = b3::byte_count();
+
+    world.destroy();
+    return { baseline, with_compound, with_world, with_shape, b3::byte_count() };
+}
+
+fn void a_compound_shape_borrows_the_compound_rather_than_copying_it() @test {
+    int[5] around = the_byte_counts_around_a_compound_shape();
+    int compound_bytes = around[1] - around[0];
+    int shape_bytes = around[3] - around[2];
+
+    assert(compound_bytes > 0, "the compound box3d bakes shows up in the byte count");
+    assert(shape_bytes > 0 && shape_bytes < compound_bytes, "attaching it costs a shape, not a second compound");
+    assert(around[4] == around[1], "and the compound outlives the world that was reading it");
+}
+
+struct RestingBalls {
+    float low_x;
+    float low_y;
+    bool low_asleep;
+    float high_x;
+    float high_y;
+    bool high_asleep;
+}
+
+// Two box platforms baked into one compound, four metres apart and at different heights, with a
+// ball dropped over each. A compound of the two spheres above would be no fixture for this: a
+// ball landing on a sphere rolls off it. The control attaches no shape at all, which is the one
+// variable this reading needs — a static body carrying nothing makes no contact either.
+fn RestingBalls the_balls_after_three_seconds(bool attach_the_compound) {
+    b3::SurfaceMaterial material = b3::default_surface_material();
+    b3::BoxHull low = b3::make_box_hull(1.0, 0.25, 1.0);
+    b3::BoxHull high = b3::make_box_hull(1.0, 0.5, 1.0);
+
+    b3::CompoundHullDef[2] hulls = {
+      {
+        .hull = &low.base,
+        .transform = { .p = { -2.0, 0.0, 0.0 }, .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 } },
+        .material = material,
+      },
+      {
+        .hull = &high.base,
+        .transform = { .p = { 2.0, 1.0, 0.0 }, .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 } },
+        .material = material,
+      },
+    };
+
+    b3::CompoundDef def;
+    def.hulls = &hulls[0];
+    def.hull_count = 2;
+
+    b3::CompoundData* compound = b3::create_compound(&def)!!;
+    defer compound.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+
+    if (attach_the_compound) {
+        b3::BodyDef ground_def = b3::default_body_def();
+        b3::BodyId ground = world.create_body(&ground_def)!!;
+        ground.create_baked_compound_shape(&shape_def, compound)!!;
+    }
+
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+
+    b3::BodyDef over_the_low_def = b3::default_body_def();
+    over_the_low_def.type = b3::BodyType.DYNAMIC;
+    over_the_low_def.position = (b3::Pos){ -2.0, 3.0, 0.0 };
+    b3::BodyId over_the_low = world.create_body(&over_the_low_def)!!;
+    over_the_low.create_sphere_shape(&shape_def, &sphere)!!;
+
+    b3::BodyDef over_the_high_def = b3::default_body_def();
+    over_the_high_def.type = b3::BodyType.DYNAMIC;
+    over_the_high_def.position = (b3::Pos){ 2.0, 4.0, 0.0 };
+    b3::BodyId over_the_high = world.create_body(&over_the_high_def)!!;
+    over_the_high.create_sphere_shape(&shape_def, &sphere)!!;
+
+    for (int i = 0; i < 180; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    b3::Pos low_resting = over_the_low.position();
+    b3::Pos high_resting = over_the_high.position();
+    return {
+      .low_x = low_resting.x,
+      .low_y = low_resting.y,
+      .low_asleep = !over_the_low.is_awake(),
+      .high_x = high_resting.x,
+      .high_y = high_resting.y,
+      .high_asleep = !over_the_high.is_awake(),
+    };
+}
+
+// The two resting heights are a metre and a quarter apart, and each is its own platform's top
+// plus the ball's radius, so a compound that had baked only one of the children would fail one
+// band while passing the other.
+fn void a_ball_comes_to_rest_on_the_compound_child_beneath_it() @test {
+    RestingBalls rested = the_balls_after_three_seconds(attach_the_compound: true);
+    RestingBalls fell = the_balls_after_three_seconds(attach_the_compound: false);
+
+    assert(rested.low_asleep && rested.high_asleep, "a reading taken while they were still moving would not be a reading");
+    assert(rested.low_y > 0.74 && rested.low_y < 0.76, "the quarter-metre platform holds its ball at three quarters");
+    assert(rested.high_y > 1.99 && rested.high_y < 2.01, "and the half-metre one, a metre higher, holds its own at two");
+    assert(rested.low_x > -2.01 && rested.low_x < -1.99, "each ball resting where it was dropped");
+    assert(rested.high_x > 1.99 && rested.high_x < 2.01);
+
+    assert(!fell.low_asleep && !fell.high_asleep, "with no shape under them neither ball ever settles");
+    assert(fell.low_y > -42.2 && fell.low_y < -41.9, "and both fall the three seconds through");
+    assert(fell.high_y > -41.2 && fell.high_y < -40.9);
+}

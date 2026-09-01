@@ -46,3 +46,31 @@ fn CompoundData*? create_compound(CompoundDef* def) {
 
     return create_compound_raw(def);
 }
+
+<*
+ Attaches a baked compound to this body. The definition must come from default_shape_def() — see
+ create_sphere_shape — and the null guard is the one create_mesh_shape carries for the same
+ reason: box3d reads a version field through the pointer before it tests anything.
+
+ box3d takes a baked compound only on a static body and hands back a null identifier for a
+ kinematic or a dynamic one, so INVALID_HANDLE here usually means the body was the wrong type
+ rather than that anything is wrong with the compound. A body that has to move carries its
+ children as separate shapes on the body instead.
+
+ The shape borrows the compound rather than copying it, exactly as a mesh shape borrows its mesh
+ — see create_mesh_shape for what that costs and for what destroying the geometry first does.
+
+ What the shape does copy is the compound's materials, not the definition's: mesh_material_count()
+ answers with one per distinct child material and mesh_surface_material() indexes them in the
+ order the children were baked, which is the order CompoundDef lists its kinds. Two children
+ sharing a material share one entry, and the material index a cast reports indexes the same array.
+
+ @param [&in] def : "a definition obtained from default_shape_def()"
+ @param compound : "the compound, which must outlive the shape; null is refused rather than dereferenced"
+ @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the compound is null, or INVALID_HANDLE if box3d returns a null identifier, which a body that is not static always does"
+*>
+fn ShapeId? BodyId.create_baked_compound_shape(self, ShapeDef* def, CompoundData* compound) {
+    if (def.internal_value != default_shape_def().internal_value) return INVALID_DEFINITION~;
+    if (compound == null) return INVALID_DEFINITION~;
+    return create_baked_compound_shape_raw(self, def, compound).checked();
+}

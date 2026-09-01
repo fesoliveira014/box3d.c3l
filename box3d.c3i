@@ -716,3 +716,139 @@ alias CustomFilterFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, void* con
 
 extern fn void WorldId.set_pre_solve_callback(self, PreSolveFn pre_solve_fn, void* context) @cname("b3World_SetPreSolveCallback");
 extern fn void WorldId.set_custom_filter_callback(self, CustomFilterFn custom_filter_fn, void* context) @cname("b3World_SetCustomFilterCallback");
+
+const int MAX_MANIFOLD_POINTS = 4;
+const int MAX_SHAPE_CAST_POINTS = 128;
+
+<*
+ Filters which shapes a query considers. A shape is considered when the query's mask_bits
+ overlap the shape's category_bits and the shape's mask_bits overlap the query's category_bits.
+ default_query_filter() sets every bit in both, so an unmodified filter considers everything.
+ The id and name fields are recording metadata and are ignored when not recording; name must
+ outlive the query if it is set.
+*>
+struct QueryFilter {
+    ulong category_bits;
+    ulong mask_bits;
+    ulong id;
+    ZString name;
+}
+
+<*
+ The closest hit from WorldId.cast_ray_closest(). node_visits and leaf_visits are traversal
+ diagnostics. When hit is false every other field is undefined, which is why the wrapper faults
+ instead of returning this struct.
+*>
+struct RayResult {
+    ShapeId shape_id;
+    Pos point;
+    Vec3 normal;
+    ulong user_material_id;
+    float fraction;
+    int triangle_index;
+    int child_index;
+    int node_visits;
+    int leaf_visits;
+    bool hit;
+}
+
+<*
+ A convex point cloud with an external radius, used as the swept shape of a shape cast or the
+ probe of an overlap query. The points are borrowed: box3d reads them during the call and does
+ not copy them, so they must outlive it — a stack array is fine, a temporary is not. count must
+ not exceed MAX_SHAPE_CAST_POINTS.
+*>
+struct ShapeProxy {
+    Vec3* points;
+    int count;
+    float radius;
+}
+
+<*
+ The result of a single-shape ray or shape cast. When hit is false every other field is
+ undefined. material_index is -1 when the shape carries no material.
+*>
+struct CastOutput {
+    Vec3 normal;
+    Vec3 point;
+    float fraction;
+    int iterations;
+    int triangle_index;
+    int child_index;
+    int material_index;
+    bool hit;
+}
+
+<*
+ The same layout as CastOutput in this build. box3d widens the hit point to a double-precision
+ position under BOX3D_DOUBLE_PRECISION, which this package never compiles; the alias keeps the
+ two names distinct so a future double-precision variant changes one declaration.
+*>
+alias WorldCastOutput = CastOutput;
+
+<*
+ The result of casting at one specific body. When hit is false every other field is undefined.
+*>
+struct BodyCastResult {
+    ShapeId shape_id;
+    Pos point;
+    Vec3 normal;
+    float fraction;
+    int triangle_index;
+    ulong user_material_id;
+    int iterations;
+    bool hit;
+}
+
+<*
+ Broad-phase traversal counters returned by the callback queries. Diagnostic only.
+*>
+struct TreeStats {
+    int node_visits;
+    int leaf_visits;
+}
+
+<*
+ One contact point of a manifold. box3d uses speculative collision, so a point may be separated:
+ separation is negative only when the shapes actually overlap, and total_normal_impulse is what
+ distinguishes a point that carried an interaction from one that merely existed.
+*>
+struct ManifoldPoint {
+    Vec3 anchor_a;
+    Vec3 anchor_b;
+    float separation;
+    float base_separation;
+    float normal_impulse;
+    float total_normal_impulse;
+    float normal_velocity;
+    uint feature_id;
+    int triangle_index;
+    bool persisted;
+}
+
+<*
+ The contact points between two colliding shapes. Only the first point_count entries of points
+ are valid — contact_points() returns exactly that prefix. The normal is a unit vector pointing
+ from shape A to shape B.
+*>
+struct Manifold {
+    ManifoldPoint[MAX_MANIFOLD_POINTS] points;
+    Vec3 normal;
+    float twist_impulse;
+    Vec3 friction_impulse;
+    Vec3 rolling_impulse;
+    int point_count;
+}
+
+<*
+ One touching contact. The manifolds pointer and its count keep box3d's own layout because this
+ struct is written by box3d into a caller-supplied buffer and cannot hold a C3 slice; read them
+ through contact_manifolds(), which carries the borrow in its docstring.
+*>
+struct ContactData {
+    ContactId contact_id;
+    ShapeId shape_id_a;
+    ShapeId shape_id_b;
+    Manifold* manifolds;
+    int manifold_count;
+}

@@ -44,3 +44,13 @@ b3BodyMoveEvent userData,transform,bodyId,fellAsleep
 b3BodyEvents moveEvents,moveCount
 b3JointEvent jointId,userData
 b3JointEvents jointEvents,count
+b3QueryFilter categoryBits,maskBits,id,name
+b3RayResult shapeId,point,normal,userMaterialId,fraction,triangleIndex,childIndex,nodeVisits,leafVisits,hit
+b3ShapeProxy points,count,radius
+b3CastOutput normal,point,fraction,iterations,triangleIndex,childIndex,materialIndex,hit
+b3WorldCastOutput
+b3BodyCastResult shapeId,point,normal,fraction,triangleIndex,userMaterialId,iterations,hit
+b3TreeStats nodeVisits,leafVisits
+b3ContactData contactId,shapeIdA,shapeIdB,manifolds,manifoldCount
+b3ManifoldPoint anchorA,anchorB,separation,baseSeparation,normalImpulse,totalNormalImpulse,normalVelocity,featureId,triangleIndex,persisted
+b3Manifold points,normal,twistImpulse,frictionImpulse,rollingImpulse,pointCount

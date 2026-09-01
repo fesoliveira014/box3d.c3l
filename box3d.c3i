@@ -2344,11 +2344,11 @@ typedef MotorJointId = inline JointId;
  and an angular spring. Both velocities are whole Vec3 values rather than the single motor speed
  the joint types with one driven axis carry.
 
- This type has no enable flags at all, where every other sprung or motored joint type carries
- one. Each of its four channels is switched by its own ceiling instead: box3d solves the linear
- and the angular drive only while max_velocity_force and max_velocity_torque respectively are
- above 0, and each spring only while both its ceiling and its hertz are. So a ceiling of 0 is not
- a bound this joint never reaches — it is the channel turned off.
+ This type has no enable flags at all. Each of its four channels is switched by its own ceiling
+ instead: box3d solves the linear and the angular drive only while max_velocity_force and
+ max_velocity_torque respectively are above 0, and each spring only while both its ceiling and its
+ hertz are. So a ceiling of 0 is not a bound this joint never reaches — it is the channel turned
+ off.
 
  Must come from default_motor_joint_def(), which zeroes every field it adds to the base. A
  default motor joint therefore drives and holds nothing until a ceiling is raised. The
@@ -2648,3 +2648,95 @@ extern fn JointId create_spherical_joint_raw(
   WorldId world_id,
   SphericalJointDef* def,
 ) @cname("b3CreateSphericalJoint") @private;
+
+<*
+ Enables or disables this joint's cone limit, which bounds how far local frame B's z axis may tilt
+ away from local frame A's. A change to the flag discards the cone's accumulated impulse, so a
+ limit switched back on rebuilds its hold over the following steps rather than resuming the one it
+ had.
+*>
+extern fn void SphericalJointId.enable_cone_limit(self, bool enable_limit) @cname("b3SphericalJoint_EnableConeLimit");
+
+<*
+ Whether this joint's cone limit is enabled. False on a joint built from a default definition.
+*>
+extern fn bool SphericalJointId.is_cone_limit_enabled(self) @cname("b3SphericalJoint_IsConeLimitEnabled");
+
+<*
+ Sets the angle in radians the cone limit holds the two frames' z axes within. box3d stores it
+ exactly as handed and clamps nothing, where the constructor clamps SphericalJointDef's cone_angle
+ into [0, pi/2]: an angle a definition asks for comes back narrowed and the same angle asked for
+ here does not, so the two paths reach the solver with different cones. box3d asserts the value is
+ finite and within [0, pi/2], an assertion this release build compiles out and the wrappers do not
+ restore, so a negative angle or one past pi/2 reaches the solver through this call and through no
+ other. The limit acts only while is_cone_limit_enabled() is on, and setting it leaves the impulse
+ the cone had accumulated standing.
+*>
+extern fn void SphericalJointId.set_cone_limit(self, float angle_radians) @cname("b3SphericalJoint_SetConeLimit");
+
+<*
+ The angle in radians the cone limit holds the two frames' z axes within. It is what box3d stored,
+ which is what set_cone_limit was handed or what the constructor clamped the definition's
+ cone_angle to — see set_cone_limit for why those differ. 0 on a joint built from a default
+ definition.
+*>
+extern fn float SphericalJointId.cone_limit(self) @cname("b3SphericalJoint_GetConeLimit");
+
+<*
+ The current angle in radians between local frame A's z axis and local frame B's, kept in [0, pi].
+ It is read from the two frames' relative orientation and never from the bodies' positions, in the
+ way SphericalJointDef describes, so carrying the bodies anywhere leaves it where it was and only
+ turning one moves it. It is measured whether or not the cone limit is enabled, and against the
+ frames' current alignment rather than against cone_limit().
+*>
+extern fn float SphericalJointId.cone_angle(self) @cname("b3SphericalJoint_GetConeAngle");
+
+<*
+ Enables or disables this joint's twist limit, which bounds the rotation of local frame B about
+ the frames' shared z axis. A change to the flag discards both of the twist's accumulated
+ impulses, so a limit switched back on rebuilds its hold over the following steps rather than
+ resuming the one it had.
+*>
+extern fn void SphericalJointId.enable_twist_limit(self, bool enable_limit) @cname("b3SphericalJoint_EnableTwistLimit");
+
+<*
+ Whether this joint's twist limit is enabled. False on a joint built from a default definition.
+*>
+extern fn bool SphericalJointId.is_twist_limit_enabled(self) @cname("b3SphericalJoint_IsTwistLimitEnabled");
+
+<*
+ The low end of the rotation about the frames' z axis the twist limit holds body B above, in
+ radians. It is what box3d stored, not what it was handed: see set_twist_limits. 0 on a joint
+ built from a default definition.
+*>
+extern fn float SphericalJointId.lower_twist_limit(self) @cname("b3SphericalJoint_GetLowerTwistLimit");
+
+<*
+ The high end of the rotation about the frames' z axis the twist limit holds body B below, in
+ radians. It is what box3d stored, not what it was handed: see set_twist_limits. 0 on a joint
+ built from a default definition.
+*>
+extern fn float SphericalJointId.upper_twist_limit(self) @cname("b3SphericalJoint_GetUpperTwistLimit");
+
+<*
+ Sets the two angles in radians the twist limit holds the rotation about the frames' z axis
+ between. box3d takes the smaller of the pair as the lower and the larger as the upper, so a
+ reversed pair is quietly corrected rather than refused, and then clamps both ends into
+ [-0.99 pi, 0.99 pi]. The constructor swaps and clamps the definition's pair the same way, so a
+ twist limit arrives the same however it was asked for. box3d asserts only that both values are
+ finite — their order and their range it corrects instead; that assertion is compiled out of this
+ release build and the wrappers do not restore it. The limit acts only while
+ is_twist_limit_enabled() is on, and setting it leaves the impulses the limit had accumulated
+ standing.
+*>
+extern fn void SphericalJointId.set_twist_limits(self, float lower_radians, float upper_radians) @cname("b3SphericalJoint_SetTwistLimits");
+
+<*
+ The current rotation in radians of local frame B about the frames' shared z axis, kept in
+ [-pi, pi]. It is read from the two frames' relative orientation and never from the bodies'
+ positions, in the way SphericalJointDef describes, so carrying the bodies anywhere leaves it
+ where it was and only turning one moves it. It is measured whether or not the twist limit is
+ enabled, and against the frames' current alignment rather than against the pair
+ lower_twist_limit() and upper_twist_limit() report.
+*>
+extern fn float SphericalJointId.twist_angle(self) @cname("b3SphericalJoint_GetTwistAngle");

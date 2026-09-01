@@ -4417,3 +4417,275 @@ fn void dropping_a_spring_ceiling_leaves_the_impulse_it_holds_standing() @test {
     assert(never[1] > -0.001 && never[1] < 0.001, "reporting no force at all");
     assert(never[2] > -81.0 && never[2] < -79.0);
 }
+
+struct SwungBall {
+    float cone;
+    float twist;
+    bool awake;
+}
+
+// The two bodies start co-located with both anchors at their centres and gravity off, so body A
+// holds position while body B turns freely and the joint's own limit is the only thing that can
+// stop it. Sixty steps at 1/60 s and not more: 2 rad/s carries both angles past their principal
+// range soon after, and by 180 steps the unlimited swing has wrapped back to 0.283225, close
+// enough to the limited 0.300000 that the two bands would no longer tell the rows apart. The
+// limited row differs from its control in the limit flag alone.
+fn SwungBall a_ball_swung_off_its_axis_for_a_second(bool enable_cone_limit) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = swinging;
+    joint_def.enable_cone_limit = enable_cone_limit;
+    joint_def.cone_angle = 0.3;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    swinging.set_angular_velocity((b3::Vec3){ 2.0, 0.0, 0.0 });
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.cone = ball.cone_angle(), .twist = ball.twist_angle(), .awake = swinging.is_awake()};
+}
+
+// The twist twin of the fixture above, turning about the frames' z axis instead of across it, and
+// held to the same sixty steps for the same reason.
+fn SwungBall a_ball_twisted_about_its_axis_for_a_second(bool enable_twist_limit) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId twisting = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = twisting;
+    joint_def.enable_twist_limit = enable_twist_limit;
+    joint_def.lower_twist_angle = -0.4;
+    joint_def.upper_twist_angle = 0.4;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    twisting.set_angular_velocity((b3::Vec3){ 0.0, 0.0, 2.0 });
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.cone = ball.cone_angle(), .twist = ball.twist_angle(), .awake = twisting.is_awake()};
+}
+
+struct BallConeLimits {
+    float on_a_default_ball;
+    float after_a_negative_angle;
+    float after_an_angle_far_out;
+    float from_a_definition_far_out;
+}
+
+fn BallConeLimits the_cone_limits_a_ball_keeps() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId bare = link_with_a_spherical_joint(world, anchor, swinging);
+
+    BallConeLimits limits = {.on_a_default_ball = bare.cone_limit()};
+
+    bare.set_cone_limit(-0.5);
+    limits.after_a_negative_angle = bare.cone_limit();
+    bare.set_cone_limit(99.0);
+    limits.after_an_angle_far_out = bare.cone_limit();
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = swinging;
+    joint_def.enable_cone_limit = true;
+    joint_def.cone_angle = 2.0;
+    b3::SphericalJointId built = world.create_spherical_joint(&joint_def)!!;
+    limits.from_a_definition_far_out = built.cone_limit();
+    return limits;
+}
+
+struct BallTwistLimits {
+    float lower_on_a_default_ball;
+    float upper_on_a_default_ball;
+    float lower_reversed;
+    float upper_reversed;
+    float lower_far_out;
+    float upper_far_out;
+}
+
+fn BallTwistLimits the_twist_limits_a_ball_keeps() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId twisting = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId ball = link_with_a_spherical_joint(world, anchor, twisting);
+
+    BallTwistLimits limits = {
+        .lower_on_a_default_ball = ball.lower_twist_limit(),
+        .upper_on_a_default_ball = ball.upper_twist_limit(),
+    };
+
+    ball.set_twist_limits(1.0, -1.0);
+    limits.lower_reversed = ball.lower_twist_limit();
+    limits.upper_reversed = ball.upper_twist_limit();
+
+    ball.set_twist_limits(-99.0, 99.0);
+    limits.lower_far_out = ball.lower_twist_limit();
+    limits.upper_far_out = ball.upper_twist_limit();
+    return limits;
+}
+
+struct BallLimitFlags {
+    bool cone_on_a_default_ball;
+    bool twist_on_a_default_ball;
+    bool cone_from_the_definition;
+    bool twist_from_the_definition;
+    bool cone_after_enabling;
+    bool twist_after_enabling;
+    bool cone_after_disabling;
+    bool twist_after_disabling;
+}
+
+fn BallLimitFlags the_limit_flags_of_a_bare_ball_and_a_bounded_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId bare = link_with_a_spherical_joint(world, anchor, swinging);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = swinging;
+    joint_def.enable_cone_limit = true;
+    joint_def.cone_angle = 0.3;
+    joint_def.enable_twist_limit = true;
+    joint_def.lower_twist_angle = -0.4;
+    joint_def.upper_twist_angle = 0.4;
+    b3::SphericalJointId bounded = world.create_spherical_joint(&joint_def)!!;
+
+    BallLimitFlags flags = {
+        .cone_on_a_default_ball = bare.is_cone_limit_enabled(),
+        .twist_on_a_default_ball = bare.is_twist_limit_enabled(),
+        .cone_from_the_definition = bounded.is_cone_limit_enabled(),
+        .twist_from_the_definition = bounded.is_twist_limit_enabled(),
+    };
+
+    bare.enable_cone_limit(true);
+    bare.enable_twist_limit(true);
+    bounded.enable_cone_limit(false);
+    bounded.enable_twist_limit(false);
+    flags.cone_after_enabling = bare.is_cone_limit_enabled();
+    flags.twist_after_enabling = bare.is_twist_limit_enabled();
+    flags.cone_after_disabling = bounded.is_cone_limit_enabled();
+    flags.twist_after_disabling = bounded.is_twist_limit_enabled();
+    return flags;
+}
+
+// Two radians a second for a second is very nearly the full two radians, and with no cone armed
+// nothing bounds it. The twist reading is what makes this discriminating rather than the swing
+// alone: a swing about x that showed up as twist would be the two angles transposed.
+fn void a_ball_with_no_cone_armed_swings_as_far_as_it_is_turned() @test {
+    SwungBall free = a_ball_swung_off_its_axis_for_a_second(false);
+
+    assert(free.awake, "the reading is the swing's rather than a body that stopped being stepped");
+    assert(free.cone > 1.95 && free.cone < 2.05, "very nearly the two radians it was turned through");
+    assert(free.twist > -0.001 && free.twist < 0.001, "and a swing across the axis is no twist about it");
+}
+
+// The control for the row above, differing from it in the cone flag alone, and the two bands are
+// disjoint. The body is asleep by the end, which is the limit having stopped it rather than a run
+// that ended early: the angle is the same 0.300000 three times longer in.
+fn void a_cone_limit_holds_the_swing_at_the_angle_it_was_given() @test {
+    SwungBall held = a_ball_swung_off_its_axis_for_a_second(true);
+
+    assert(held.cone > 0.29 && held.cone < 0.31, "the cone holds the swing at the angle it was built with");
+    assert(held.twist > -0.001 && held.twist < 0.001);
+}
+
+// The twist twin of the free swing, and the same transposition guard the other way round.
+fn void a_ball_with_no_twist_limit_armed_turns_as_far_as_it_is_twisted() @test {
+    SwungBall free = a_ball_twisted_about_its_axis_for_a_second(false);
+
+    assert(free.awake, "the reading is the twist's rather than a body that stopped being stepped");
+    assert(free.twist > 1.95 && free.twist < 2.05, "very nearly the two radians it was turned through");
+    assert(free.cone > -0.001 && free.cone < 0.001, "and a turn about the axis is no swing across it");
+}
+
+// The control for the row above, differing in the twist flag alone. Asleep at the end for the same
+// reason the held swing is.
+fn void a_twist_limit_holds_the_turn_at_the_angle_it_was_given() @test {
+    SwungBall held = a_ball_twisted_about_its_axis_for_a_second(true);
+
+    assert(held.twist > 0.39 && held.twist < 0.41, "the limit holds the turn at the upper angle it was built with");
+    assert(held.cone > -0.001 && held.cone < 0.001);
+}
+
+// -0.5 and 99 are exactly representable as floats and this setter bounds neither end, so they
+// compare exactly. A negative cone is not a range box3d documents anywhere; it is what the setter
+// stores because the assertion that would have caught it is compiled out of this build.
+fn void a_cone_angle_outside_every_range_box3d_names_is_kept_as_it_was_handed() @test {
+    BallConeLimits limits = the_cone_limits_a_ball_keeps();
+
+    assert(limits.on_a_default_ball == 0.0, "a default spherical joint carries no cone");
+    assert(limits.after_a_negative_angle == -0.5, "the setter clamps neither end");
+    assert(limits.after_an_angle_far_out == 99.0);
+}
+
+// The other half of that divergence: the constructor clamps the same field where the setter does
+// not, so the 2.0 radians this definition asks for arrives as pi/2 while set_cone_limit's 99 stays
+// 99. The clamp is asserted against the expression rather than the 1.570796 it prints.
+fn void a_definition_asking_for_a_wider_cone_than_the_constructor_allows_is_narrowed_to_it() @test {
+    BallConeLimits limits = the_cone_limits_a_ball_keeps();
+
+    assert(limits.from_a_definition_far_out == 0.5f * (float)math::PI,
+        "the constructor clamps the cone to a right angle, half the range this field's own prose gives it");
+    assert(limits.after_an_angle_far_out == 99.0, "where the setter for the same field keeps what it was handed");
+}
+
+// 1 and -1 are exactly representable and sit well inside the clamp, so the swap shows up exactly
+// and on its own.
+fn void a_reversed_pair_of_twist_limits_is_swapped_into_order_rather_than_refused() @test {
+    BallTwistLimits limits = the_twist_limits_a_ball_keeps();
+
+    assert(limits.lower_on_a_default_ball == 0.0, "a default spherical joint carries no twist limit");
+    assert(limits.upper_on_a_default_ball == 0.0);
+    assert(limits.lower_reversed == -1.0, "box3d takes the smaller of the two as the lower");
+    assert(limits.upper_reversed == 1.0);
+}
+
+// The pair above cannot tell a setter that only swaps from one that swaps and clamps; a pair
+// outside the bound can. 99 radians comes back as the 3.110177 the clamp names, asserted against
+// the expression rather than that reading.
+fn void twist_limits_far_out_are_clamped_as_well_as_ordered() @test {
+    BallTwistLimits limits = the_twist_limits_a_ball_keeps();
+
+    assert(limits.lower_far_out == -0.99f * (float)math::PI, "both ends land on the bound box3d clamps them to");
+    assert(limits.upper_far_out == 0.99f * (float)math::PI);
+}
+
+fn void the_two_limit_flags_of_a_ball_start_off_and_round_trip() @test {
+    BallLimitFlags flags = the_limit_flags_of_a_bare_ball_and_a_bounded_one();
+
+    assert(!flags.cone_on_a_default_ball, "a default spherical joint is a bare ball and socket");
+    assert(!flags.twist_on_a_default_ball);
+    assert(flags.cone_from_the_definition, "the joint reports the two limits its definition asked for");
+    assert(flags.twist_from_the_definition);
+    assert(flags.cone_after_enabling);
+    assert(flags.twist_after_enabling);
+    assert(!flags.cone_after_disabling);
+    assert(!flags.twist_after_disabling);
+}

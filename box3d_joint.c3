@@ -50,7 +50,9 @@ fn ConstraintTuning JointId.constraint_tuning(self) {
  Writes the joints linked to this body into the caller's buffer, most recently created first:
  box3d walks a list each new joint is inserted at the head of, so a body linked by one joint and
  then another reports the second before the first. joint_count() is exact, so a buffer that long
- is never truncated, and a buffer with no room at all takes nothing.
+ is never truncated, and a buffer with no room at all takes nothing. Like joint_count(), the fill
+ keeps working while the world is locked: box3d reaches the world here without the locked check,
+ rather than filling nothing the way the sensor filler does.
 
  @return "the prefix of buffer that was filled"
 *>

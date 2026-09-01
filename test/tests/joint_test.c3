@@ -607,6 +607,7 @@ struct BodyJoints {
     int filled_cramped;
     b3::JointId[1] cramped;
     int filled_empty;
+    b3::JointId[2] untouched;
 }
 
 // The buffers are copied out whole rather than returned as slices: a slice out of this helper
@@ -629,9 +630,10 @@ fn BodyJoints the_joints_of_a_body_linked_to_two_others() {
 
     b3::JointId[4] roomy;
     b3::JointId[1] cramped;
+    b3::JointId[2] untouched;
     int filled_roomy = shared.joints(roomy[..]).len;
     int filled_cramped = shared.joints(cramped[..]).len;
-    int filled_empty = shared.joints(roomy[:0]).len;
+    int filled_empty = shared.joints(untouched[:0]).len;
 
     first.destroy(false);
     second.destroy(false);
@@ -648,6 +650,7 @@ fn BodyJoints the_joints_of_a_body_linked_to_two_others() {
         .filled_cramped = filled_cramped,
         .cramped = cramped,
         .filled_empty = filled_empty,
+        .untouched = untouched,
     };
 }
 
@@ -679,4 +682,5 @@ fn void a_buffer_takes_only_the_joints_that_fit_in_it() @test {
     assert(joints.cramped[0].index1 == joints.second.index1, "and takes the joint the walk reaches first");
     assert(joints.cramped[0].generation == joints.second.generation);
     assert(joints.filled_empty == 0, "a buffer with no room at all takes nothing");
+    assert(joints.untouched[0].index1 == 0, "and the buffer it was handed comes back as it went in");
 }

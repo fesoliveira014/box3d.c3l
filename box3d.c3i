@@ -622,31 +622,66 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
 
 <*
- The ceiling on a compound's children, which is one more than the number it can hold: box3d
- refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
- API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER
- upstream moves the real ceiling without moving this.
+ The two children of an internal tree node, as indices into the tree's own node array. box3d
+ writes -1 in either of them where there is no child.
 *>
-const int MAX_CHILD_SHAPES = 1048576;
+struct TreeNodeChildren {
+    int child1;
+    int child2;
+}
 
 <*
- The number of surface materials one mesh child of a compound can carry. Mirrors
- B3_MAX_COMPOUND_MESH_MATERIALS in types.h, which the C API does not expose as a function. A mesh
- with more materials than this has to be used outside a compound.
+ One node of a dynamic tree. box3d calls it private data placed in a public header for
+ performance, and the binding declares it because the tree's two proxy accessors are inline in
+ the C header rather than exported symbols, so box3d_tree.c3 reimplements them over these fields.
+
+ A node is one of three things at a time, and the two unions follow that. It is a leaf, whose
+ shared eight bytes are the user data its proxy was created with and whose box is that proxy's;
+ or an internal node, whose same eight bytes are two child indices and whose box encloses a
+ subtree; or a free slot on the tree's free list, whose parent is the next slot and whose box is
+ whatever a destroyed proxy left there. Which one it is lives in flags, whose bits box3d
+ documents as internal and this binding does not bind, so nothing a caller can read says how to
+ read the rest.
 *>
-const int MAX_COMPOUND_MESH_MATERIALS = 4;
+struct TreeNode {
+    Aabb aabb;
+    ulong category_bits;
+    union {
+        TreeNodeChildren children;
+        ulong user_data;
+    }
+    union {
+        int parent;
+        int next;
+    }
+    ushort height;
+    ushort flags;
+}
 
 <*
- A node of a bounding volume hierarchy. box3d calls it private data placed in a public header for
- performance, and nothing in this binding reads one, so it is carried as an opaque pointer target.
-*>
-typedef TreeNode = void;
+ A bounding volume hierarchy over whatever a caller puts in it: proxies, each a box carrying
+ eight bytes of user data, which a query reports by id. box3d calls this private data too, and
+ the binding declares it in full because the counts and the node array its accessors need are
+ reachable nowhere else.
 
-<*
- A bounding volume hierarchy over whatever it indexes. box3d calls this private data too, and it
- is declared in full only because CompoundData embeds one by value and the layout pins have to
- reach the fields past it. A compound's tree is immutable: its nodes live inside the compound's
- own allocation and the four rebuild arrays it would otherwise scratch in are null.
+ Alone among the resources here it is held by value rather than behind an identifier or a
+ pointer, and that is its one hazard: the struct is 80 bytes pointing at a node pool box3d
+ allocated, so a copy — an assignment, a by-value argument, a returned local — leaves two
+ structs sharing one pool. Only one of them may be destroyed, and the moment it is, every other
+ copy addresses freed memory. Pass a tree on as &tree, and build one with create_tree().
+
+ The node pool grows itself when the tree runs out of nodes, whatever capacity create_tree() was
+ given, and every node moves when it does. So nodes is not a pointer to hold on to, and a proxy
+ id names the same proxy across a growth where a TreeNode* would not.
+
+ Every field is box3d's, written when the tree was built and on every proxy since. The counts
+ have no accessors — proxy_count and node_capacity are read as fields, as CompoundData's counts
+ are — and node_capacity is also the bound the accessors in box3d_tree.c3 check an id against,
+ so assigning to it moves that bound rather than the array it stands for.
+
+ A compound holds one of these and it is not the caller's to destroy: its nodes address the
+ middle of the compound's own allocation and its four rebuild arrays are null, so destroy() on
+ it frees a pointer that was never separately allocated and aborts the process.
 *>
 struct DynamicTree {
     ulong version;
@@ -662,6 +697,59 @@ struct DynamicTree {
     int* bin_indices;
     int rebuild_capacity;
 }
+
+<*
+ Builds an empty tree and the node pool it inserts into.
+
+ proxy_capacity is a starting size and never a ceiling: box3d raises anything below 16 to 16 —
+ a negative argument included — and then sizes the pool at twice that less one, so every
+ argument from 16 down produces the same tree, and the pool grows itself past it as needed.
+
+ The tree comes back by value and the caller owns it: destroy() it exactly once, and see
+ DynamicTree for what a copy of it means. The 80-byte struct is the caller's own storage and is
+ not on byte_count(); the node pool box3d allocated for it is, and an undestroyed tree strands
+ those bytes for the rest of the process exactly as a world or a mesh does.
+*>
+extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Create");
+
+<*
+ Releases the node pool and the rebuild arrays, then zeroes the tree, so a second call on the
+ same struct has nothing left to free and does nothing. That protects no copy of the struct: a
+ copy still holds the pointer this call freed and frees it again. See DynamicTree, which also
+ covers the tree a compound owns.
+*>
+extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
+
+<*
+ Inserts a proxy holding the box and the user data, and returns the id that names it.
+
+ category_bits is the proxy's side of the mask a query filters on, so a proxy created with 0 is
+ one no query reports.
+
+ box3d asserts the box is valid and this release build compiles that assertion out, so a box
+ whose bounds are inverted or not finite is inserted all the same, and every query that reaches
+ it is answered from it.
+
+ Ids are recycled and carry no generation counter: the id of a destroyed proxy is handed to the
+ next proxy created. An id stays in range once its proxy is gone and names whatever holds that
+ slot then — see user_data().
+*>
+extern fn int DynamicTree.create_proxy(&self, Aabb aabb, ulong category_bits, ulong user_data) @cname("b3DynamicTree_CreateProxy");
+
+<*
+ The ceiling on a compound's children, which is one more than the number it can hold: box3d
+ refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
+ API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER
+ upstream moves the real ceiling without moving this.
+*>
+const int MAX_CHILD_SHAPES = 1048576;
+
+<*
+ The number of surface materials one mesh child of a compound can carry. Mirrors
+ B3_MAX_COMPOUND_MESH_MATERIALS in types.h, which the C API does not expose as a function. A mesh
+ with more materials than this has to be used outside a compound.
+*>
+const int MAX_COMPOUND_MESH_MATERIALS = 4;
 
 <*
  The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened

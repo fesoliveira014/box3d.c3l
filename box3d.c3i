@@ -2327,3 +2327,120 @@ extern fn void ParallelJointId.set_max_torque(self, float torque) @cname("b3Para
  a default definition.
 *>
 extern fn float ParallelJointId.max_torque(self) @cname("b3ParallelJoint_GetMaxTorque");
+
+<*
+ A joint known to be a motor joint. box3d resolves every per-type accessor through a joint-type
+ assertion this release build compiles out, so a motor accessor reaching a joint of another type
+ reinterprets that joint's solver union instead: a getter hands back nonsense and a setter writes
+ over the other type's state. The distinct handle moves that check to the one place the type is
+ genuinely in question. A MotorJointId converts to a JointId on its own, so every shared joint
+ accessor reaches it uncast; the way back is JointId.as_motor(), which checks.
+*>
+typedef MotorJointId = inline JointId;
+
+<*
+ A motor joint definition. The joint drives body B towards a relative linear and angular velocity
+ and, separately, pulls it towards the transform the two local frames describe through a linear
+ and an angular spring. Both velocities are whole Vec3 values rather than the single motor speed
+ the joint types with one driven axis carry.
+
+ This type has no enable flags at all, where every other sprung or motored joint type carries
+ one. Each of its four channels is switched by its own ceiling instead: box3d solves the linear
+ and the angular drive only while max_velocity_force and max_velocity_torque respectively are
+ above 0, and each spring only while both its ceiling and its hertz are. So a ceiling of 0 is not
+ a bound this joint never reaches — it is the channel turned off.
+
+ Must come from default_motor_joint_def(), which zeroes every field it adds to the base. A
+ default motor joint therefore drives and holds nothing until a ceiling is raised. The
+ constructor copies all ten fields across verbatim: nothing here is validated, clamped or
+ reordered on the way in.
+*>
+struct MotorJointDef {
+    inline JointDef base;
+    Vec3 linear_velocity;
+    float max_velocity_force;
+    Vec3 angular_velocity;
+    float max_velocity_torque;
+    float linear_hertz;
+    float linear_damping_ratio;
+    float max_spring_force;
+    float angular_hertz;
+    float angular_damping_ratio;
+    float max_spring_torque;
+}
+
+extern fn MotorJointDef default_motor_joint_def() @cname("b3DefaultMotorJointDef");
+
+<*
+ Raw motor joint constructor. Bypasses WorldId.create_motor_joint's definition guard and hands
+ back a joint of no particular type, so it is private to the module — box3d_joint_motor.c3's
+ WorldId.create_motor_joint is the only caller and is the only public way to a live motor joint.
+*>
+extern fn JointId create_motor_joint_raw(
+  WorldId world_id,
+  MotorJointDef* def,
+) @cname("b3CreateMotorJoint") @private;
+
+<*
+ A joint known to be a spherical joint. box3d resolves every per-type accessor through a
+ joint-type assertion this release build compiles out, so a spherical accessor reaching a joint of
+ another type reinterprets that joint's solver union instead: a getter hands back nonsense and a
+ setter writes over the other type's state. The distinct handle moves that check to the one place
+ the type is genuinely in question. A SphericalJointId converts to a JointId on its own, so every
+ shared joint accessor reaches it uncast; the way back is JointId.as_spherical(), which checks.
+*>
+typedef SphericalJointId = inline JointId;
+
+<*
+ A spherical joint definition. The joint pins the origin of local frame B to the origin of local
+ frame A and leaves the orientation about that point free — a ball and socket. An optional cone
+ limit bounds how far the two frames may swing apart, an optional twist limit bounds the rotation
+ between them, an optional spring turns frame B towards target_rotation, and an optional motor
+ drives their relative angular velocity, which is a whole Vec3 rather than a single speed.
+
+ Both limited angles are measured from the two frames' relative ORIENTATION and never from
+ position, which is the opposite of what this joint's name suggests. box3d builds each from body
+ A's rotation composed with local frame A's, compared against body B's the same way, and the
+ bodies' positions enter neither. So swinging a spherical joint as a pendulum leaves the cone and
+ twist angles at exactly 0 however far the bodies travel, and only rotating a body moves them.
+
+ Must come from default_spherical_joint_def(), which zeroes every field it adds to the base
+ except target_rotation, which is the identity quaternion (0, 0, 0, 1) rather than the zero a
+ reader scanning the rest of the default would expect. A default spherical joint is a bare ball
+ and socket: no spring, no limit, no motor.
+
+ Three fields are silently corrected on the way in. The constructor clamps cone_angle to
+ [0, pi/2], half the range this type's own prose gives the field, and it swaps the two twist
+ angles into order before clamping each to ±0.99 pi. box3d also asserts a cone angle within
+ [0, 0.99 pi] and a valid target_rotation, both under assertions this release build compiles out,
+ so an out-of-range angle is silently clamped rather than caught and a target_rotation that is
+ not a unit quaternion is stored and solved against as handed.
+*>
+struct SphericalJointDef {
+    inline JointDef base;
+    bool enable_spring;
+    float hertz;
+    float damping_ratio;
+    Quat target_rotation;
+    bool enable_cone_limit;
+    float cone_angle;
+    bool enable_twist_limit;
+    float lower_twist_angle;
+    float upper_twist_angle;
+    bool enable_motor;
+    float max_motor_torque;
+    Vec3 motor_velocity;
+}
+
+extern fn SphericalJointDef default_spherical_joint_def() @cname("b3DefaultSphericalJointDef");
+
+<*
+ Raw spherical joint constructor. Bypasses WorldId.create_spherical_joint's definition guard and
+ hands back a joint of no particular type, so it is private to the module —
+ box3d_joint_spherical.c3's WorldId.create_spherical_joint is the only caller and is the only
+ public way to a live spherical joint.
+*>
+extern fn JointId create_spherical_joint_raw(
+  WorldId world_id,
+  SphericalJointDef* def,
+) @cname("b3CreateSphericalJoint") @private;

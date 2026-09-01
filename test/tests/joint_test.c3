@@ -3742,3 +3742,251 @@ fn void the_parallel_spring_settings_round_trip() @test {
     assert(settings.damping_ratio_after == 0.125);
     assert(settings.max_torque_after == 12.5);
 }
+
+fn void the_motor_joint_types_match_the_c_layout() @test {
+    assert(b3::MotorJointDef::size == 168);
+    assert(b3::MotorJointDef::alignment == 8);
+}
+
+fn void the_spherical_joint_types_match_the_c_layout() @test {
+    assert(b3::SphericalJointDef::size == 184);
+    assert(b3::SphericalJointDef::alignment == 8);
+}
+
+// 0 is exactly representable as a float and is copied straight out of the definition, so these
+// compare exactly rather than in a band. Every ceiling here is also the switch for its channel,
+// so a motor joint built from this definition drives and holds nothing.
+fn void the_default_motor_joint_definition_zeroes_every_field_it_adds_to_the_base() @test {
+    b3::MotorJointDef def = b3::default_motor_joint_def();
+
+    assert(def.linear_velocity.x == 0.0);
+    assert(def.linear_velocity.y == 0.0);
+    assert(def.linear_velocity.z == 0.0);
+    assert(def.max_velocity_force == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.angular_velocity.x == 0.0);
+    assert(def.angular_velocity.y == 0.0);
+    assert(def.angular_velocity.z == 0.0);
+    assert(def.max_velocity_torque == 0.0);
+    assert(def.linear_hertz == 0.0);
+    assert(def.linear_damping_ratio == 0.0);
+    assert(def.max_spring_force == 0.0);
+    assert(def.angular_hertz == 0.0);
+    assert(def.angular_damping_ratio == 0.0);
+    assert(def.max_spring_torque == 0.0);
+}
+
+fn void a_default_motor_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::MotorJointDef def = b3::default_motor_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+// The one field either of these two definitions leaves non-zero. 0 and 1 are exactly representable
+// as floats and are copied straight out, so the quaternion is compared component by component
+// rather than in a band: a rotated component order would leave the 1 somewhere else.
+fn void the_default_spherical_joint_definition_zeroes_all_but_its_target_rotation() @test {
+    b3::SphericalJointDef def = b3::default_spherical_joint_def();
+
+    assert(!def.enable_spring, "a default spherical joint is a bare ball and socket");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(def.target_rotation.i == 0.0, "the target rotation is the identity quaternion, not zero");
+    assert(def.target_rotation.j == 0.0);
+    assert(def.target_rotation.k == 0.0);
+    assert(def.target_rotation.l == 1.0, "and the 1 sits in the real component");
+    assert(!def.enable_cone_limit);
+    assert(def.cone_angle == 0.0);
+    assert(!def.enable_twist_limit);
+    assert(def.lower_twist_angle == 0.0);
+    assert(def.upper_twist_angle == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_torque == 0.0);
+    assert(def.motor_velocity.x == 0.0);
+    assert(def.motor_velocity.y == 0.0);
+    assert(def.motor_velocity.z == 0.0);
+}
+
+fn void a_default_spherical_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::SphericalJointDef def = b3::default_spherical_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+fn b3::MotorJointId link_with_a_motor_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_motor_joint(&joint_def)!!;
+}
+
+fn b3::SphericalJointId link_with_a_spherical_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_spherical_joint(&joint_def)!!;
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_motor_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::MotorJointId motor = link_with_a_motor_joint(world, a, b);
+
+    return {
+        .type = motor.type(),
+        .expected_a = a,
+        .reported_a = motor.body_a(),
+        .valid = motor.is_valid(),
+    };
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_spherical_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::SphericalJointId ball = link_with_a_spherical_joint(world, a, b);
+
+    return {
+        .type = ball.type(),
+        .expected_a = a,
+        .reported_a = ball.body_a(),
+        .valid = ball.is_valid(),
+    };
+}
+
+fn void the_shared_joint_accessors_reach_a_motor_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_motor_joint();
+
+    assert(report.type == b3::JointType.MOTOR);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void the_shared_joint_accessors_reach_a_spherical_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_spherical_joint();
+
+    assert(report.type == b3::JointType.SPHERICAL);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+struct DrivenJointConversions {
+    b3::JointId motor;
+    b3::JointId ball;
+    b3::JointId narrowed_motor;
+    b3::JointId narrowed_ball;
+    bool motor_converted;
+    bool ball_converted;
+    fault ball_as_motor;
+    fault slider_as_motor;
+    fault motor_as_spherical;
+    fault slider_as_spherical;
+}
+
+// All three joints link the same pair of bodies in the same world, so the only thing separating
+// the joint each conversion refuses is its type.
+fn DrivenJointConversions the_conversions_of_a_motor_joint_and_a_ball_and_socket() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId motor = link_with_a_motor_joint(world, a, b);
+    b3::JointId ball = link_with_a_spherical_joint(world, a, b);
+    b3::JointId slider = link_with_a_prismatic_joint(world, a, b);
+
+    DrivenJointConversions conversions = {.motor = motor, .ball = ball};
+    if (try narrowed = motor.as_motor()) {
+        conversions.narrowed_motor = narrowed;
+        conversions.motor_converted = true;
+    }
+    if (try narrowed = ball.as_spherical()) {
+        conversions.narrowed_ball = narrowed;
+        conversions.ball_converted = true;
+    }
+    if (catch err = ball.as_motor()) conversions.ball_as_motor = err;
+    if (catch err = slider.as_motor()) conversions.slider_as_motor = err;
+    if (catch err = motor.as_spherical()) conversions.motor_as_spherical = err;
+    if (catch err = slider.as_spherical()) conversions.slider_as_spherical = err;
+    return conversions;
+}
+
+struct DestroyedDrivenConversions {
+    bool valid_before;
+    b3::JointType motor_type_after;
+    fault motor_refusal;
+    fault ball_refusal;
+}
+
+// The two joints are destroyed while their world lives on, so each handle names a joint slot
+// box3d has freed rather than a world that is gone. box3d leaves the slot's type where it was,
+// which is why reading the type is not on its own enough to refuse the handle.
+fn DestroyedDrivenConversions the_conversions_of_a_destroyed_motor_joint_and_ball_and_socket() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId motor = link_with_a_motor_joint(world, a, b);
+    b3::JointId ball = link_with_a_spherical_joint(world, a, b);
+
+    DestroyedDrivenConversions conversions = {.valid_before = motor.is_valid() && ball.is_valid()};
+    motor.destroy(false);
+    ball.destroy(false);
+
+    conversions.motor_type_after = motor.type();
+    if (catch err = motor.as_motor()) conversions.motor_refusal = err;
+    if (catch err = ball.as_spherical()) conversions.ball_refusal = err;
+    return conversions;
+}
+
+fn void only_a_motor_joint_narrows_to_a_motor_handle() @test {
+    DrivenJointConversions conversions = the_conversions_of_a_motor_joint_and_a_ball_and_socket();
+
+    assert(conversions.motor_converted, "as_motor takes back the joint it was given");
+    assert(conversions.narrowed_motor.index1 == conversions.motor.index1);
+    assert(conversions.narrowed_motor.world0 == conversions.motor.world0);
+    assert(conversions.narrowed_motor.generation == conversions.motor.generation);
+    assert(conversions.ball_as_motor == b3::WRONG_JOINT_TYPE,
+        "a motor accessor on a ball and socket reinterprets that joint's solver union");
+    assert(conversions.slider_as_motor == b3::WRONG_JOINT_TYPE, "and on a slider, the slider's");
+}
+
+fn void only_a_spherical_joint_narrows_to_a_spherical_handle() @test {
+    DrivenJointConversions conversions = the_conversions_of_a_motor_joint_and_a_ball_and_socket();
+
+    assert(conversions.ball_converted, "as_spherical takes back the joint it was given");
+    assert(conversions.narrowed_ball.index1 == conversions.ball.index1);
+    assert(conversions.narrowed_ball.world0 == conversions.ball.world0);
+    assert(conversions.narrowed_ball.generation == conversions.ball.generation);
+    assert(conversions.motor_as_spherical == b3::WRONG_JOINT_TYPE,
+        "a spherical accessor on a motor joint reinterprets that joint's solver union");
+    assert(conversions.slider_as_spherical == b3::WRONG_JOINT_TYPE, "and on a slider, the slider's");
+}
+
+fn void a_destroyed_joint_narrows_to_neither_of_the_two_new_handles() @test {
+    DestroyedDrivenConversions conversions = the_conversions_of_a_destroyed_motor_joint_and_ball_and_socket();
+
+    assert(conversions.valid_before, "both joints were live before they were destroyed");
+    assert(conversions.motor_type_after == b3::JointType.MOTOR,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversions.motor_refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+    assert(conversions.ball_refusal == b3::INVALID_HANDLE);
+}

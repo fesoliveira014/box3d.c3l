@@ -775,3 +775,146 @@ fn void a_default_revolute_joint_definition_carries_the_cookie_every_definition_
     assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
     assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
 }
+
+fn b3::RevoluteJointId link_with_a_revolute_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_revolute_joint(&joint_def)!!;
+}
+
+struct RevoluteHandleReport {
+    b3::JointType type;
+    b3::BodyId expected_a;
+    b3::BodyId reported_a;
+    bool valid;
+}
+
+// Every accessor here is a shared JointId one called on a RevoluteJointId with no cast, which is
+// what the inline typedef buys.
+fn RevoluteHandleReport the_shared_accessors_on_a_new_hinge() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::RevoluteJointId hinge = link_with_a_revolute_joint(world, a, b);
+
+    return {
+        .type = hinge.type(),
+        .expected_a = a,
+        .reported_a = hinge.body_a(),
+        .valid = hinge.is_valid(),
+    };
+}
+
+enum HingeBodies {
+    UNSET,
+    THIS_WORLD,
+    ANOTHER_WORLD,
+}
+
+// Two worlds every time, both destroyed, so that the cross-world row differs from the others in
+// nothing but which world its second body came from.
+fn fault refusal_of_a_revolute_joint_definition(b3::RevoluteJointDef* def, HingeBodies bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+    b3::WorldId elsewhere = b3::create_world(&world_def)!!;
+    defer elsewhere.destroy();
+
+    if (bodies != HingeBodies.UNSET) {
+        b3::WorldId home_of_b = bodies == HingeBodies.ANOTHER_WORLD ? elsewhere : world;
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(home_of_b, 1.0);
+    }
+
+    if (catch err = world.create_revolute_joint(def)) return err;
+    return {};
+}
+
+struct HingeConversion {
+    b3::JointId hinge;
+    b3::JointId narrowed;
+    bool converted;
+    fault filter_refusal;
+}
+
+fn HingeConversion the_conversions_of_a_hinge_and_a_filter_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+    b3::JointId filter = link_with_a_filter_joint(world, a, b);
+
+    HingeConversion conversion = {.hinge = hinge};
+    if (try narrowed = hinge.as_revolute()) {
+        conversion.narrowed = narrowed;
+        conversion.converted = true;
+    }
+    if (catch err = filter.as_revolute()) conversion.filter_refusal = err;
+    return conversion;
+}
+
+fn void a_revolute_joint_reports_its_own_type() @test {
+    RevoluteHandleReport report = the_shared_accessors_on_a_new_hinge();
+
+    assert(report.type == b3::JointType.REVOLUTE);
+}
+
+fn void the_shared_joint_accessors_reach_a_revolute_handle_uncast() @test {
+    RevoluteHandleReport report = the_shared_accessors_on_a_new_hinge();
+
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void a_zeroed_revolute_joint_definition_is_refused() @test {
+    b3::RevoluteJointDef zeroed;
+
+    fault refusal = refusal_of_a_revolute_joint_definition(&zeroed, HingeBodies.THIS_WORLD);
+
+    assert(refusal == b3::INVALID_DEFINITION, "box3d accepts a zeroed joint definition; the binding must not");
+}
+
+fn void a_revolute_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::RevoluteJointDef bodiless = b3::default_revolute_joint_def();
+
+    fault refusal = refusal_of_a_revolute_joint_definition(&bodiless, HingeBodies.UNSET);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+}
+
+// The control is the row above it: the same definition with both bodies from the calling world is
+// accepted, so the refusal here is the world the second body came from and nothing else.
+fn void a_revolute_joint_definition_naming_a_body_of_another_world_is_refused() @test {
+    b3::RevoluteJointDef stranger = b3::default_revolute_joint_def();
+
+    fault refusal = refusal_of_a_revolute_joint_definition(&stranger, HingeBodies.ANOTHER_WORLD);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "box3d resolves a body identifier against the world it was handed, not the world it came from");
+
+    fault none;
+    b3::RevoluteJointDef local = b3::default_revolute_joint_def();
+    fault accepted = refusal_of_a_revolute_joint_definition(&local, HingeBodies.THIS_WORLD);
+    assert(accepted == none, "the same definition with both bodies from the calling world is accepted");
+}
+
+fn void a_revolute_joint_converts_to_its_own_handle_and_a_filter_joint_does_not() @test {
+    HingeConversion conversion = the_conversions_of_a_hinge_and_a_filter_joint();
+
+    assert(conversion.converted, "as_revolute takes back the joint it was given");
+    assert(conversion.narrowed.index1 == conversion.hinge.index1);
+    assert(conversion.narrowed.world0 == conversion.hinge.world0);
+    assert(conversion.narrowed.generation == conversion.hinge.generation);
+    assert(conversion.filter_refusal == b3::WRONG_JOINT_TYPE,
+        "a revolute accessor on another joint type reinterprets that joint's solver union");
+}

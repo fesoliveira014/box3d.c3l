@@ -3,34 +3,29 @@ module b3;
 <*
  Links two bodies with a joint that constrains nothing, so that they stop colliding.
 
- The suppression is not the filter joint's own doing: b3ShouldBodiesCollide walks the shorter
- body's joint list and refuses the pair for any joint whose collide_connected is false and which
- links the two, whatever its type. A filter joint is simply the joint type with nothing else
- attached, so set_collide_connected(true) on it puts the collision back, and the effect is
- observable only while at least one of the two bodies is dynamic — two non-dynamic bodies never
- collide anyway. Being a joint, it also links the two bodies into one island, so that waking one
- wakes the other — but box3d adds a joint to the island graph only once at least one of the bodies
- is dynamic and neither is disabled, and a static body carries no island of its own, so against one
- the joint simply joins the dynamic body's.
+ A filter joint is simply the joint type with nothing else attached, and the suppression is
+ collide_connected's doing rather than the type's: b3ShouldBodiesCollide refuses the pair for any
+ joint linking the two bodies whose flag is false, whatever its type, and set_collide_connected
+ carries that mechanism in full. Being a joint, it also links the two bodies into one island, so
+ that waking one wakes the other — but box3d adds a joint to the island graph only once at least
+ one of the bodies is dynamic and neither is disabled, and a static body carries no island of its
+ own, so against one the joint simply joins the dynamic body's.
 
- The definition must come from default_filter_joint_def() and must name both bodies. box3d marks a
- definition with an internal cookie there and checks it with an assertion, but this package links a
- release build where that assertion is compiled out — an unmarked definition would be accepted and
- would produce a joint whose force threshold is zero rather than float::max, reporting a joint event
- on every awake step. The body identifiers are checked because box3d's bounds assertion on them is
- compiled out too: an unset identifier indexes one slot before the start of the world's body array,
- and creating the joint writes the body's joint list head and count through it. Those two are the
- only checks this guard restores. box3d also asserts valid local frames and non-negative finite
- thresholds, those assertions are compiled out here as well and neither is restored, which is a
- known limit of the guard rather than an oversight — an unvalidated frame or threshold produces a
+ The definition must come from default_filter_joint_def() and must name two bodies of this world.
+ This release build compiles box3d's own checks out, so an unmarked definition would be accepted
+ and would carry a force threshold of zero rather than float::max, reporting a joint event on every
+ awake step, while a body identifier this world cannot resolve — unset, or belonging to another
+ world — would be indexed and written through, since creating the joint writes that body's joint
+ list head and count. Those three are the only checks restored: box3d also asserts valid local
+ frames and non-negative finite thresholds, neither of those assertions is restored here, and that
+ is a deliberate limit rather than an oversight — an unvalidated frame or threshold produces a
  wrong simulation, while an unvalidated identifier is dereferenced and written through.
 
- @param [&in] def : "a definition obtained from default_filter_joint_def(), naming both bodies"
- @return "the joint, INVALID_DEFINITION if the definition did not come from default_filter_joint_def() or leaves either body identifier unset, or INVALID_HANDLE if box3d returns a null identifier — which b3CreateFilterJoint does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
+ @param [&in] def : "a definition obtained from default_filter_joint_def(), naming two bodies of this world"
+ @return "the joint, INVALID_DEFINITION if the definition did not come from default_filter_joint_def() or names a body this world cannot resolve, or INVALID_HANDLE if box3d returns a null identifier — which b3CreateFilterJoint does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
 *>
 fn JointId? WorldId.create_filter_joint(self, FilterJointDef* def) {
-    if (def.internal_value != default_filter_joint_def().internal_value) return INVALID_DEFINITION~;
-    if (def.body_id_a.is_null() || def.body_id_b.is_null()) return INVALID_DEFINITION~;
+    check_joint_def(self, &def.base)!;
     return create_filter_joint_raw(self, def).checked();
 }
 
@@ -59,4 +54,20 @@ fn ConstraintTuning JointId.constraint_tuning(self) {
 fn JointId[] BodyId.joints(self, JointId[] buffer) {
     int written = body_joints_raw(self, buffer.ptr, (int)buffer.len);
     return buffer[:written];
+}
+
+<*
+ The definition guard every joint constructor runs, so that no constructor can be written without
+ one. Every joint definition embeds the same base, and every default carries the same cookie. See
+ WorldId.create_filter_joint for what the three checks buy and where the guard deliberately stops.
+
+ @param [&in] def : "the base embedded in the caller's definition"
+ @return "void, or INVALID_DEFINITION when the definition is unmarked or names a body this world cannot resolve"
+*>
+fn void? check_joint_def(WorldId world_id, JointDef* def) @private {
+    if (def.internal_value != default_filter_joint_def().internal_value) return INVALID_DEFINITION~;
+    if (def.body_id_a.is_null() || def.body_id_b.is_null()) return INVALID_DEFINITION~;
+
+    int world0 = world_id.index1 - 1;
+    if (def.body_id_a.world0 != world0 || def.body_id_b.world0 != world0) return INVALID_DEFINITION~;
 }

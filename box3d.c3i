@@ -928,3 +928,67 @@ extern fn float body_closest_point_raw(
   Vec3* result,
   Vec3 target,
 ) @cname("b3Body_GetClosestPoint") @private;
+
+<*
+ Called once for each shape a cast finds along its path, in no particular order. The return value
+ steers the cast: -1 rejects this shape and continues, 0 ends the cast, 1 continues without
+ clipping, and any fraction between them clips the cast to that point so later shapes are only
+ reported if they are nearer. box3d may call this from a worker thread, and the world must not be
+ modified from inside it.
+*>
+alias CastResultFn = fn float(
+  ShapeId shape_id,
+  Pos point,
+  Vec3 normal,
+  float fraction,
+  ulong user_material_id,
+  int triangle_index,
+  int child_index,
+  void* context,
+);
+
+<*
+ Called once for each shape an overlap query finds. Returning false ends the query. box3d may
+ call this from a worker thread, and the world must not be modified from inside it.
+*>
+alias OverlapResultFn = fn bool(ShapeId shape_id, void* context);
+
+extern fn TreeStats WorldId.cast_ray(
+  self,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+  CastResultFn fcn,
+  void* context,
+) @cname("b3World_CastRay");
+
+extern fn TreeStats WorldId.cast_shape(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  Vec3 translation,
+  QueryFilter filter,
+  CastResultFn fcn,
+  void* context,
+) @cname("b3World_CastShape");
+
+<*
+ Reports shapes whose broad-phase bounds potentially overlap the query box; it is not an exact
+ test against the shape's actual geometry.
+*>
+extern fn TreeStats WorldId.overlap_aabb(
+  self,
+  Aabb aabb,
+  QueryFilter filter,
+  OverlapResultFn fcn,
+  void* context,
+) @cname("b3World_OverlapAABB");
+
+extern fn TreeStats WorldId.overlap_shape(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  QueryFilter filter,
+  OverlapResultFn fcn,
+  void* context,
+) @cname("b3World_OverlapShape");

@@ -175,3 +175,138 @@ fn void the_closest_point_on_a_body_ignores_the_shape_radius() @test {
     assert(closest.point.y > -0.01f && closest.point.y < 0.01f,
         "and the point is the centre for the same reason");
 }
+
+struct RayVisitLog {
+    int calls;
+    int stop_after;
+}
+
+fn float log_visit_and_continue(
+  b3::ShapeId shape_id,
+  b3::Pos point,
+  b3::Vec3 normal,
+  float fraction,
+  ulong user_material_id,
+  int triangle_index,
+  int child_index,
+  void* context,
+) {
+    RayVisitLog* log = (RayVisitLog*)context;
+    log.calls++;
+    if (log.stop_after > 0 && log.calls >= log.stop_after) return 0.0f;
+    return 1.0f;
+}
+
+fn float log_visit_and_filter(
+  b3::ShapeId shape_id,
+  b3::Pos point,
+  b3::Vec3 normal,
+  float fraction,
+  ulong user_material_id,
+  int triangle_index,
+  int child_index,
+  void* context,
+) {
+    RayVisitLog* log = (RayVisitLog*)context;
+    log.calls++;
+    return -1.0f;
+}
+
+fn bool log_overlap(b3::ShapeId shape_id, void* context) {
+    RayVisitLog* log = (RayVisitLog*)context;
+    log.calls++;
+    return true;
+}
+
+fn b3::WorldId a_world_holding_three_spheres_in_a_line() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+
+    float[3] heights = {0.0f, -2.0f, -4.0f};
+    for (int i = 0; i < 3; i++) {
+        b3::BodyDef body_def = b3::default_body_def();
+        body_def.type = b3::BodyType.STATIC;
+        body_def.position = {0.0, heights[i], 0.0};
+        b3::BodyId body = world.create_body(&body_def)!!;
+
+        b3::ShapeDef shape_def = b3::default_shape_def();
+        b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+        body.create_sphere_shape(&shape_def, &sphere)!!;
+    }
+    return world;
+}
+
+fn void a_cast_callback_controls_how_far_the_ray_goes() @test {
+    b3::WorldId world = a_world_holding_three_spheres_in_a_line();
+    defer world.destroy();
+
+    b3::QueryFilter filter = b3::default_query_filter();
+
+    RayVisitLog every = { .calls = 0, .stop_after = 0 };
+    b3::TreeStats stats = world.cast_ray(
+      origin: {0.0, 4.0, 0.0},
+      translation: {0.0, -12.0, 0.0},
+      filter: filter,
+      fcn: &log_visit_and_continue,
+      context: &every,
+    );
+    assert(every.calls == 3, "returning one visits every sphere along the ray");
+    assert(stats.node_visits > 0 && stats.leaf_visits > 0, "the traversal counters are reported");
+
+    RayVisitLog stopped = { .calls = 0, .stop_after = 1 };
+    world.cast_ray(
+      origin: {0.0, 4.0, 0.0},
+      translation: {0.0, -12.0, 0.0},
+      filter: filter,
+      fcn: &log_visit_and_continue,
+      context: &stopped,
+    );
+    assert(stopped.calls == 1, "returning zero terminates the cast at the first shape");
+
+    RayVisitLog filtered = { .calls = 0, .stop_after = 0 };
+    world.cast_ray(
+      origin: {0.0, 4.0, 0.0},
+      translation: {0.0, -12.0, 0.0},
+      filter: filter,
+      fcn: &log_visit_and_filter,
+      context: &filtered,
+    );
+    assert(filtered.calls == 3, "returning minus one rejects a shape without ending the cast");
+}
+
+fn void an_overlap_callback_sees_the_shapes_in_the_box() @test {
+    b3::WorldId world = a_world_holding_three_spheres_in_a_line();
+    defer world.destroy();
+
+    b3::QueryFilter filter = b3::default_query_filter();
+    b3::Aabb box = {
+      .lower_bound = {-1.0, -5.0, -1.0},
+      .upper_bound = {1.0, 1.0, 1.0},
+    };
+
+    RayVisitLog log = { .calls = 0, .stop_after = 0 };
+    world.overlap_aabb(
+      aabb: box,
+      filter: filter,
+      fcn: &log_overlap,
+      context: &log,
+    );
+    assert(log.calls == 3, "all three spheres fall inside the box");
+
+    b3::Vec3[1] proxy_points = { {0.0, 0.0, 0.0} };
+    b3::ShapeProxy proxy = {
+      .points = &proxy_points[0],
+      .count = 1,
+      .radius = 0.25,
+    };
+
+    RayVisitLog probe = { .calls = 0, .stop_after = 0 };
+    world.overlap_shape(
+      origin: {0.0, 0.0, 0.0},
+      proxy: &proxy,
+      filter: filter,
+      fcn: &log_overlap,
+      context: &probe,
+    );
+    assert(probe.calls == 1, "a probe at the origin overlaps only the sphere there");
+}

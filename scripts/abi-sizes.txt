@@ -59,3 +59,6 @@ b3JointDef 112 8 userData=0 bodyIdA=8 bodyIdB=16 localFrameA=24 localFrameB=52 f
 b3FilterJointDef 112 8 base=0
 b3RevoluteJointDef 152 8 base=0 targetAngle=112 enableSpring=116 hertz=120 dampingRatio=124 enableLimit=128 lowerAngle=132 upperAngle=136 enableMotor=140 maxMotorTorque=144 motorSpeed=148
 b3DistanceJointDef 160 8 base=0 length=112 enableSpring=116 lowerSpringForce=120 upperSpringForce=124 hertz=128 dampingRatio=132 enableLimit=136 minLength=140 maxLength=144 enableMotor=148 maxMotorForce=152 motorSpeed=156
+b3PrismaticJointDef 152 8 base=0 enableSpring=112 hertz=116 dampingRatio=120 targetTranslation=124 enableLimit=128 lowerTranslation=132 upperTranslation=136 enableMotor=140 maxMotorForce=144 motorSpeed=148
+b3WeldJointDef 128 8 base=0 linearHertz=112 angularHertz=116 linearDampingRatio=120 angularDampingRatio=124
+b3ParallelJointDef 128 8 base=0 hertz=112 dampingRatio=116 maxTorque=120

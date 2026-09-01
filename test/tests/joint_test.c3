@@ -2538,3 +2538,378 @@ fn void a_spring_pulling_back_leaves_the_shared_force_far_under_the_motor_force(
     assert(driven.constraint_force.y > 1.8f && driven.constraint_force.y < 1.95f,
         "while the joint's whole force is the small remainder the spring does not cancel");
 }
+
+fn void the_prismatic_joint_types_match_the_c_layout() @test {
+    assert(b3::PrismaticJointDef::size == 152);
+    assert(b3::PrismaticJointDef::alignment == 8);
+}
+
+fn void the_weld_joint_types_match_the_c_layout() @test {
+    assert(b3::WeldJointDef::size == 128);
+    assert(b3::WeldJointDef::alignment == 8);
+}
+
+fn void the_parallel_joint_types_match_the_c_layout() @test {
+    assert(b3::ParallelJointDef::size == 128);
+    assert(b3::ParallelJointDef::alignment == 8);
+}
+
+// 0 is exactly representable as a float and is copied straight out of the definition, so these
+// compare exactly rather than in a band.
+fn void the_default_prismatic_joint_definition_zeroes_every_field_it_adds_to_the_base() @test {
+    b3::PrismaticJointDef def = b3::default_prismatic_joint_def();
+
+    assert(!def.enable_spring, "a default prismatic joint is a bare slider");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(def.target_translation == 0.0);
+    assert(!def.enable_limit);
+    assert(def.lower_translation == 0.0);
+    assert(def.upper_translation == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_force == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.motor_speed == 0.0);
+}
+
+// Zero is what this type asks for a rigid channel with, so a default weld joint is the stiff one
+// rather than the free one the same zeroes mean on the other sprung types.
+fn void the_default_weld_joint_definition_zeroes_all_four_fields_it_adds_to_the_base() @test {
+    b3::WeldJointDef def = b3::default_weld_joint_def();
+
+    assert(def.linear_hertz == 0.0);
+    assert(def.angular_hertz == 0.0);
+    assert(def.linear_damping_ratio == 0.0);
+    assert(def.angular_damping_ratio == 0.0);
+}
+
+// The odd one of the three: 1 and float::max are exactly representable as floats and are copied
+// straight out of the definition, so they too compare exactly.
+fn void the_default_parallel_joint_definition_zeroes_nothing_it_adds_to_the_base() @test {
+    b3::ParallelJointDef def = b3::default_parallel_joint_def();
+
+    assert(def.hertz == 1.0, "a default parallel joint is already sprung");
+    assert(def.damping_ratio == 1.0);
+    assert(def.max_torque == float::max, "and its spring is uncapped, where 0 would switch it off");
+}
+
+fn b3::PrismaticJointId link_with_a_prismatic_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_prismatic_joint(&joint_def)!!;
+}
+
+fn b3::WeldJointId link_with_a_weld_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::WeldJointDef joint_def = b3::default_weld_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_weld_joint(&joint_def)!!;
+}
+
+fn b3::ParallelJointId link_with_a_parallel_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::ParallelJointDef joint_def = b3::default_parallel_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_parallel_joint(&joint_def)!!;
+}
+
+struct TypedHandleReport {
+    b3::JointType type;
+    b3::BodyId expected_a;
+    b3::BodyId reported_a;
+    bool valid;
+}
+
+// Every accessor here is a shared JointId one called on the typed handle with no cast, which is
+// what the inline typedef buys.
+fn TypedHandleReport the_shared_accessors_on_a_new_slider() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::PrismaticJointId slider = link_with_a_prismatic_joint(world, a, b);
+
+    return {
+        .type = slider.type(),
+        .expected_a = a,
+        .reported_a = slider.body_a(),
+        .valid = slider.is_valid(),
+    };
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_weld_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::WeldJointId weld = link_with_a_weld_joint(world, a, b);
+
+    return {
+        .type = weld.type(),
+        .expected_a = a,
+        .reported_a = weld.body_a(),
+        .valid = weld.is_valid(),
+    };
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_parallel_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::ParallelJointId parallel = link_with_a_parallel_joint(world, a, b);
+
+    return {
+        .type = parallel.type(),
+        .expected_a = a,
+        .reported_a = parallel.body_a(),
+        .valid = parallel.is_valid(),
+    };
+}
+
+fn void the_shared_joint_accessors_reach_a_prismatic_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_slider();
+
+    assert(report.type == b3::JointType.PRISMATIC);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void the_shared_joint_accessors_reach_a_weld_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_weld_joint();
+
+    assert(report.type == b3::JointType.WELD);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void the_shared_joint_accessors_reach_a_parallel_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_parallel_joint();
+
+    assert(report.type == b3::JointType.PARALLEL);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+struct TypedJointConversions {
+    b3::JointId slider;
+    b3::JointId weld;
+    b3::JointId parallel;
+    b3::JointId narrowed_slider;
+    b3::JointId narrowed_weld;
+    b3::JointId narrowed_parallel;
+    bool slider_converted;
+    bool weld_converted;
+    bool parallel_converted;
+    fault weld_as_slider;
+    fault parallel_as_slider;
+    fault slider_as_weld;
+    fault parallel_as_weld;
+    fault slider_as_parallel;
+    fault weld_as_parallel;
+}
+
+// All three joints link the same pair of bodies in the same world, so the only thing separating
+// the joint each conversion refuses is its type.
+fn TypedJointConversions the_conversions_of_a_slider_a_weld_joint_and_a_parallel_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId slider = link_with_a_prismatic_joint(world, a, b);
+    b3::JointId weld = link_with_a_weld_joint(world, a, b);
+    b3::JointId parallel = link_with_a_parallel_joint(world, a, b);
+
+    TypedJointConversions conversions = {.slider = slider, .weld = weld, .parallel = parallel};
+    if (try narrowed = slider.as_prismatic()) {
+        conversions.narrowed_slider = narrowed;
+        conversions.slider_converted = true;
+    }
+    if (try narrowed = weld.as_weld()) {
+        conversions.narrowed_weld = narrowed;
+        conversions.weld_converted = true;
+    }
+    if (try narrowed = parallel.as_parallel()) {
+        conversions.narrowed_parallel = narrowed;
+        conversions.parallel_converted = true;
+    }
+    if (catch err = weld.as_prismatic()) conversions.weld_as_slider = err;
+    if (catch err = parallel.as_prismatic()) conversions.parallel_as_slider = err;
+    if (catch err = slider.as_weld()) conversions.slider_as_weld = err;
+    if (catch err = parallel.as_weld()) conversions.parallel_as_weld = err;
+    if (catch err = slider.as_parallel()) conversions.slider_as_parallel = err;
+    if (catch err = weld.as_parallel()) conversions.weld_as_parallel = err;
+    return conversions;
+}
+
+struct DestroyedTypedConversions {
+    bool valid_before;
+    b3::JointType slider_type_after;
+    fault slider_refusal;
+    fault weld_refusal;
+    fault parallel_refusal;
+}
+
+// The three joints are destroyed while their world lives on, so each handle names a joint slot
+// box3d has freed rather than a world that is gone. box3d leaves the slot's type where it was,
+// which is why reading the type is not on its own enough to refuse the handle.
+fn DestroyedTypedConversions the_conversions_of_three_destroyed_joints() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId slider = link_with_a_prismatic_joint(world, a, b);
+    b3::JointId weld = link_with_a_weld_joint(world, a, b);
+    b3::JointId parallel = link_with_a_parallel_joint(world, a, b);
+
+    DestroyedTypedConversions conversions = {
+        .valid_before = slider.is_valid() && weld.is_valid() && parallel.is_valid(),
+    };
+    slider.destroy(false);
+    weld.destroy(false);
+    parallel.destroy(false);
+
+    conversions.slider_type_after = slider.type();
+    if (catch err = slider.as_prismatic()) conversions.slider_refusal = err;
+    if (catch err = weld.as_weld()) conversions.weld_refusal = err;
+    if (catch err = parallel.as_parallel()) conversions.parallel_refusal = err;
+    return conversions;
+}
+
+fn fault refusal_of_a_prismatic_joint_definition(b3::PrismaticJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_prismatic_joint(def)) return err;
+    return {};
+}
+
+fn fault refusal_of_a_weld_joint_definition(b3::WeldJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_weld_joint(def)) return err;
+    return {};
+}
+
+fn fault refusal_of_a_parallel_joint_definition(b3::ParallelJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_parallel_joint(def)) return err;
+    return {};
+}
+
+fn void only_a_prismatic_joint_narrows_to_a_prismatic_handle() @test {
+    TypedJointConversions conversions = the_conversions_of_a_slider_a_weld_joint_and_a_parallel_joint();
+
+    assert(conversions.slider_converted, "as_prismatic takes back the joint it was given");
+    assert(conversions.narrowed_slider.index1 == conversions.slider.index1);
+    assert(conversions.narrowed_slider.world0 == conversions.slider.world0);
+    assert(conversions.narrowed_slider.generation == conversions.slider.generation);
+    assert(conversions.weld_as_slider == b3::WRONG_JOINT_TYPE,
+        "a prismatic accessor on a weld joint reinterprets the weld joint's solver union");
+    assert(conversions.parallel_as_slider == b3::WRONG_JOINT_TYPE, "and on a parallel joint, that joint's");
+}
+
+fn void only_a_weld_joint_narrows_to_a_weld_handle() @test {
+    TypedJointConversions conversions = the_conversions_of_a_slider_a_weld_joint_and_a_parallel_joint();
+
+    assert(conversions.weld_converted, "as_weld takes back the joint it was given");
+    assert(conversions.narrowed_weld.index1 == conversions.weld.index1);
+    assert(conversions.narrowed_weld.world0 == conversions.weld.world0);
+    assert(conversions.narrowed_weld.generation == conversions.weld.generation);
+    assert(conversions.slider_as_weld == b3::WRONG_JOINT_TYPE,
+        "a weld accessor on a slider reinterprets the slider's solver union");
+    assert(conversions.parallel_as_weld == b3::WRONG_JOINT_TYPE, "and on a parallel joint, that joint's");
+}
+
+fn void only_a_parallel_joint_narrows_to_a_parallel_handle() @test {
+    TypedJointConversions conversions = the_conversions_of_a_slider_a_weld_joint_and_a_parallel_joint();
+
+    assert(conversions.parallel_converted, "as_parallel takes back the joint it was given");
+    assert(conversions.narrowed_parallel.index1 == conversions.parallel.index1);
+    assert(conversions.narrowed_parallel.world0 == conversions.parallel.world0);
+    assert(conversions.narrowed_parallel.generation == conversions.parallel.generation);
+    assert(conversions.slider_as_parallel == b3::WRONG_JOINT_TYPE,
+        "a parallel accessor on a slider reinterprets the slider's solver union");
+    assert(conversions.weld_as_parallel == b3::WRONG_JOINT_TYPE, "and on a weld joint, that joint's");
+}
+
+fn void a_destroyed_joint_narrows_to_none_of_the_three_handles() @test {
+    DestroyedTypedConversions conversions = the_conversions_of_three_destroyed_joints();
+
+    assert(conversions.valid_before, "all three joints were live before they were destroyed");
+    assert(conversions.slider_type_after == b3::JointType.PRISMATIC,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversions.slider_refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+    assert(conversions.weld_refusal == b3::INVALID_HANDLE);
+    assert(conversions.parallel_refusal == b3::INVALID_HANDLE);
+}
+
+fn void a_zeroed_definition_of_each_new_joint_type_is_refused() @test {
+    b3::PrismaticJointDef zeroed_slider;
+    b3::WeldJointDef zeroed_weld;
+    b3::ParallelJointDef zeroed_parallel;
+
+    assert(refusal_of_a_prismatic_joint_definition(&zeroed_slider, true) == b3::INVALID_DEFINITION,
+        "box3d accepts a zeroed joint definition; the binding must not");
+    assert(refusal_of_a_weld_joint_definition(&zeroed_weld, true) == b3::INVALID_DEFINITION);
+    assert(refusal_of_a_parallel_joint_definition(&zeroed_parallel, true) == b3::INVALID_DEFINITION);
+}
+
+fn void a_definition_of_each_new_joint_type_naming_no_bodies_is_refused() @test {
+    b3::PrismaticJointDef bodiless_slider = b3::default_prismatic_joint_def();
+    b3::WeldJointDef bodiless_weld = b3::default_weld_joint_def();
+    b3::ParallelJointDef bodiless_parallel = b3::default_parallel_joint_def();
+
+    assert(refusal_of_a_prismatic_joint_definition(&bodiless_slider, false) == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+    assert(refusal_of_a_weld_joint_definition(&bodiless_weld, false) == b3::INVALID_DEFINITION);
+    assert(refusal_of_a_parallel_joint_definition(&bodiless_parallel, false) == b3::INVALID_DEFINITION);
+
+    fault none;
+    b3::PrismaticJointDef named_slider = b3::default_prismatic_joint_def();
+    b3::WeldJointDef named_weld = b3::default_weld_joint_def();
+    b3::ParallelJointDef named_parallel = b3::default_parallel_joint_def();
+
+    assert(refusal_of_a_prismatic_joint_definition(&named_slider, true) == none,
+        "the same definition naming two bodies of the calling world is accepted");
+    assert(refusal_of_a_weld_joint_definition(&named_weld, true) == none);
+    assert(refusal_of_a_parallel_joint_definition(&named_parallel, true) == none);
+}

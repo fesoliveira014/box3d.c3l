@@ -59,3 +59,6 @@ b3JointDef userData,bodyIdA,bodyIdB,localFrameA,localFrameB,forceThreshold,torqu
 b3FilterJointDef base
 b3RevoluteJointDef base,targetAngle,enableSpring,hertz,dampingRatio,enableLimit,lowerAngle,upperAngle,enableMotor,maxMotorTorque,motorSpeed
 b3DistanceJointDef base,length,enableSpring,lowerSpringForce,upperSpringForce,hertz,dampingRatio,enableLimit,minLength,maxLength,enableMotor,maxMotorForce,motorSpeed
+b3PrismaticJointDef base,enableSpring,hertz,dampingRatio,targetTranslation,enableLimit,lowerTranslation,upperTranslation,enableMotor,maxMotorForce,motorSpeed
+b3WeldJointDef base,linearHertz,angularHertz,linearDampingRatio,angularDampingRatio
+b3ParallelJointDef base,hertz,dampingRatio,maxTorque

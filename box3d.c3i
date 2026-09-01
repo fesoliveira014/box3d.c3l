@@ -1091,3 +1091,59 @@ extern fn int shape_sensor_data_raw(
   ShapeId* visitor_ids,
   int capacity,
 ) @cname("b3Shape_GetSensorData") @private;
+
+enum JointType : int {
+    PARALLEL,
+    DISTANCE,
+    FILTER,
+    MOTOR,
+    PRISMATIC,
+    REVOLUTE,
+    SPHERICAL,
+    WELD,
+    WHEEL,
+}
+
+<*
+ The definition every joint type builds on. Must come from default_filter_joint_def(), or from
+ another type's default — see WorldId.create_filter_joint. Both local frames are measured from
+ their body's origin rather than its centre of mass, so recomputing a body's mass leaves the
+ joint where it was.
+*>
+struct JointDef {
+    void* user_data;
+    BodyId body_id_a;
+    BodyId body_id_b;
+    Transform local_frame_a;
+    Transform local_frame_b;
+    float force_threshold;
+    float torque_threshold;
+    float constraint_hertz;
+    float constraint_damping_ratio;
+    float draw_scale;
+    bool collide_connected;
+    int internal_value;
+}
+
+<*
+ A filter joint definition. A filter joint constrains nothing: it exists so the two bodies it
+ links stop colliding, and that suppression lasts only while collide_connected stays false.
+*>
+struct FilterJointDef {
+    inline JointDef base;
+}
+
+<*
+ Both thresholds come back as float::max, the value that keeps a joint out of
+ WorldId.joint_events() entirely.
+*>
+extern fn FilterJointDef default_filter_joint_def() @cname("b3DefaultFilterJointDef");
+
+<*
+ The soft-constraint tuning a joint solves with. This is a C3 type with no C counterpart: box3d
+ reports the pair through two out-parameters.
+*>
+struct ConstraintTuning {
+    float hertz;
+    float damping_ratio;
+}

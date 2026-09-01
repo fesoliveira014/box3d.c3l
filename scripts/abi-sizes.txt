@@ -54,3 +54,6 @@ b3TreeStats 8 4 nodeVisits=0 leafVisits=4
 b3ContactData 48 8 contactId=0 shapeIdA=12 shapeIdB=20 manifolds=32 manifoldCount=40
 b3ManifoldPoint 56 4 anchorA=0 anchorB=12 separation=24 baseSeparation=28 normalImpulse=32 totalNormalImpulse=36 normalVelocity=40 featureId=44 triangleIndex=48 persisted=52
 b3Manifold 268 4 points=0 normal=224 twistImpulse=236 frictionImpulse=240 rollingImpulse=252 pointCount=264
+b3JointType 4 4
+b3JointDef 112 8 userData=0 bodyIdA=8 bodyIdB=16 localFrameA=24 localFrameB=52 forceThreshold=80 torqueThreshold=84 constraintHertz=88 constraintDampingRatio=92 drawScale=96 collideConnected=100 internalValue=104
+b3FilterJointDef 112 8 base=0

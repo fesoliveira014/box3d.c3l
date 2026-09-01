@@ -853,6 +853,16 @@ struct ContactData {
     int manifold_count;
 }
 
+<*
+ A point on a body and the distance to it. box3d measures both against the shapes' core points
+ with their radii excluded, so for a sphere or a capsule the point is the centre line and the
+ distance overshoots the surface by the radius.
+*>
+struct ClosestPoint {
+    Vec3 point;
+    float distance;
+}
+
 extern fn QueryFilter default_query_filter() @cname("b3DefaultQueryFilter");
 
 <*
@@ -865,3 +875,56 @@ extern fn RayResult cast_ray_closest_raw(
   Vec3 translation,
   QueryFilter filter,
 ) @cname("b3World_CastRayClosest") @private;
+
+<*
+ Raw single-shape ray cast. Private because a miss comes back as a struct of undefined fields.
+*>
+extern fn CastOutput shape_ray_cast_raw(
+  ShapeId shape_id,
+  Pos origin,
+  Vec3 translation,
+) @cname("b3Shape_RayCast") @private;
+
+<*
+ Raw single-body ray cast. Private for the same reason as shape_ray_cast_raw.
+*>
+extern fn BodyCastResult body_cast_ray_raw(
+  BodyId body_id,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+  float max_fraction,
+  WorldTransform body_transform,
+) @cname("b3Body_CastRay") @private;
+
+<*
+ Raw single-body shape cast. Private for the same reason as shape_ray_cast_raw.
+*>
+extern fn BodyCastResult body_cast_shape_raw(
+  BodyId body_id,
+  Pos origin,
+  ShapeProxy* proxy,
+  Vec3 translation,
+  QueryFilter filter,
+  float max_fraction,
+  bool can_encroach,
+  WorldTransform body_transform,
+) @cname("b3Body_CastShape") @private;
+
+extern fn bool BodyId.overlap_shape(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  QueryFilter filter,
+  WorldTransform body_transform,
+) @cname("b3Body_OverlapShape");
+
+<*
+ Raw closest-point accessor. Private because it reports the point through an out-parameter and
+ the distance through its return value; BodyId.closest_point() returns both together.
+*>
+extern fn float body_closest_point_raw(
+  BodyId body_id,
+  Vec3* result,
+  Vec3 target,
+) @cname("b3Body_GetClosestPoint") @private;

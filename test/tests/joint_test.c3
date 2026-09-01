@@ -3205,13 +3205,14 @@ struct SliderMotorDrive {
     float speed;
 }
 
-// Gravity off, no spring and no limit, so the motor is the only thing acting on the slider and
-// the force it reports is its own. The 5 m/s it asks for is far more than two seconds of either
-// ceiling buys against the body's mass, so both driven rows are still saturated at the end rather
-// than coasting at the speed they were asked for.
-fn SliderMotorDrive a_slider_motor_driven_to(bool enable_motor, float max_motor_force) {
+// No spring and no limit, so the motor and the gravity the row is given are the only things
+// acting on the slider. The slider runs along world x and gravity pulls along y, so a row with
+// gravity on loads the joint across the direction it slides. The 5 m/s the motor asks for is far
+// more than two seconds of either ceiling buys against the body's mass, so every driven row is
+// still saturated at the end rather than coasting at the speed it was asked for.
+fn SliderMotorDrive a_slider_motor_driven_to(bool enable_motor, float max_motor_force, float gravity_y) {
     b3::WorldDef world_def = b3::default_world_def();
-    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.gravity = (b3::Vec3){ 0.0, gravity_y, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
     defer world.destroy();
 
@@ -3376,8 +3377,8 @@ fn void the_spring_settings_of_a_slider_round_trip() @test {
 // disjoint from each other and from the disabled control. What the pair pins is the ceiling rather
 // than a force the motor would settle at whatever it was allowed.
 fn void the_motor_force_saturates_at_the_ceiling_it_was_given() @test {
-    SliderMotorDrive light = a_slider_motor_driven_to(true, 10.0);
-    SliderMotorDrive heavy = a_slider_motor_driven_to(true, 25.0);
+    SliderMotorDrive light = a_slider_motor_driven_to(true, 10.0, 0.0);
+    SliderMotorDrive heavy = a_slider_motor_driven_to(true, 25.0, 0.0);
 
     assert(light.motor_force > 9.9f && light.motor_force < 10.1f, "the motor is held at the ceiling it was given");
     assert(heavy.motor_force > 24.9f && heavy.motor_force < 25.1f, "and a higher ceiling is held at that instead");
@@ -3390,7 +3391,7 @@ fn void the_motor_force_saturates_at_the_ceiling_it_was_given() @test {
 // The control for the pair above: the same definition with only the motor flag cleared, so the
 // speed and the ceiling the joint still carries drive nothing.
 fn void a_slider_whose_motor_is_disabled_applies_no_motor_force() @test {
-    SliderMotorDrive idle = a_slider_motor_driven_to(false, 25.0);
+    SliderMotorDrive idle = a_slider_motor_driven_to(false, 25.0, 0.0);
 
     assert(idle.motor_force > -0.001f && idle.motor_force < 0.001f, "a disabled motor applies nothing");
     assert(idle.translation > -0.001f && idle.translation < 0.001f, "and the slider stays where it was built");
@@ -3414,17 +3415,36 @@ fn void the_motor_settings_of_a_slider_round_trip() @test {
 // joint's are summed and not twice the way the revolute joint's are, so the magnitudes agree — but
 // it lays the total along local frame A's z axis while the slider runs along that frame's x axis.
 // The frames are identity here, so the body is moving along world x under a force reported along
-// world z, and the two components below are what say so.
+// world z. Gravity is off in this row and no spring or limit is live, so the axial sum is the only
+// impulse the joint holds and the other two components are empty for want of a load, not because
+// the accessor leaves the sliding axis clear.
 fn void the_shared_constraint_force_carries_the_motor_force_across_the_sliding_axis() @test {
-    SliderMotorDrive driven = a_slider_motor_driven_to(true, 25.0);
+    SliderMotorDrive driven = a_slider_motor_driven_to(true, 25.0, 0.0);
 
     assert(driven.translation > 0.75f && driven.translation < 0.78f, "the slider is moving along the joint's x axis");
     assert(driven.constraint_force.x > -0.001f && driven.constraint_force.x < 0.001f,
-        "and none of the force the shared accessor reports lies along it");
+        "and with nothing loading the joint across that axis it carries no transverse reaction");
     assert(driven.constraint_force.y > -0.001f && driven.constraint_force.y < 0.001f);
 
     float ratio = driven.constraint_force.z / driven.motor_force;
     assert(ratio > 0.999f && ratio < 1.001f, "the whole of it lies along z, at the motor force counted once");
+}
+
+// The row that gives the joint a transverse load, and it shows that what displaces the components
+// is a permutation of all three rather than the axial term alone. Gravity pulls the body along y,
+// the slider holds it there, and the reaction comes back on world x — the one direction of the
+// three the slider leaves free. 654.5 newtons is the body's own weight: a sphere of radius 0.25 at
+// the default density under ten metres per second squared.
+fn void a_load_across_the_slider_is_reported_along_the_axis_it_slides_on() @test {
+    SliderMotorDrive loaded = a_slider_motor_driven_to(true, 25.0, -10.0);
+
+    assert(loaded.constraint_force.x > 654.0f && loaded.constraint_force.x < 655.0f,
+        "the whole of the transverse reaction is reported along the sliding axis");
+    assert(loaded.constraint_force.y > -0.001f && loaded.constraint_force.y < 0.001f,
+        "and nothing at all along the axis the load actually pulls on");
+
+    float ratio = loaded.constraint_force.z / loaded.motor_force;
+    assert(ratio > 0.999f && ratio < 1.001f, "while the axial sum sits where the row above found it");
 }
 
 // Same accessor name, different contract, across joint types: this joint's spring flag discards
@@ -3472,6 +3492,39 @@ fn b3::Pos the_position_a_welded_sphere_hangs_at(bool soften_the_translation) {
     }
 
     return hanging.position();
+}
+
+// The same hanging sphere, loaded the one way the fixture above cannot load it: its frame B sits
+// on the body's own centre, so gravity pulls through the centre of mass and gives the rotational
+// channel no arm to turn the body by. A steady 200 newton-metres about z, reapplied every step
+// because box3d clears applied torque as it integrates, supplies one. Five seconds at 1/60 s: both
+// rows have settled by the end and doubling the run leaves them unchanged.
+fn b3::Quat the_rotation_a_welded_sphere_holds_under_a_steady_torque(bool soften_the_rotation) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_at(world, 1.0);
+
+    b3::WeldJointDef joint_def = b3::default_weld_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.local_frame_a.p = {1.0, 0.0, 0.0};
+    b3::WeldJointId weld = world.create_weld_joint(&joint_def)!!;
+
+    if (soften_the_rotation) {
+        weld.set_angular_hertz(1.0);
+        weld.set_angular_damping_ratio(0.5);
+    }
+
+    for (int i = 0; i < 300; i++) {
+        hanging.apply_torque({0.0, 0.0, 200.0}, true);
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return hanging.rotation();
 }
 
 struct WeldSpringSettings {
@@ -3615,6 +3668,25 @@ fn void a_weld_joint_whose_translation_is_softened_sags_under_the_same_load() @t
     assert(sagging.y > -0.27f && sagging.y < -0.24f,
         "a spring at one hertz lets the sphere hang a quarter metre lower than a rigid channel does");
     assert(sagging.x > 0.99f && sagging.x < 1.01f, "while the axis the load does not pull along is barely touched");
+}
+
+// The other half of what a weld joint holds, which the two rows above leave untested: the pair
+// there fixes a position, and a joint whose rotational channel did nothing at all would pass both.
+// Five seconds of a steady torque turn the rigid row by thirteen microradians and the softened one
+// by a twentieth of a radian — one setter apart, and three and a half orders of magnitude of band
+// between them, so neither row can be mistaken for the other. That the softened row is the one
+// that turns is a weld's zero hertz being its rigid setting on this channel too.
+fn void a_weld_joint_holds_its_rotation_until_that_channel_is_softened() @test {
+    b3::Quat held = the_rotation_a_welded_sphere_holds_under_a_steady_torque(false);
+    b3::Quat turned = the_rotation_a_welded_sphere_holds_under_a_steady_torque(true);
+
+    assert(held.k > -0.0005f && held.k < 0.0005f, "a rigid weld gives the applied torque nothing");
+    assert(held.l > 0.9999f && held.l < 1.0001f);
+    assert(turned.k > 0.047f && turned.k < 0.050f,
+        "while a spring at one hertz lets the same torque turn the sphere a twentieth of a radian");
+    assert(turned.l > 0.998f && turned.l < 0.9995f);
+    assert(turned.i > -0.001f && turned.i < 0.001f, "and the turn is about the axis the torque was applied on");
+    assert(turned.j > -0.001f && turned.j < 0.001f);
 }
 
 // Four distinct values down each path, because the definition interleaves its four fields —

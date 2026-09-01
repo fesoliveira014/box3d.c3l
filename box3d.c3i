@@ -2087,12 +2087,29 @@ extern fn float PrismaticJointId.max_motor_force(self) @cname("b3PrismaticJoint_
 
 <*
  The force the motor applied over the last step, in newtons, bounded by max_motor_force(). This is
- the honest reading of the two available, and the shared constraint_force() is a third contract
- again: box3d sums this joint's axial impulses — the spring's, the motor's and the two limits' —
- once each, not twice the way the revolute joint's constraint_torque() sums its own, and then lays
- the total along local frame A's z axis while the slider itself runs along that frame's x axis. So
- on a joint with no spring and no limit the shared reading carries this force at full magnitude
- and at a right angle to the direction the motor is driving the slider.
+ the honest reading: on this type the shared constraint_force() is wrong in both its direction and
+ its magnitude, and the shared constraint_torque() is wrong in its direction as well.
+
+ The force vector is a full cyclic permutation of its three components, not merely the axial term
+ laid on the wrong axis. box3d assembles the joint-space impulse as the two perpendicular terms
+ followed by the axial one, where local frame A's basis carries the axial term first, so every
+ component lands one slot over: the transverse reaction the slider is really carrying comes back
+ along the frame's x axis, which is the one direction the slider leaves free. On identity frames
+ under gravity along -y, the whole of a hanging body's weight reads on world x.
+
+ The magnitude is wrong whenever a limit opposes a motor or a spring. box3d adds the lower and the
+ upper limit impulse where the joint's own warm start subtracts the upper from the lower, so an
+ opposed pair sums instead of cancelling: a motor at a 25 newton ceiling driven into its own limit
+ reports 50 newtons of constraint force while the body is stationary and the net axial force is
+ zero. With no limit live the axial sum is honest, each impulse counted once rather than twice the
+ way the revolute joint's constraint_torque() counts its own.
+
+ The shared constraint_torque() is double-rotated. box3d accumulates this joint's angular impulse
+ in world space and then rotates it by local frame A and again by body A's transform, a chain
+ copied from the force accessor, which legitimately needs it. The magnitude survives; the direction
+ does not, as soon as either body A or local frame A is off identity. The weld joint's torque
+ applies no rotation and is right, so this is a bug in one type rather than a convention to carry
+ across them.
 *>
 extern fn float PrismaticJointId.motor_force(self) @cname("b3PrismaticJoint_GetMotorForce");
 
@@ -2253,8 +2270,14 @@ extern fn JointId create_parallel_joint_raw(
 <*
  Sets the spring's stiffness in hertz. 1 on a joint built from a default definition, where the weld
  joint's two are 0 — and 0 does not mean here what it means there: box3d's softness for a zero
- hertz carries a zero mass scale, so a parallel spring at 0 applies no torque at all rather than
- going rigid, leaving the two frames as free as a max_torque of 0 leaves them.
+ hertz carries a zero mass scale, so a parallel spring at 0 stops solving rather than going rigid,
+ the way a max_torque of 0 does.
+
+ That leaves the two frames free only on a joint set to 0 before it has accumulated an impulse.
+ box3d's warm start re-applies the impulse the spring already holds every substep and is gated on
+ neither the hertz nor the ceiling, while the zero mass scale stops that impulse ever being updated
+ or decayed, so a joint silenced after it has been working goes on pushing the bodies with the
+ impulse it was holding at the time.
 
  box3d asserts the value is finite and at or above 0, and this package links a release build where
  that assertion is compiled out. The value is stored as handed, nothing is clamped, and the
@@ -2283,9 +2306,15 @@ extern fn float ParallelJointId.spring_damping_ratio(self) @cname("b3ParallelJoi
  Sets the ceiling in newton-metres on the torque the spring may apply: box3d bounds the spring's
  accumulated impulse to the time step times this value. float::max on a joint built from a default
  definition. The ceiling gates the constraint as well as bounding it, so set_max_torque(0) leaves
- the joint solving nothing at all and the two bodies turning as freely as if it were not there —
- this joint holds nothing else. Upstream names the parameter a force; what it stores and everything
- that reads it is a torque.
+ the joint solving nothing at all — this joint holds nothing else. Upstream names the parameter a
+ force; what it stores and everything that reads it is a torque.
+
+ A joint set to 0 before it has accumulated an impulse leaves the two bodies turning freely; one
+ silenced after it has been working does not. box3d's warm start re-applies the impulse the spring
+ already holds every substep and is gated on neither the ceiling nor the hertz, while the gate on
+ the solve stops that impulse ever being updated or decayed, so it goes on being applied unchanged
+ for as long as the joint lives — measured, a body left spinning under a joint silenced this way is
+ pushed off the rate it was turning at rather than holding it.
 
  box3d asserts the value is finite and at or above 0, and this package links a release build where
  that assertion is compiled out. The value is stored as handed, and the spring's accumulated

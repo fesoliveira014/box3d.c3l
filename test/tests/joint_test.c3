@@ -5345,3 +5345,214 @@ fn void a_spherical_joint_holds_the_ball_at_the_anchor_it_was_given() @test {
     assert(loose.position[1] > -21.6 && loose.position[1] < -21.5,
         "where the same ball with nothing pinning it has fallen clear");
 }
+
+fn void the_wheel_joint_types_match_the_c_layout() @test {
+    assert(b3::WheelJointDef::size == 184);
+    assert(b3::WheelJointDef::alignment == 8);
+}
+
+// The only default in the package that hands back an enable flag already set. 0 and 1 are exactly
+// representable as floats and are copied straight out of the definition, so they compare exactly;
+// 0.7 is not representable at all, so the two damping ratios take a two-sided band.
+fn void the_default_wheel_joint_definition_arrives_with_its_suspension_spring_on() @test {
+    b3::WheelJointDef def = b3::default_wheel_joint_def();
+
+    assert(def.enable_suspension_spring, "a wheel arrives already sprung, where every other type arrives inert");
+    assert(def.suspension_hertz == 1.0);
+    assert(def.suspension_damping_ratio > 0.6999 && def.suspension_damping_ratio < 0.7001);
+    assert(def.steering_hertz == 1.0, "and its steering spring is tuned alongside the suspension's");
+    assert(def.steering_damping_ratio > 0.6999 && def.steering_damping_ratio < 0.7001);
+
+    assert(!def.enable_suspension_limit, "everything else is off or zero");
+    assert(def.lower_suspension_limit == 0.0);
+    assert(def.upper_suspension_limit == 0.0);
+    assert(!def.enable_spin_motor);
+    assert(def.max_spin_torque == 0.0);
+    assert(def.spin_speed == 0.0);
+    assert(!def.enable_steering, "so the tuned steering spring is not solved at all until this is set");
+    assert(def.target_steering_angle == 0.0);
+    assert(def.max_steering_torque == 0.0);
+    assert(!def.enable_steering_limit);
+    assert(def.lower_steering_limit == 0.0);
+    assert(def.upper_steering_limit == 0.0);
+}
+
+fn void a_default_wheel_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::WheelJointDef def = b3::default_wheel_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+fn b3::WheelJointId link_with_a_wheel_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_wheel_joint(&joint_def)!!;
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_wheel_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::WheelJointId wheel = link_with_a_wheel_joint(world, a, b);
+
+    return {
+        .type = wheel.type(),
+        .expected_a = a,
+        .reported_a = wheel.body_a(),
+        .valid = wheel.is_valid(),
+    };
+}
+
+fn void the_shared_joint_accessors_reach_a_wheel_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_wheel_joint();
+
+    assert(report.type == b3::JointType.WHEEL);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+struct WheelJointConversions {
+    b3::JointId wheel;
+    b3::JointId narrowed;
+    bool converted;
+    fault filter_refusal;
+    fault revolute_refusal;
+    fault distance_refusal;
+    fault prismatic_refusal;
+    fault weld_refusal;
+    fault parallel_refusal;
+    fault motor_refusal;
+    fault spherical_refusal;
+}
+
+// The wheel is the last of the nine types, so every other one is on hand to be refused. All nine
+// joints link the same pair of bodies in the same world, so the only thing separating the joint
+// each conversion turns down is its type.
+fn WheelJointConversions the_conversions_of_a_wheel_joint_and_the_eight_other_types() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId wheel = link_with_a_wheel_joint(world, a, b);
+    b3::JointId filter = link_with_a_filter_joint(world, a, b);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+    b3::JointId rod = link_with_a_distance_joint(world, a, b);
+    b3::JointId slider = link_with_a_prismatic_joint(world, a, b);
+    b3::JointId weld = link_with_a_weld_joint(world, a, b);
+    b3::JointId parallel = link_with_a_parallel_joint(world, a, b);
+    b3::JointId motor = link_with_a_motor_joint(world, a, b);
+    b3::JointId ball = link_with_a_spherical_joint(world, a, b);
+
+    WheelJointConversions conversions = {.wheel = wheel};
+    if (try narrowed = wheel.as_wheel()) {
+        conversions.narrowed = narrowed;
+        conversions.converted = true;
+    }
+    if (catch err = filter.as_wheel()) conversions.filter_refusal = err;
+    if (catch err = hinge.as_wheel()) conversions.revolute_refusal = err;
+    if (catch err = rod.as_wheel()) conversions.distance_refusal = err;
+    if (catch err = slider.as_wheel()) conversions.prismatic_refusal = err;
+    if (catch err = weld.as_wheel()) conversions.weld_refusal = err;
+    if (catch err = parallel.as_wheel()) conversions.parallel_refusal = err;
+    if (catch err = motor.as_wheel()) conversions.motor_refusal = err;
+    if (catch err = ball.as_wheel()) conversions.spherical_refusal = err;
+    return conversions;
+}
+
+struct DestroyedWheelConversion {
+    bool valid_before;
+    b3::JointType type_after;
+    fault refusal;
+}
+
+// The joint is destroyed while its world lives on, so the handle names a joint slot box3d has
+// freed rather than a world that is gone.
+fn DestroyedWheelConversion the_conversion_of_a_destroyed_wheel_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId wheel = link_with_a_wheel_joint(world, a, b);
+
+    DestroyedWheelConversion conversion = {.valid_before = wheel.is_valid()};
+    wheel.destroy(false);
+
+    conversion.type_after = wheel.type();
+    if (catch err = wheel.as_wheel()) conversion.refusal = err;
+    return conversion;
+}
+
+fn fault refusal_of_a_wheel_joint_definition(b3::WheelJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_wheel_joint(def)) return err;
+    return {};
+}
+
+fn void only_a_wheel_joint_narrows_to_a_wheel_handle() @test {
+    WheelJointConversions conversions = the_conversions_of_a_wheel_joint_and_the_eight_other_types();
+
+    assert(conversions.converted, "as_wheel takes back the joint it was given");
+    assert(conversions.narrowed.index1 == conversions.wheel.index1);
+    assert(conversions.narrowed.world0 == conversions.wheel.world0);
+    assert(conversions.narrowed.generation == conversions.wheel.generation);
+
+    assert(conversions.filter_refusal == b3::WRONG_JOINT_TYPE,
+        "a wheel accessor on a joint of another type reinterprets that joint's solver union");
+    assert(conversions.revolute_refusal == b3::WRONG_JOINT_TYPE);
+    assert(conversions.distance_refusal == b3::WRONG_JOINT_TYPE);
+    assert(conversions.prismatic_refusal == b3::WRONG_JOINT_TYPE);
+    assert(conversions.weld_refusal == b3::WRONG_JOINT_TYPE);
+    assert(conversions.parallel_refusal == b3::WRONG_JOINT_TYPE);
+    assert(conversions.motor_refusal == b3::WRONG_JOINT_TYPE);
+    assert(conversions.spherical_refusal == b3::WRONG_JOINT_TYPE);
+}
+
+fn void a_destroyed_joint_narrows_to_no_wheel_handle() @test {
+    DestroyedWheelConversion conversion = the_conversion_of_a_destroyed_wheel_joint();
+
+    assert(conversion.valid_before, "the joint was live before it was destroyed");
+    assert(conversion.type_after == b3::JointType.WHEEL,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversion.refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+}
+
+fn void a_zeroed_wheel_joint_definition_is_refused() @test {
+    b3::WheelJointDef zeroed_wheel;
+
+    assert(refusal_of_a_wheel_joint_definition(&zeroed_wheel, true) == b3::INVALID_DEFINITION,
+        "box3d accepts a zeroed joint definition; the binding must not");
+}
+
+fn void a_wheel_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::WheelJointDef bodiless_wheel = b3::default_wheel_joint_def();
+
+    assert(refusal_of_a_wheel_joint_definition(&bodiless_wheel, false) == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+
+    fault none;
+    b3::WheelJointDef named_wheel = b3::default_wheel_joint_def();
+
+    assert(refusal_of_a_wheel_joint_definition(&named_wheel, true) == none,
+        "the same definition naming two bodies of the calling world is accepted");
+}

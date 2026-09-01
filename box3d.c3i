@@ -2889,3 +2889,70 @@ extern fn void SphericalJointId.set_max_motor_torque(self, float torque) @cname(
  default definition.
 *>
 extern fn float SphericalJointId.max_motor_torque(self) @cname("b3SphericalJoint_GetMaxMotorTorque");
+
+<*
+ A joint known to be a wheel joint. box3d resolves every per-type accessor through a joint-type
+ assertion this release build compiles out, so a wheel accessor reaching a joint of another type
+ reinterprets that joint's solver union instead: a getter hands back nonsense and a setter writes
+ over the other type's state. The distinct handle moves that check to the one place the type is
+ genuinely in question. A WheelJointId converts to a JointId on its own, so every shared joint
+ accessor reaches it uncast; the way back is JointId.as_wheel(), which checks.
+*>
+typedef WheelJointId = inline JointId;
+
+<*
+ A wheel joint definition. Body A is the chassis and body B is the wheel: the wheel spins about
+ local frame B's z axis, its suspension travels along local frame A's x axis, and its steering
+ turns about that same x axis of frame A. Three channels, each with its own enable flag and its
+ own optional limit — a suspension spring, a spin motor, and a steering spring.
+
+ Must come from default_wheel_joint_def(), and that default is the only one in this package that
+ hands back an enable flag already set. enable_suspension_spring is true, with suspension_hertz 1
+ and suspension_damping_ratio 0.7, and steering_hertz 1 and steering_damping_ratio 0.7 sit
+ alongside them. So a wheel arrives already sprung along its suspension axis where every other
+ joint type arrives inert. The other twelve fields are zero or false, which leaves the spin motor,
+ the steering and both limits off until the definition turns them on — the steering spring is
+ tuned but not solved at all until enable_steering is set.
+
+ spin_speed is what this definition calls the speed the spin motor drives at, while the accessors
+ for the same quantity are set_spin_motor_speed() and spin_motor_speed(). box3d names the field
+ and the accessors differently and each side of the binding follows its own name, so a reader
+ expecting the two to agree is reading two different names for one value.
+
+ The shared JointId.angular_separation() reports nothing meaningful on a joint of this type.
+ box3d's switch over the joint types carries no implementation for the wheel case — only an
+ assertion this release build compiles out and a bare return of 0 — so it reads 0 on every wheel
+ joint because that code was never written, not because the joint is aligned.
+*>
+struct WheelJointDef {
+    inline JointDef base;
+    bool enable_suspension_spring;
+    float suspension_hertz;
+    float suspension_damping_ratio;
+    bool enable_suspension_limit;
+    float lower_suspension_limit;
+    float upper_suspension_limit;
+    bool enable_spin_motor;
+    float max_spin_torque;
+    float spin_speed;
+    bool enable_steering;
+    float steering_hertz;
+    float steering_damping_ratio;
+    float target_steering_angle;
+    float max_steering_torque;
+    bool enable_steering_limit;
+    float lower_steering_limit;
+    float upper_steering_limit;
+}
+
+extern fn WheelJointDef default_wheel_joint_def() @cname("b3DefaultWheelJointDef");
+
+<*
+ Raw wheel joint constructor. Bypasses WorldId.create_wheel_joint's definition guard and hands
+ back a joint of no particular type, so it is private to the module — box3d_joint_wheel.c3's
+ WorldId.create_wheel_joint is the only caller and is the only public way to a live wheel joint.
+*>
+extern fn JointId create_wheel_joint_raw(
+  WorldId world_id,
+  WheelJointDef* def,
+) @cname("b3CreateWheelJoint") @private;

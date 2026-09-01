@@ -5,7 +5,8 @@ faultdef
     INVALID_DEFINITION,
     INVALID_HANDLE,
     DOUBLE_PRECISION_LIBRARY,
-    WRONG_SHAPE_TYPE;
+    WRONG_SHAPE_TYPE,
+    NO_HIT;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
 macro bool BodyId.is_null(self) => self.index1 == 0;

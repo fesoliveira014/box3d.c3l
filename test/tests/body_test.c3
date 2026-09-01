@@ -516,3 +516,33 @@ fn void a_kinematic_body_driven_to_a_target_arrives_there() @test {
     assert(box.upper_bound.y == box.lower_bound.y);
     assert(box.upper_bound.z == box.lower_bound.z);
 }
+
+fn void a_body_reports_the_shapes_attached_to_it() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere first = {.center = {-1.0, 0.0, 0.0}, .radius = 0.5};
+    b3::Sphere second = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    b3::Sphere third = {.center = {1.0, 0.0, 0.0}, .radius = 0.5};
+    body.create_sphere_shape(&shape_def, &first)!!;
+    body.create_sphere_shape(&shape_def, &second)!!;
+    body.create_sphere_shape(&shape_def, &third)!!;
+
+    assert(body.shape_count() == 3, "three spheres were attached");
+
+    b3::ShapeId[8] roomy;
+    b3::ShapeId[] shapes = body.shapes(roomy[..]);
+    assert(shapes.len == 3, "and all three are reported");
+    assert(shapes[0].is_valid() && shapes[1].is_valid() && shapes[2].is_valid(),
+        "each reported shape is live");
+
+    b3::ShapeId[2] cramped;
+    b3::ShapeId[] some = body.shapes(cramped[..]);
+    assert(some.len == 2, "a short buffer is filled to its length and no further");
+}

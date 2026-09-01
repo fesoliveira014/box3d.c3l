@@ -716,3 +716,378 @@ alias CustomFilterFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, void* con
 
 extern fn void WorldId.set_pre_solve_callback(self, PreSolveFn pre_solve_fn, void* context) @cname("b3World_SetPreSolveCallback");
 extern fn void WorldId.set_custom_filter_callback(self, CustomFilterFn custom_filter_fn, void* context) @cname("b3World_SetCustomFilterCallback");
+
+const int MAX_MANIFOLD_POINTS = 4;
+const int MAX_SHAPE_CAST_POINTS = 128;
+
+<*
+ Filters which shapes a query considers. A shape is considered when the query's mask_bits
+ overlap the shape's category_bits and the shape's mask_bits overlap the query's category_bits.
+ default_query_filter() sets every bit in both, so an unmodified filter considers everything.
+ The id and name fields are recording metadata and are ignored when not recording; name must
+ outlive the query if it is set.
+*>
+struct QueryFilter {
+    ulong category_bits;
+    ulong mask_bits;
+    ulong id;
+    ZString name;
+}
+
+<*
+ The closest hit from WorldId.cast_ray_closest(). node_visits and leaf_visits are traversal
+ diagnostics. When hit is false every other field is undefined, which is why the wrapper faults
+ instead of returning this struct.
+*>
+struct RayResult {
+    ShapeId shape_id;
+    Pos point;
+    Vec3 normal;
+    ulong user_material_id;
+    float fraction;
+    int triangle_index;
+    int child_index;
+    int node_visits;
+    int leaf_visits;
+    bool hit;
+}
+
+<*
+ A convex point cloud with an external radius, used as the swept shape of a shape cast or the
+ probe of an overlap query. The points are borrowed: box3d reads them during the call and does
+ not copy them, so they must outlive it — a stack array is fine, a temporary is not. count must
+ not exceed MAX_SHAPE_CAST_POINTS.
+*>
+struct ShapeProxy {
+    Vec3* points;
+    int count;
+    float radius;
+}
+
+<*
+ The result of a single-shape ray or shape cast. When hit is false every other field is
+ undefined. material_index is -1 when the shape carries no material.
+*>
+struct CastOutput {
+    Vec3 normal;
+    Vec3 point;
+    float fraction;
+    int iterations;
+    int triangle_index;
+    int child_index;
+    int material_index;
+    bool hit;
+}
+
+<*
+ The same layout as CastOutput in this build. box3d widens the hit point to a double-precision
+ position under BOX3D_DOUBLE_PRECISION, which this package never compiles; the alias keeps the
+ two names distinct so a future double-precision variant changes one declaration.
+*>
+alias WorldCastOutput = CastOutput;
+
+<*
+ The result of casting at one specific body. When hit is false every other field is undefined.
+*>
+struct BodyCastResult {
+    ShapeId shape_id;
+    Pos point;
+    Vec3 normal;
+    float fraction;
+    int triangle_index;
+    ulong user_material_id;
+    int iterations;
+    bool hit;
+}
+
+<*
+ Broad-phase traversal counters returned by the callback queries. Diagnostic only.
+*>
+struct TreeStats {
+    int node_visits;
+    int leaf_visits;
+}
+
+<*
+ One contact point of a manifold. box3d uses speculative collision, so a point may be separated:
+ separation is negative only when the shapes actually overlap, and total_normal_impulse is what
+ distinguishes a point that carried an interaction from one that merely existed.
+*>
+struct ManifoldPoint {
+    Vec3 anchor_a;
+    Vec3 anchor_b;
+    float separation;
+    float base_separation;
+    float normal_impulse;
+    float total_normal_impulse;
+    float normal_velocity;
+    uint feature_id;
+    int triangle_index;
+    bool persisted;
+}
+
+<*
+ The contact points between two colliding shapes. Only the first point_count entries of points
+ are valid — contact_points() returns exactly that prefix. The normal is a unit vector pointing
+ from shape A to shape B.
+*>
+struct Manifold {
+    ManifoldPoint[MAX_MANIFOLD_POINTS] points;
+    Vec3 normal;
+    float twist_impulse;
+    Vec3 friction_impulse;
+    Vec3 rolling_impulse;
+    int point_count;
+}
+
+<*
+ One touching contact. The manifolds pointer and its count keep box3d's own layout because this
+ struct is written by box3d into a caller-supplied buffer and cannot hold a C3 slice; read them
+ through contact_manifolds(), which carries the borrow in its docstring.
+*>
+struct ContactData {
+    ContactId contact_id;
+    ShapeId shape_id_a;
+    ShapeId shape_id_b;
+    Manifold* manifolds;
+    int manifold_count;
+}
+
+<*
+ A point on a body and the distance to it. box3d measures both against the shapes' core points
+ with their radii excluded, so for a sphere or a capsule the point is the centre line and the
+ distance overshoots the surface by the radius.
+*>
+struct ClosestPoint {
+    Vec3 point;
+    float distance;
+}
+
+extern fn QueryFilter default_query_filter() @cname("b3DefaultQueryFilter");
+
+<*
+ Raw closest-hit accessor. Private because a miss comes back as a struct whose point, normal and
+ fraction are undefined; WorldId.cast_ray_closest() turns that into a fault.
+*>
+extern fn RayResult cast_ray_closest_raw(
+  WorldId world_id,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+) @cname("b3World_CastRayClosest") @private;
+
+<*
+ Raw single-shape ray cast. Private because a miss comes back as a struct of undefined fields.
+*>
+extern fn WorldCastOutput shape_ray_cast_raw(
+  ShapeId shape_id,
+  Pos origin,
+  Vec3 translation,
+) @cname("b3Shape_RayCast") @private;
+
+<*
+ Raw single-body ray cast. Private for the same reason as shape_ray_cast_raw.
+*>
+extern fn BodyCastResult body_cast_ray_raw(
+  BodyId body_id,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+  float max_fraction,
+  WorldTransform body_transform,
+) @cname("b3Body_CastRay") @private;
+
+<*
+ Raw single-body shape cast. Private for the same reason as shape_ray_cast_raw.
+*>
+extern fn BodyCastResult body_cast_shape_raw(
+  BodyId body_id,
+  Pos origin,
+  ShapeProxy* proxy,
+  Vec3 translation,
+  QueryFilter filter,
+  float max_fraction,
+  bool can_encroach,
+  WorldTransform body_transform,
+) @cname("b3Body_CastShape") @private;
+
+extern fn bool BodyId.overlap_shape(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  QueryFilter filter,
+  WorldTransform body_transform,
+) @cname("b3Body_OverlapShape");
+
+<*
+ Raw closest-point accessor. Private because it reports the point through an out-parameter and
+ the distance through its return value; BodyId.closest_point() returns both together.
+*>
+extern fn float body_closest_point_raw(
+  BodyId body_id,
+  Vec3* result,
+  Vec3 target,
+) @cname("b3Body_GetClosestPoint") @private;
+
+<*
+ Called once for each shape a cast finds along its path, in no particular order. The return value
+ steers the cast: -1 rejects this shape and continues, 0 ends the cast, 1 continues without
+ clipping, and any fraction between them clips the cast to that point so later shapes are only
+ reported if they are nearer. The query runs synchronously on the calling thread, and the world
+ must not be modified from inside it.
+*>
+alias CastResultFn = fn float(
+  ShapeId shape_id,
+  Pos point,
+  Vec3 normal,
+  float fraction,
+  ulong user_material_id,
+  int triangle_index,
+  int child_index,
+  void* context,
+);
+
+<*
+ Called once for each shape an overlap query finds. Returning false ends the query. The query
+ runs synchronously on the calling thread, and the world must not be modified from inside it.
+*>
+alias OverlapResultFn = fn bool(ShapeId shape_id, void* context);
+
+<*
+ Fires a ray from origin to origin + translation and calls fcn once per shape found along it, in
+ no particular order. The callback's return value steers the cast — see CastResultFn. Returns the
+ broad-phase traversal counters.
+*>
+extern fn TreeStats WorldId.cast_ray(
+  self,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+  CastResultFn fcn,
+  void* context,
+) @cname("b3World_CastRay");
+
+<*
+ Sweeps a convex proxy instead of a point, calling fcn once per shape it reaches. The proxy's
+ points are borrowed for the duration of the call and its count must not exceed
+ MAX_SHAPE_CAST_POINTS. Reported fractions stop short of true contact by box3d's speculative
+ margin.
+*>
+extern fn TreeStats WorldId.cast_shape(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  Vec3 translation,
+  QueryFilter filter,
+  CastResultFn fcn,
+  void* context,
+) @cname("b3World_CastShape");
+
+<*
+ Reports shapes whose broad-phase bounds potentially overlap the query box; it is not an exact
+ test against the shape's actual geometry.
+*>
+extern fn TreeStats WorldId.overlap_aabb(
+  self,
+  Aabb aabb,
+  QueryFilter filter,
+  OverlapResultFn fcn,
+  void* context,
+) @cname("b3World_OverlapAABB");
+
+<*
+ Calls fcn once per shape overlapping a convex proxy placed at origin. The proxy's points are
+ borrowed for the duration of the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
+*>
+extern fn TreeStats WorldId.overlap_shape(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  QueryFilter filter,
+  OverlapResultFn fcn,
+  void* context,
+) @cname("b3World_OverlapShape");
+
+<*
+ One shape a collecting cast found, carrying exactly what the cast callback is given. This is a
+ C3 type with no C counterpart: RayResult is the closest-hit result and its traversal counters
+ and hit flag mean nothing for a collected hit.
+*>
+struct CastHit {
+    ShapeId shape_id;
+    Pos point;
+    Vec3 normal;
+    float fraction;
+    ulong user_material_id;
+    int triangle_index;
+    int child_index;
+}
+
+<*
+ The touching contact behind a contact id. The manifolds it carries point into live internal
+ state — read them through ContactData.contact_manifolds() and do not hold the result.
+*>
+extern fn ContactData ContactId.data(self) @cname("b3Contact_GetData");
+
+<*
+ An upper bound on the contacts BodyId.contact_data() will write. It counts every contact on the
+ body, including ones that are not touching and so never appear in the data, and it reports zero
+ while the world is locked.
+*>
+extern fn int BodyId.contact_capacity(self) @cname("b3Body_GetContactCapacity");
+
+<*
+ Raw body contact filler. Private because it reports its count through a return value;
+ BodyId.contact_data() returns the filled prefix instead.
+*>
+extern fn int body_contact_data_raw(
+  BodyId body_id,
+  ContactData* contact_data,
+  int capacity,
+) @cname("b3Body_GetContactData") @private;
+
+<*
+ An upper bound on the contacts ShapeId.contact_data() will write. It is the whole body's contact
+ count, not this shape's, so it over-reports for a body carrying several shapes. It is zero for a
+ sensor and zero while the world is locked.
+*>
+extern fn int ShapeId.contact_capacity(self) @cname("b3Shape_GetContactCapacity");
+
+<*
+ Raw shape contact filler. Private for the same reason as body_contact_data_raw.
+*>
+extern fn int shape_contact_data_raw(
+  ShapeId shape_id,
+  ContactData* contact_data,
+  int capacity,
+) @cname("b3Shape_GetContactData") @private;
+
+<*
+ The number of shapes attached to this body. Exact, unlike the contact capacities.
+*>
+extern fn int BodyId.shape_count(self) @cname("b3Body_GetShapeCount");
+
+<*
+ Raw body shape filler. Private because it reports its count through a return value;
+ BodyId.shapes() returns the filled prefix instead.
+*>
+extern fn int body_shapes_raw(
+  BodyId body_id,
+  ShapeId* shape_array,
+  int capacity,
+) @cname("b3Body_GetShapes") @private;
+
+<*
+ The number of shapes currently overlapping this sensor. Exact, unlike the contact capacities,
+ but zero for a shape that is not a sensor and zero while the world is locked.
+*>
+extern fn int ShapeId.sensor_capacity(self) @cname("b3Shape_GetSensorCapacity");
+
+<*
+ Raw sensor overlap filler. Private for the same reason as body_shapes_raw.
+*>
+extern fn int shape_sensor_data_raw(
+  ShapeId shape_id,
+  ShapeId* visitor_ids,
+  int capacity,
+) @cname("b3Shape_GetSensorData") @private;

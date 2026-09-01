@@ -572,3 +572,47 @@ fn void a_box_comes_to_rest_on_static_ground() @test {
     assert(!crate.is_awake(), "a box at rest falls asleep");
     assert(crate_shape.is_valid());
 }
+
+fn void a_sensor_reports_the_shapes_overlapping_it() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, 0.0, 0.0};
+    b3::BodyId sensor_body = world.create_body(&body_def)!!;
+    b3::ShapeDef sensor_def = b3::default_shape_def();
+    sensor_def.is_sensor = true;
+    sensor_def.enable_sensor_events = true;
+    b3::Sphere sensor_sphere = {.center = {0.0, 0.0, 0.0}, .radius = 1.0};
+    b3::ShapeId sensor = sensor_body.create_sphere_shape(&sensor_def, &sensor_sphere)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 0.0, 0.0};
+    body_def.gravity_scale = 0.0;
+    b3::BodyId visitor_body = world.create_body(&body_def)!!;
+    b3::ShapeDef visitor_def = b3::default_shape_def();
+    visitor_def.density = 1.0;
+    visitor_def.enable_sensor_events = true;
+    b3::Sphere visitor_sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    b3::ShapeId visitor = visitor_body.create_sphere_shape(&visitor_def, &visitor_sphere)!!;
+
+    for (int i = 0; i < 10; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    assert(sensor.sensor_capacity() >= 1, "the sensor has an overlap to report");
+
+    b3::ShapeId[8] storage;
+    b3::ShapeId[] visitors = sensor.sensor_data(storage[..]);
+    assert(visitors.len == 1, "exactly one shape is inside the sensor");
+    assert(visitors[0].index1 == visitor.index1, "and it is the visitor");
+
+    b3::ShapeId[] none = sensor.sensor_data(storage[:0]);
+    assert(none.len == 0, "a zero-length buffer is filled with nothing");
+
+    assert(visitor.sensor_capacity() == 0, "a shape that is not a sensor reports no capacity");
+    assert(visitor.sensor_data(storage[..]).len == 0, "and no overlaps");
+}

@@ -304,3 +304,26 @@ fn ContactData[] ShapeId.contact_data(self, ContactData[] buffer) {
     int written = shape_contact_data_raw(self, buffer.ptr, (int)buffer.len);
     return buffer[:written];
 }
+
+<*
+ Writes this body's shapes into the caller's buffer. shape_count() is exact, so a buffer that
+ long is never truncated.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn ShapeId[] BodyId.shapes(self, ShapeId[] buffer) {
+    int written = body_shapes_raw(self, buffer.ptr, (int)buffer.len);
+    return buffer[:written];
+}
+
+<*
+ Writes the shapes currently overlapping this sensor into the caller's buffer. A shape that is
+ not a sensor fills nothing. An overlap may name a shape that has since been destroyed, so
+ ShapeId.is_valid() is the check before using one.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn ShapeId[] ShapeId.sensor_data(self, ShapeId[] buffer) {
+    int written = shape_sensor_data_raw(self, buffer.ptr, (int)buffer.len);
+    return buffer[:written];
+}

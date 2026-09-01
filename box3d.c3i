@@ -1046,3 +1046,32 @@ extern fn int shape_contact_data_raw(
   ContactData* contact_data,
   int capacity,
 ) @cname("b3Shape_GetContactData") @private;
+
+<*
+ The number of shapes attached to this body. Exact, unlike the contact capacities.
+*>
+extern fn int BodyId.shape_count(self) @cname("b3Body_GetShapeCount");
+
+<*
+ Raw body shape filler. Private because it reports its count through a return value;
+ BodyId.shapes() returns the filled prefix instead.
+*>
+extern fn int body_shapes_raw(
+  BodyId body_id,
+  ShapeId* shape_array,
+  int capacity,
+) @cname("b3Body_GetShapes") @private;
+
+<*
+ The number of shapes currently overlapping this sensor, or zero if it is not a sensor. Exact.
+*>
+extern fn int ShapeId.sensor_capacity(self) @cname("b3Shape_GetSensorCapacity");
+
+<*
+ Raw sensor overlap filler. Private for the same reason as body_shapes_raw.
+*>
+extern fn int shape_sensor_data_raw(
+  ShapeId shape_id,
+  ShapeId* visitor_ids,
+  int capacity,
+) @cname("b3Shape_GetSensorData") @private;

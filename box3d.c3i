@@ -1364,6 +1364,11 @@ typedef RevoluteJointId = inline JointId;
  motor. Must come from default_revolute_joint_def(), which zeroes every field it adds to the
  base: no spring, no limit, no motor, and hertz, damping_ratio and max_motor_torque all 0 rather
  than the float::max thresholds the base defaults to. A default revolute joint is a bare hinge.
+
+ Three of the angles are corrected on the way in rather than taken as written: target_angle is
+ clamped into [-pi, pi], and lower_angle and upper_angle are swapped into order if they are
+ reversed and then both clamped into [-0.99 pi, 0.99 pi] — the same correction set_limits applies
+ at runtime. A joint's limits need not read back as the definition set them.
 *>
 struct RevoluteJointDef {
     inline JointDef base;
@@ -1449,3 +1454,40 @@ extern fn float RevoluteJointId.max_motor_torque(self) @cname("b3RevoluteJoint_G
  drives the angle positive.
 *>
 extern fn float RevoluteJointId.angle(self) @cname("b3RevoluteJoint_GetAngle");
+
+<*
+ Enables or disables this joint's limit. A change to the flag discards the limit's accumulated
+ impulses, so a limit switched back on rebuilds its hold over the following steps rather than
+ resuming the one it had.
+*>
+extern fn void RevoluteJointId.enable_limit(self, bool enable_limit) @cname("b3RevoluteJoint_EnableLimit");
+
+<*
+ Whether this joint's limit is enabled. False on a joint built from a default definition. While it
+ is off the shared angular_separation() reports zero for this joint whatever the hinge angle is —
+ the state-dependent zero JointId.constraint_force describes, not a permanent one.
+*>
+extern fn bool RevoluteJointId.is_limit_enabled(self) @cname("b3RevoluteJoint_IsLimitEnabled");
+
+<*
+ The low end of the angle the limit holds the hinge above, in radians about the frames' z axis. It
+ is what box3d stored, not what it was handed: see set_limits. 0 on a joint built from a default
+ definition.
+*>
+extern fn float RevoluteJointId.lower_limit(self) @cname("b3RevoluteJoint_GetLowerLimit");
+
+<*
+ The high end of the angle the limit holds the hinge below, in radians about the frames' z axis. It
+ is what box3d stored, not what it was handed: see set_limits. 0 on a joint built from a default
+ definition.
+*>
+extern fn float RevoluteJointId.upper_limit(self) @cname("b3RevoluteJoint_GetUpperLimit");
+
+<*
+ Sets the two angles in radians the limit holds the hinge between. box3d takes the smaller of the
+ pair as the lower and the larger as the upper, so a reversed pair is quietly corrected rather than
+ refused, and then clamps both into [-0.99 pi, 0.99 pi]. A wrapper faulting on a reversed pair would
+ contradict the library, so the binding documents the swap instead of guarding it. The limit acts
+ only while enable_limit() is on.
+*>
+extern fn void RevoluteJointId.set_limits(self, float lower_radians, float upper_radians) @cname("b3RevoluteJoint_SetLimits");

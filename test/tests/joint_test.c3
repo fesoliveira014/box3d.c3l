@@ -1169,3 +1169,193 @@ fn void the_shared_constraint_torque_reports_twice_a_revolute_motor_torque() @te
     float ratio = torque.constraint_torque_z / torque.motor_torque;
     assert(ratio > 1.999 && ratio < 2.001, "the shared accessor double-counts the hinge axis");
 }
+
+// The same motor as the drive above with a limit in its definition, run for twice as long as an
+// unlimited hinge needs to pass 0.5, so the reading is the limit holding rather than the run
+// stopping early.
+fn float the_angle_of_a_motor_driven_hinge_held_by_its_limit() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    joint_def.enable_limit = true;
+    joint_def.lower_angle = -0.5;
+    joint_def.upper_angle = 0.5;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return hinge.angle();
+}
+
+struct HingeLimits {
+    float lower;
+    float upper;
+}
+
+fn HingeLimits the_limits_of_a_hinge_set_to(float lower, float upper) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+    b3::RevoluteJointId hinge = link_with_a_revolute_joint(world, anchor, turning);
+
+    hinge.set_limits(lower, upper);
+    return {.lower = hinge.lower_limit(), .upper = hinge.upper_limit()};
+}
+
+fn HingeLimits the_limits_of_a_hinge_whose_definition_reversed_them() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_limit = true;
+    joint_def.lower_angle = 1.0;
+    joint_def.upper_angle = -1.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    return {.lower = hinge.lower_limit(), .upper = hinge.upper_limit()};
+}
+
+struct HingeLimitFlags {
+    bool on_a_default_hinge;
+    bool from_the_definition;
+    bool after_enabling;
+    bool after_disabling;
+}
+
+fn HingeLimitFlags the_limit_flags_of_a_bare_hinge_and_a_limited_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+    b3::RevoluteJointId bare = link_with_a_revolute_joint(world, anchor, turning);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_limit = true;
+    joint_def.lower_angle = -0.5;
+    joint_def.upper_angle = 0.5;
+    b3::RevoluteJointId limited = world.create_revolute_joint(&joint_def)!!;
+
+    HingeLimitFlags flags = {
+        .on_a_default_hinge = bare.is_limit_enabled(),
+        .from_the_definition = limited.is_limit_enabled(),
+    };
+
+    bare.enable_limit(true);
+    limited.enable_limit(false);
+    flags.after_enabling = bare.is_limit_enabled();
+    flags.after_disabling = limited.is_limit_enabled();
+    return flags;
+}
+
+struct HingeSeparations {
+    float while_the_limit_is_off;
+    float once_the_limit_is_exceeded;
+}
+
+// The hinge is driven well past the limit first and the limit armed afterwards without a further
+// step, so the two readings differ in the limit's state and in nothing else.
+fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_limit() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    float off = hinge.angular_separation();
+    hinge.set_limits(-0.1, 0.1);
+    hinge.enable_limit(true);
+
+    return {.while_the_limit_is_off = off, .once_the_limit_is_exceeded = hinge.angular_separation()};
+}
+
+// The closing condition for the limit family. The band holds 0.500134 and excludes both a hinge
+// the limit never caught and the 1.899400 the same motor reaches unlimited.
+fn void a_limit_stops_the_motor_that_drives_the_hinge_into_it() @test {
+    float angle = the_angle_of_a_motor_driven_hinge_held_by_its_limit();
+
+    assert(angle > 0.49 && angle < 0.51, "the motor is held at the limit rather than turning past it");
+}
+
+// 1 and -1 are exactly representable and need no clamping, so the swap shows up exactly.
+fn void a_reversed_pair_of_limits_is_swapped_into_order_rather_than_refused() @test {
+    HingeLimits limits = the_limits_of_a_hinge_set_to(1.0, -1.0);
+
+    assert(limits.lower == -1.0, "box3d takes the smaller of the two as the lower");
+    assert(limits.upper == 1.0);
+}
+
+fn void limits_beyond_the_half_turn_box3d_allows_are_clamped_to_it() @test {
+    HingeLimits limits = the_limits_of_a_hinge_set_to(-10.0, 10.0);
+
+    assert(limits.lower > -3.12 && limits.lower < -3.10, "0.99 pi, not the ten radians it was handed");
+    assert(limits.upper > 3.10 && limits.upper < 3.12);
+}
+
+// The constructor applies the same correction as set_limits, so a definition can name its two
+// angles in either order and the joint still comes out ordered.
+fn void a_definition_that_reverses_its_two_angles_still_builds_an_ordered_limit() @test {
+    HingeLimits limits = the_limits_of_a_hinge_whose_definition_reversed_them();
+
+    assert(limits.lower == -1.0);
+    assert(limits.upper == 1.0);
+}
+
+fn void the_limit_flag_of_a_hinge_starts_off_and_round_trips() @test {
+    HingeLimitFlags flags = the_limit_flags_of_a_bare_hinge_and_a_limited_one();
+
+    assert(!flags.on_a_default_hinge, "a default revolute joint is a bare hinge");
+    assert(flags.from_the_definition, "the joint reports the limit its definition asked for");
+    assert(flags.after_enabling);
+    assert(!flags.after_disabling);
+}
+
+// The concrete case of a shared accessor whose zero is the joint's state rather than its type:
+// the same hinge at the same angle reads zero with the limit off and the full quaternion angle
+// once the limit is armed inside it.
+fn void a_hinge_reports_no_angular_separation_until_its_limit_is_armed() @test {
+    HingeSeparations separations = the_angular_separations_of_a_turned_hinge_around_arming_its_limit();
+
+    assert(separations.while_the_limit_is_off == 0.0, "box3d strips the hinge angle while the limit is off");
+    assert(separations.once_the_limit_is_exceeded > 1.85 && separations.once_the_limit_is_exceeded < 1.95,
+        "the zero was the limit's state, not a separation this joint type never measures");
+}

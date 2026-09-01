@@ -123,7 +123,7 @@ fn ProxyReadings the_readings_of_two_proxies() {
           aabb: boxes[i],
           category_bits: ulong::max,
           user_data: payloads[i],
-        );
+        )!!;
         if (try user_data = tree.user_data(proxy)) read.user_data[i] = user_data;
         if (try box = tree.aabb(proxy)) read.box[i] = box;
     }
@@ -160,17 +160,19 @@ struct IdGuards {
     fault aabb_negative;
     fault aabb_past_the_end;
     fault last_slot;
+    fault aabb_last_slot;
+    fault live_proxy;
 }
 
 fn IdGuards the_guards_on_a_proxy_id() {
     b3::DynamicTree tree = b3::create_tree(16);
     defer tree.destroy();
 
-    tree.create_proxy(
+    int live = tree.create_proxy(
       aabb: (b3::Aabb){ .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
       category_bits: ulong::max,
       user_data: 7,
-    );
+    )!!;
 
     IdGuards guards;
     if (catch err = tree.user_data(-1)) guards.user_data_negative = err;
@@ -178,14 +180,15 @@ fn IdGuards the_guards_on_a_proxy_id() {
     if (catch err = tree.aabb(-1)) guards.aabb_negative = err;
     if (catch err = tree.aabb(tree.node_capacity)) guards.aabb_past_the_end = err;
     if (catch err = tree.user_data(tree.node_capacity - 1)) guards.last_slot = err;
+    if (catch err = tree.aabb(tree.node_capacity - 1)) guards.aabb_last_slot = err;
+    if (catch err = tree.user_data(live)) guards.live_proxy = err;
 
     return guards;
 }
 
-// box3d's own readers are inline in the header and bound the id with nothing at all, so both
-// ends run off the node array there — the negative end into memory before it. What the guard
-// restores is the array's bound and only that: the last slot holds no proxy and is read all the
-// same, because the tree carries nothing that could tell a caller so.
+// box3d's own readers are inline in the header and bound the id with nothing at all, so both ends
+// run off the node array there — the negative end into memory before it. The last slot is in range
+// and holds no proxy, which is the case the leaf bit separates from a live one.
 fn void a_proxy_id_outside_the_node_array_is_refused_at_both_ends() @test {
     IdGuards guards = the_guards_on_a_proxy_id();
     fault none;
@@ -194,5 +197,60 @@ fn void a_proxy_id_outside_the_node_array_is_refused_at_both_ends() @test {
     assert(guards.user_data_past_the_end == b3::INDEX_OUT_OF_RANGE, "and neither does the one past the last");
     assert(guards.aabb_negative == b3::INDEX_OUT_OF_RANGE);
     assert(guards.aabb_past_the_end == b3::INDEX_OUT_OF_RANGE);
-    assert(guards.last_slot == none, "while an id in range is read whether or not a proxy holds it");
+    assert(guards.last_slot == b3::NOT_A_PROXY, "an id in range holding no proxy is refused, not read");
+    assert(guards.aabb_last_slot == b3::NOT_A_PROXY);
+    assert(guards.live_proxy == none, "while the one that does holds is read");
+}
+
+struct BoxGuards {
+    fault inverted;
+    fault infinite;
+    fault not_a_number;
+    fault zero;
+}
+
+fn BoxGuards the_boxes_a_proxy_is_refused_for() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    float infinity = (float)1.0e40;
+    float nan = infinity - infinity;
+
+    BoxGuards guards;
+    if (catch err = tree.create_proxy(
+      aabb: (b3::Aabb){ .lower_bound = { 5.0, 5.0, 5.0 }, .upper_bound = { -5.0, -5.0, -5.0 } },
+      category_bits: 1,
+      user_data: 1,
+    )) guards.inverted = err;
+    if (catch err = tree.create_proxy(
+      aabb: (b3::Aabb){ .lower_bound = { -infinity, 0.0, 0.0 }, .upper_bound = { infinity, 1.0, 1.0 } },
+      category_bits: 1,
+      user_data: 2,
+    )) guards.infinite = err;
+    if (catch err = tree.create_proxy(
+      aabb: (b3::Aabb){ .lower_bound = { nan, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+      category_bits: 1,
+      user_data: 3,
+    )) guards.not_a_number = err;
+    if (catch err = tree.create_proxy(
+      aabb: (b3::Aabb){ .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 0.0, 0.0, 0.0 } },
+      category_bits: 1,
+      user_data: 4,
+    )) guards.zero = err;
+
+    return guards;
+}
+
+// box3d asserts the box and this build compiles the assertion out, so an invalid one reaches the
+// tree. None of the three is inert: an inverted box answers no query, an infinite one answers all
+// of them, and a box carrying a NaN corrupts the boxes above it and hides proxies that have
+// nothing to do with it. A zero box is a legitimate point and stays accepted.
+fn void a_proxy_box_that_box3d_would_assert_against_is_refused() @test {
+    BoxGuards guards = the_boxes_a_proxy_is_refused_for();
+    fault none;
+
+    assert(guards.inverted == b3::INVALID_DEFINITION, "lower above upper names no volume");
+    assert(guards.infinite == b3::INVALID_DEFINITION, "and an unbounded one would answer every query");
+    assert(guards.not_a_number == b3::INVALID_DEFINITION, "and a NaN would spread to unrelated proxies");
+    assert(guards.zero == none, "while a zero box is a point, which the tree holds happily");
 }

@@ -626,13 +626,21 @@ struct TreeNodeChildren {
 }
 
 <*
+ A tree node's flags. box3d sets LEAF with ALLOCATED when a proxy is created and clears the word
+ when the slot is freed; nothing else in the tree writes either bit, so LEAF is an exact test for
+ whether a node index names a live proxy. ENLARGED is box3d's own rebuild bookkeeping.
+*>
+const ushort TREE_NODE_ALLOCATED = 0x0001;
+const ushort TREE_NODE_ENLARGED = 0x0002;
+const ushort TREE_NODE_LEAF = 0x0004;
+
+<*
  One node of a dynamic tree, declared because the tree's two proxy accessors are inline in box3d's
  header rather than exported, so box3d_tree.c3 reimplements them over these fields.
 
  A node is a leaf, an internal node or a free slot: the shared eight bytes are a proxy's user
- data, two child indices, or the next free slot. Which reading applies lives in flags, whose bits
- box3d documents as internal and this binding does not bind, so nothing a caller can read says how
- to read the rest.
+ data, two child indices, or the next free slot. flags says which — TREE_NODE_LEAF is the only
+ reading under which user_data and aabb mean anything.
 *>
 struct TreeNode {
     Aabb aabb;
@@ -650,13 +658,13 @@ struct TreeNode {
 }
 
 <*
- A bounding volume hierarchy over proxies — a box and eight bytes of user data, reported by id.
+ A bounding volume hierarchy over proxies, held by value: 80 bytes pointing at a pool box3d
+ allocated, so a copy leaves two structs sharing one pool and only one may be destroyed. Pass it
+ on as &tree; the pool moves every node as it grows, so nodes is not a pointer to hold on to.
 
- Alone here it is held by value: 80 bytes pointing at a node pool box3d allocated, so a copy
- leaves two structs sharing one pool and only one may be destroyed. Pass it on as &tree, and build
- one with create_tree(). The pool grows itself and moves every node, so nodes is not a pointer to
- hold on to, and node_capacity is the bound box3d_tree.c3 checks an id against. A compound's tree
- is not the caller's: its nodes sit inside the compound's allocation, so destroy() on it aborts.
+ A compound's tree is neither the caller's to destroy nor to modify: destroy() frees into the
+ middle of the compound, and its free list points at live geometry, so create_proxy() overwrites
+ a child and hides it from every query with nothing reporting the loss.
 *>
 struct DynamicTree {
     ulong version;
@@ -692,16 +700,12 @@ extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Crea
 *>
 extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
 
-<*
- Inserts a proxy holding the box and the user data, and returns the id that names it.
-
- category_bits is the proxy's side of the mask a query filters on, so a proxy created with 0 is
- one no query reports. box3d's check that the box is valid is an assertion this build compiles
- out, so an inverted or non-finite box is inserted all the same and answered from. Ids are
- recycled with no generation counter: a destroyed proxy's id goes to the next proxy created — see
- user_data().
-*>
-extern fn int DynamicTree.create_proxy(&self, Aabb aabb, ulong category_bits, ulong user_data) @cname("b3DynamicTree_CreateProxy");
+extern fn int create_proxy_raw(
+  DynamicTree* tree,
+  Aabb aabb,
+  ulong category_bits,
+  ulong user_data,
+) @cname("b3DynamicTree_CreateProxy") @private;
 
 <*
  The ceiling on a compound's children, which is one more than the number it can hold: box3d

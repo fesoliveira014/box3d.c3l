@@ -254,3 +254,424 @@ fn void a_proxy_box_that_box3d_would_assert_against_is_refused() @test {
     assert(guards.not_a_number == b3::INVALID_DEFINITION, "and a NaN would spread to unrelated proxies");
     assert(guards.zero == none, "while a zero box is a point, which the tree holds happily");
 }
+
+struct MutatorReadings {
+    ulong category_at_creation;
+    ulong category_after_setting;
+    b3::Aabb moved;
+    b3::Aabb enlarged;
+    fault move_refused;
+    fault enlarge_refused;
+    fault set_refused;
+}
+
+fn MutatorReadings the_readings_after_moving_and_enlarging_one_proxy() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    b3::Aabb elsewhere = {
+        .lower_bound = { 6.5, -3.25, 12.75 },
+        .upper_bound = { 8.5, -1.25, 14.75 },
+    };
+    b3::Aabb wider = {
+        .lower_bound = { 5.5, -4.25, 11.75 },
+        .upper_bound = { 9.5, -0.25, 15.75 },
+    };
+
+    int proxy = tree.create_proxy(
+      aabb: (b3::Aabb){ .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+      category_bits: 2,
+      user_data: 11,
+    )!!;
+
+    MutatorReadings read;
+    if (try bits = tree.category_bits(proxy)) read.category_at_creation = bits;
+
+    if (catch err = tree.move_proxy(proxy, elsewhere)) read.move_refused = err;
+    if (try box = tree.aabb(proxy)) read.moved = box;
+
+    if (catch err = tree.enlarge_proxy(proxy, wider)) read.enlarge_refused = err;
+    if (try box = tree.aabb(proxy)) read.enlarged = box;
+
+    if (catch err = tree.set_category_bits(proxy, 0xF0)) read.set_refused = err;
+    if (try bits = tree.category_bits(proxy)) read.category_after_setting = bits;
+
+    return read;
+}
+
+// The two boxes share no component, so a mutator that wrote one field and left the rest, or that
+// answered from the box the proxy was created with, cannot pass.
+fn void a_proxy_takes_the_box_a_move_and_an_enlarge_give_it() @test {
+    MutatorReadings read = the_readings_after_moving_and_enlarging_one_proxy();
+    fault none;
+
+    assert(read.move_refused == none, "a finite box is a box the tree accepts");
+    assert(read.moved.lower_bound.x > 6.49 && read.moved.lower_bound.x < 6.51);
+    assert(read.moved.lower_bound.y > -3.26 && read.moved.lower_bound.y < -3.24);
+    assert(read.moved.lower_bound.z > 12.74 && read.moved.lower_bound.z < 12.76);
+    assert(read.moved.upper_bound.x > 8.49 && read.moved.upper_bound.x < 8.51);
+    assert(read.moved.upper_bound.y > -1.26 && read.moved.upper_bound.y < -1.24);
+    assert(read.moved.upper_bound.z > 14.74 && read.moved.upper_bound.z < 14.76,
+        "every component of the box the move was given");
+
+    assert(read.enlarge_refused == none);
+    assert(read.enlarged.lower_bound.x > 5.49 && read.enlarged.lower_bound.x < 5.51);
+    assert(read.enlarged.lower_bound.y > -4.26 && read.enlarged.lower_bound.y < -4.24);
+    assert(read.enlarged.lower_bound.z > 11.74 && read.enlarged.lower_bound.z < 11.76);
+    assert(read.enlarged.upper_bound.x > 9.49 && read.enlarged.upper_bound.x < 9.51);
+    assert(read.enlarged.upper_bound.y > -0.26 && read.enlarged.upper_bound.y < -0.24);
+    assert(read.enlarged.upper_bound.z > 15.74 && read.enlarged.upper_bound.z < 15.76,
+        "and every component of the wider one the enlarge was given");
+}
+
+// The category bits are a mask read straight back out, so they are compared exactly.
+fn void a_proxy_keeps_the_category_bits_it_is_given() @test {
+    MutatorReadings read = the_readings_after_moving_and_enlarging_one_proxy();
+    fault none;
+
+    assert(read.category_at_creation == 2, "the bits the proxy was created with");
+    assert(read.set_refused == none);
+    assert(read.category_after_setting == 0xF0, "and the ones set over them afterwards");
+}
+
+struct ProxyLifetimes {
+    int[3] proxy_count;
+    int destroyed_id;
+    int reused_id;
+    fault destroy_refused;
+    fault repeated_destroy;
+    fault read_of_a_destroyed_proxy;
+}
+
+fn ProxyLifetimes the_counts_around_a_destroyed_proxy() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    b3::Aabb unit = {
+        .lower_bound = { -1.0, -1.0, -1.0 },
+        .upper_bound = { 1.0, 1.0, 1.0 },
+    };
+
+    ProxyLifetimes lifetimes;
+    int[4] created;
+    for (int i = 0; i < 4; i++) {
+        created[i] = tree.create_proxy(
+          aabb: unit,
+          category_bits: 1,
+          user_data: (ulong)i,
+        )!!;
+    }
+    lifetimes.proxy_count[0] = tree.proxy_count;
+
+    lifetimes.destroyed_id = created[1];
+    if (catch err = tree.destroy_proxy(created[1])) lifetimes.destroy_refused = err;
+    lifetimes.proxy_count[1] = tree.proxy_count;
+    if (catch err = tree.destroy_proxy(created[1])) lifetimes.repeated_destroy = err;
+    if (catch err = tree.user_data(created[1])) lifetimes.read_of_a_destroyed_proxy = err;
+
+    lifetimes.reused_id = tree.create_proxy(
+      aabb: unit,
+      category_bits: 1,
+      user_data: 99,
+    )!!;
+    lifetimes.proxy_count[2] = tree.proxy_count;
+
+    return lifetimes;
+}
+
+// A proxy id carries no generation counter, so the slot a destroy frees is handed straight back
+// out and a stale id then names whatever took it. Nothing in the binding can catch that; what it
+// does catch is the window before the reuse, where the slot holds no proxy at all.
+fn void a_destroyed_proxy_gives_its_id_to_the_next_one() @test {
+    ProxyLifetimes lifetimes = the_counts_around_a_destroyed_proxy();
+    fault none;
+
+    assert(lifetimes.destroy_refused == none, "a live proxy is a proxy the tree will destroy");
+    assert(lifetimes.proxy_count[0] == 4, "four created");
+    assert(lifetimes.proxy_count[1] == 3, "three left after one is destroyed");
+    assert(lifetimes.proxy_count[2] == 4, "and four again after another is created");
+    assert(lifetimes.repeated_destroy == b3::NOT_A_PROXY, "destroying the same id twice is refused");
+    assert(lifetimes.read_of_a_destroyed_proxy == b3::NOT_A_PROXY, "and so is reading it");
+    assert(lifetimes.reused_id == lifetimes.destroyed_id, "the freed slot goes to the next proxy");
+}
+
+struct TreeReports {
+    int[3] height;
+    float[3] area_ratio;
+    int[3] proxy_count;
+    b3::Aabb empty_bounds;
+    b3::Aabb two_proxy_bounds;
+}
+
+fn TreeReports the_reports_of_a_growing_tree() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    TreeReports reports;
+    reports.height[0] = tree.height();
+    reports.area_ratio[0] = tree.area_ratio();
+    reports.proxy_count[0] = tree.proxy_count;
+    reports.empty_bounds = tree.root_bounds();
+
+    for (int i = 0; i < 6; i++) {
+        tree.create_proxy(
+          aabb: (b3::Aabb){
+            .lower_bound = { i * 4.0f - 1.0f, -1.0, -1.0 },
+            .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
+          },
+          category_bits: 1ul << i,
+          user_data: (ulong)i,
+        )!!;
+        if (i == 1) {
+            reports.height[1] = tree.height();
+            reports.area_ratio[1] = tree.area_ratio();
+            reports.proxy_count[1] = tree.proxy_count;
+            reports.two_proxy_bounds = tree.root_bounds();
+        }
+    }
+    reports.height[2] = tree.height();
+    reports.area_ratio[2] = tree.area_ratio();
+    reports.proxy_count[2] = tree.proxy_count;
+
+    return reports;
+}
+
+// Heights are the levels below the root, and both values here are the fewest a binary tree over
+// that many leaves can have, so a tree that inserted without rebalancing would report more.
+fn void the_height_is_the_depth_of_the_tree_below_its_root() @test {
+    TreeReports reports = the_reports_of_a_growing_tree();
+
+    assert(reports.proxy_count[0] == 0 && reports.proxy_count[1] == 2 && reports.proxy_count[2] == 6);
+    assert(reports.height[0] == 0, "an empty tree has no root to measure from");
+    assert(reports.height[1] == 1, "two leaves under one internal node");
+    assert(reports.height[2] == 3, "and six leaves three levels below the root");
+}
+
+// The ratio sums the internal nodes and skips both the leaves and the root, so a tree whose only
+// internal node is its root has nothing to sum and reports the same 0 an empty tree does. The
+// value for six is left as a band: which leaves box3d pairs is its own business, and the contrast
+// that matters is between having internal nodes to sum and having none.
+fn void the_area_ratio_is_zero_until_the_tree_has_a_node_below_its_root() @test {
+    TreeReports reports = the_reports_of_a_growing_tree();
+
+    assert(reports.area_ratio[0] == 0.0, "no root, nothing to sum");
+    assert(reports.area_ratio[1] == 0.0, "a root over two leaves, still nothing to sum");
+    assert(reports.area_ratio[2] > 1.0 && reports.area_ratio[2] < 3.0,
+        "and four internal nodes below the root, each with a perimeter of its own");
+}
+
+// An empty tree reports the type's zero rather than a marked box, which is why the count is
+// asserted alongside it: the bounds alone cannot tell an empty tree from a point at the origin.
+fn void the_root_bounds_hold_every_proxy_and_an_empty_tree_reports_zero() @test {
+    TreeReports reports = the_reports_of_a_growing_tree();
+
+    assert(reports.proxy_count[0] == 0);
+    assert(reports.empty_bounds.lower_bound.x == 0.0 && reports.empty_bounds.upper_bound.x == 0.0);
+    assert(reports.empty_bounds.lower_bound.y == 0.0 && reports.empty_bounds.upper_bound.y == 0.0);
+    assert(reports.empty_bounds.lower_bound.z == 0.0 && reports.empty_bounds.upper_bound.z == 0.0,
+        "the zero box, indistinguishable from a degenerate one at the origin");
+
+    assert(reports.two_proxy_bounds.lower_bound.x > -1.01 && reports.two_proxy_bounds.lower_bound.x < -0.99);
+    assert(reports.two_proxy_bounds.lower_bound.y > -1.01 && reports.two_proxy_bounds.lower_bound.y < -0.99);
+    assert(reports.two_proxy_bounds.lower_bound.z > -1.01 && reports.two_proxy_bounds.lower_bound.z < -0.99);
+    assert(reports.two_proxy_bounds.upper_bound.x > 4.99 && reports.two_proxy_bounds.upper_bound.x < 5.01,
+        "the far side of the second proxy, four along from the first");
+    assert(reports.two_proxy_bounds.upper_bound.y > 0.99 && reports.two_proxy_bounds.upper_bound.y < 1.01);
+    assert(reports.two_proxy_bounds.upper_bound.z > 0.99 && reports.two_proxy_bounds.upper_bound.z < 1.01);
+}
+
+struct RebuildCounts {
+    int baseline;
+    int live;
+    int after_an_empty_rebuild;
+    int after_a_rebuild;
+    int tree_bytes;
+    int[3] sorted;
+    int[2] height;
+}
+
+fn RebuildCounts the_counts_around_a_rebuild() {
+    RebuildCounts counts;
+    counts.baseline = b3::byte_count();
+
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    counts.live = b3::byte_count();
+    counts.tree_bytes = tree.byte_count();
+
+    counts.sorted[0] = tree.rebuild(false);
+    counts.after_an_empty_rebuild = b3::byte_count();
+
+    for (int i = 0; i < 6; i++) {
+        tree.create_proxy(
+          aabb: (b3::Aabb){
+            .lower_bound = { i * 4.0f - 1.0f, -1.0, -1.0 },
+            .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
+          },
+          category_bits: 1ul << i,
+          user_data: (ulong)i,
+        )!!;
+    }
+    counts.height[0] = tree.height();
+    counts.sorted[1] = tree.rebuild(false);
+    counts.sorted[2] = tree.rebuild(true);
+    counts.height[1] = tree.height();
+    counts.after_a_rebuild = b3::byte_count();
+
+    return counts;
+}
+
+// A full build sorts every leaf; a partial one keeps the subtrees box3d has not marked enlarged
+// and sorts fewer, which is the whole point of asking for one. Neither leaves the tree at a
+// different height than it found it.
+fn void a_full_rebuild_sorts_every_proxy_and_a_partial_one_sorts_fewer() @test {
+    RebuildCounts counts = the_counts_around_a_rebuild();
+
+    assert(counts.sorted[0] == 0, "a tree with no proxies has nothing to sort");
+    assert(counts.sorted[2] == 6, "a full build sorts one box per proxy");
+    assert(counts.sorted[1] >= 1 && counts.sorted[1] < counts.sorted[2], "and a partial build fewer");
+    assert(counts.height[0] == 3 && counts.height[1] == 3, "and neither changes the height it found");
+}
+
+// The rebuild arrays are box3d's, allocated on the first rebuild that needs them and released
+// with the tree. The tree's own count is arithmetic over its capacities and includes the caller's
+// by-value struct, which never was on the heap — the two numbers differ by exactly that struct.
+fn void a_tree_counts_its_own_struct_and_the_rebuild_arrays_it_takes() @test {
+    RebuildCounts counts = the_counts_around_a_rebuild();
+
+    assert(counts.live > counts.baseline, "the node pool is on the shared count");
+    assert(counts.tree_bytes == counts.live - counts.baseline + (int)b3::DynamicTree::size,
+        "and the tree counts that pool plus the struct the caller holds");
+    assert(counts.after_an_empty_rebuild == counts.live, "a rebuild with nothing to sort takes nothing");
+    assert(counts.after_a_rebuild > counts.live, "while one with proxies takes the rebuild arrays");
+    assert(b3::byte_count() == counts.baseline, "and destroying the tree gives all of it back");
+}
+
+struct ProxyIdGuards {
+    fault[3] destroyed;
+    fault[3] moved;
+    fault[3] enlarged;
+    fault[3] set_category;
+    fault[3] read_category;
+    fault destroy_of_a_live_proxy;
+    fault read_of_a_live_proxy;
+}
+
+fn ProxyIdGuards the_guards_on_every_call_that_names_a_proxy() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    b3::Aabb unit = {
+        .lower_bound = { -1.0, -1.0, -1.0 },
+        .upper_bound = { 1.0, 1.0, 1.0 },
+    };
+
+    int live = tree.create_proxy(
+      aabb: unit,
+      category_bits: 1,
+      user_data: 1,
+    )!!;
+    int freed = tree.create_proxy(
+      aabb: unit,
+      category_bits: 1,
+      user_data: 2,
+    )!!;
+
+    ProxyIdGuards guards;
+    if (catch err = tree.destroy_proxy(freed)) guards.destroy_of_a_live_proxy = err;
+
+    int[3] bad = { -1, tree.node_capacity, freed };
+    for (int i = 0; i < 3; i++) {
+        if (catch err = tree.destroy_proxy(bad[i])) guards.destroyed[i] = err;
+        if (catch err = tree.move_proxy(bad[i], unit)) guards.moved[i] = err;
+        if (catch err = tree.enlarge_proxy(bad[i], unit)) guards.enlarged[i] = err;
+        if (catch err = tree.set_category_bits(bad[i], 0xF0)) guards.set_category[i] = err;
+        if (catch err = tree.category_bits(bad[i])) guards.read_category[i] = err;
+    }
+    if (catch err = tree.category_bits(live)) guards.read_of_a_live_proxy = err;
+
+    return guards;
+}
+
+// Every one of these indexes the node array on the caller's id under an assertion this build
+// compiles out, and none of them is harmless without it: a mutator given an id in range but not
+// a proxy rewrites the tree's own bookkeeping, and the two ids outside the array reach memory
+// the tree does not own at all.
+fn void an_id_that_names_no_live_proxy_is_refused_by_every_call_that_takes_one() @test {
+    ProxyIdGuards guards = the_guards_on_every_call_that_names_a_proxy();
+    fault none;
+
+    assert(guards.destroy_of_a_live_proxy == none, "a live proxy is destroyed, not refused");
+    assert(guards.read_of_a_live_proxy == none, "and a live proxy's bits are read, not refused");
+
+    assert(guards.destroyed[0] == b3::INDEX_OUT_OF_RANGE, "a negative id names no node");
+    assert(guards.moved[0] == b3::INDEX_OUT_OF_RANGE);
+    assert(guards.enlarged[0] == b3::INDEX_OUT_OF_RANGE);
+    assert(guards.set_category[0] == b3::INDEX_OUT_OF_RANGE);
+    assert(guards.read_category[0] == b3::INDEX_OUT_OF_RANGE);
+
+    assert(guards.destroyed[1] == b3::INDEX_OUT_OF_RANGE, "and neither does the one past the last");
+    assert(guards.moved[1] == b3::INDEX_OUT_OF_RANGE);
+    assert(guards.enlarged[1] == b3::INDEX_OUT_OF_RANGE);
+    assert(guards.set_category[1] == b3::INDEX_OUT_OF_RANGE);
+    assert(guards.read_category[1] == b3::INDEX_OUT_OF_RANGE);
+
+    assert(guards.destroyed[2] == b3::NOT_A_PROXY, "a freed slot is in range and holds nothing");
+    assert(guards.moved[2] == b3::NOT_A_PROXY);
+    assert(guards.enlarged[2] == b3::NOT_A_PROXY);
+    assert(guards.set_category[2] == b3::NOT_A_PROXY);
+    assert(guards.read_category[2] == b3::NOT_A_PROXY);
+}
+
+struct ProxyBoxGuards {
+    fault[4] moved;
+    fault[4] enlarged;
+}
+
+fn ProxyBoxGuards the_boxes_a_move_and_an_enlarge_are_refused_for() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    int proxy = tree.create_proxy(
+      aabb: (b3::Aabb){ .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+      category_bits: 1,
+      user_data: 1,
+    )!!;
+
+    float infinity = (float)1.0e40;
+    float nan = infinity - infinity;
+    b3::Aabb[4] boxes = {
+        { .lower_bound = { 5.0, 5.0, 5.0 }, .upper_bound = { -5.0, -5.0, -5.0 } },
+        { .lower_bound = { -infinity, 0.0, 0.0 }, .upper_bound = { infinity, 1.0, 1.0 } },
+        { .lower_bound = { nan, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+        { .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 0.0, 0.0, 0.0 } },
+    };
+
+    ProxyBoxGuards guards;
+    for (int i = 0; i < 4; i++) {
+        if (catch err = tree.move_proxy(proxy, boxes[i])) guards.moved[i] = err;
+        if (catch err = tree.enlarge_proxy(proxy, boxes[i])) guards.enlarged[i] = err;
+    }
+
+    return guards;
+}
+
+// box3d asserts the box on both of these and this build compiles the assertion out, so an invalid
+// one reaches a proxy already in the tree: an inverted box takes it out of every query answer, an
+// infinite one puts it in all of them, and a NaN one leaves the boxes above it unusable. A zero
+// box is a point, which is legitimate, and both calls take it.
+fn void a_box_that_box3d_would_assert_against_is_refused_by_both_mutators() @test {
+    ProxyBoxGuards guards = the_boxes_a_move_and_an_enlarge_are_refused_for();
+    fault none;
+
+    assert(guards.moved[0] == b3::INVALID_DEFINITION, "lower above upper names no volume");
+    assert(guards.moved[1] == b3::INVALID_DEFINITION, "an unbounded box would answer every query");
+    assert(guards.moved[2] == b3::INVALID_DEFINITION, "a NaN would spread to the boxes above it");
+    assert(guards.moved[3] == none, "and a zero box is a point the tree holds happily");
+
+    assert(guards.enlarged[0] == b3::INVALID_DEFINITION);
+    assert(guards.enlarged[1] == b3::INVALID_DEFINITION);
+    assert(guards.enlarged[2] == b3::INVALID_DEFINITION);
+    assert(guards.enlarged[3] == none);
+}

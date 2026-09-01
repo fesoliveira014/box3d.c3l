@@ -708,6 +708,50 @@ extern fn int create_proxy_raw(
 ) @cname("b3DynamicTree_CreateProxy") @private;
 
 <*
+ Raw proxy calls that index the node array on an id the caller supplies, under assertions this
+ build compiles out. box3d_tree.c3 carries the guards and is the only public way in.
+*>
+extern fn void destroy_proxy_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_DestroyProxy") @private;
+extern fn void move_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_MoveProxy") @private;
+extern fn void enlarge_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_EnlargeProxy") @private;
+extern fn void set_category_bits_raw(DynamicTree* tree, int proxy_id, ulong category_bits) @cname("b3DynamicTree_SetCategoryBits") @private;
+extern fn ulong category_bits_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_GetCategoryBits") @private;
+
+<*
+ The number of levels below the root, so a tree holding a single proxy reports 0 and so does an
+ empty one.
+*>
+extern fn int DynamicTree.height(&self) @cname("b3DynamicTree_GetHeight");
+
+<*
+ The summed perimeter of the internal nodes over the root's. Leaves and the root are skipped, so
+ a tree whose only internal node is the root reports 0 — that is two proxies or fewer, not an
+ empty tree.
+*>
+extern fn float DynamicTree.area_ratio(&self) @cname("b3DynamicTree_GetAreaRatio");
+
+<*
+ The box containing every proxy. An empty tree reports the type's zero rather than an inverted or
+ otherwise marked box, so a caller cannot tell it from a degenerate box at the origin.
+*>
+extern fn Aabb DynamicTree.root_bounds(&self) @cname("b3DynamicTree_GetRootBounds");
+
+<*
+ Arithmetic over the capacities rather than a reading of the heap: it counts the caller's own
+ 80-byte struct, which is not on the heap, and after a rebuild two arrays box3d's median split
+ never allocates. The module's byte_count() is the number the allocator agrees with.
+*>
+extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount");
+
+<*
+ Rebalances the tree and returns the number of boxes it sorted. A partial build keeps every
+ subtree box3d has not marked enlarged and so sorts far fewer boxes than a full one. Both
+ allocate the rebuild arrays on first use, which the module's byte_count() carries until
+ destroy().
+*>
+extern fn int DynamicTree.rebuild(&self, bool full_build) @cname("b3DynamicTree_Rebuild");
+
+<*
  The ceiling on a compound's children, which is one more than the number it can hold: box3d
  refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
  API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER

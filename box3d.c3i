@@ -1063,7 +1063,8 @@ extern fn int body_shapes_raw(
 ) @cname("b3Body_GetShapes") @private;
 
 <*
- The number of shapes currently overlapping this sensor, or zero if it is not a sensor. Exact.
+ The number of shapes currently overlapping this sensor. Exact, unlike the contact capacities,
+ but zero for a shape that is not a sensor and zero while the world is locked.
 *>
 extern fn int ShapeId.sensor_capacity(self) @cname("b3Shape_GetSensorCapacity");
 

@@ -318,8 +318,8 @@ fn ShapeId[] BodyId.shapes(self, ShapeId[] buffer) {
 
 <*
  Writes the shapes currently overlapping this sensor into the caller's buffer. A shape that is
- not a sensor fills nothing. An overlap may name a shape that has since been destroyed, so
- ShapeId.is_valid() is the check before using one.
+ not a sensor fills nothing, and so does any shape while the world is locked. An overlap may name
+ a shape that has since been destroyed, so ShapeId.is_valid() is the check before using one.
 
  @return "the prefix of buffer that was filled"
 *>

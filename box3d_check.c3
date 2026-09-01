@@ -7,6 +7,8 @@ faultdef
     DOUBLE_PRECISION_LIBRARY,
     WRONG_SHAPE_TYPE,
     WRONG_JOINT_TYPE,
+    DEGENERATE_GEOMETRY,
+    INDEX_OUT_OF_RANGE,
     NO_HIT;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
@@ -66,4 +68,17 @@ macro JointId? JointId.checked(self) {
 macro ContactId? ContactId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
     return self;
+}
+
+<*
+ A null pointer here is not a bad handle but a refusal to build: box3d returns one when the
+ vertices and indices it was given hold no triangle with area. This is the one member of the
+ family that cannot be a method, because C3 traps a method call on a null receiver before the
+ body can test it.
+
+ @return "the mesh, or DEGENERATE_GEOMETRY when box3d returned a null pointer"
+*>
+macro MeshData*? checked_mesh(MeshData* mesh) {
+    if (mesh == null) return DEGENERATE_GEOMETRY~;
+    return mesh;
 }

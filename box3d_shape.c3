@@ -93,3 +93,75 @@ fn HullData*? ShapeId.hull(self) {
     if (self.type() != ShapeType.HULL) return WRONG_SHAPE_TYPE~;
     return hull_raw(self);
 }
+
+<*
+ The mesh belongs to the caller rather than to the world: data is the very pointer
+ BodyId.create_mesh_shape() or set_mesh() was handed, and it must still outlive this shape.
+
+ @return "the mesh and the scale it is read through, or WRONG_SHAPE_TYPE when this shape is not a mesh"
+*>
+fn Mesh? ShapeId.mesh(self) {
+    if (self.type() != ShapeType.MESH) return WRONG_SHAPE_TYPE~;
+    return mesh_raw(self);
+}
+
+<*
+ The height field belongs to the caller rather than to the world — see mesh() — and it too must
+ outlive this shape.
+
+ @return "the height field, or WRONG_SHAPE_TYPE when this shape is not a height field"
+*>
+fn HeightFieldData*? ShapeId.height_field(self) {
+    if (self.type() != ShapeType.HEIGHT_FIELD) return WRONG_SHAPE_TYPE~;
+    return height_field_raw(self);
+}
+
+<*
+ Gives this shape a mesh, replacing whatever geometry it had and making its type MESH. There is
+ no type guard here, unlike on mesh(): changing the type is what the call is for.
+
+ The shape borrows the new mesh exactly as BodyId.create_mesh_shape() does, and nothing happens
+ to the old one. box3d drops that pointer without freeing it — byte_count() does not move across
+ the call — so a caller replacing a mesh is left holding two, and owes destroy() on both.
+
+ The body's mass is not recomputed. It keeps whatever the previous geometry gave it until
+ BodyId.apply_mass_from_shapes() is called, and a mesh contributes none, so that call takes a
+ body carrying nothing else to zero mass.
+
+ Silently does nothing while the world is locked, mid WorldId.step or inside a callback box3d
+ runs during one.
+
+ @param mesh : "the mesh, which must outlive the shape; null is refused rather than dereferenced"
+ @param scale : "how far the mesh's vertices are stretched along each axis, non-uniform or mirrored; a zero component is pushed away from zero rather than refused"
+ @return "void, or INVALID_DEFINITION when the mesh is null, which is what create_mesh_shape answers there too"
+*>
+fn void? ShapeId.set_mesh(self, MeshData* mesh, Vec3 scale) {
+    if (mesh == null) return INVALID_DEFINITION~;
+    set_mesh_raw(self, mesh, scale);
+}
+
+<*
+ One of the surface materials this shape holds, by index. There is no type guard — every shape
+ holds at least one material, whatever its geometry — but there is an index guard, because the
+ bounds assertion box3d makes is compiled out here and an index outside the array reads whatever
+ follows it in memory.
+
+ @return "the material, or INDEX_OUT_OF_RANGE when index is negative or not below mesh_material_count()"
+*>
+fn SurfaceMaterial? ShapeId.mesh_surface_material(self, int index) {
+    if (index < 0 || index >= self.mesh_material_count()) return INDEX_OUT_OF_RANGE~;
+    return mesh_surface_material_raw(self, index);
+}
+
+<*
+ Replaces one of the surface materials this shape holds. Index 0 is the same material
+ set_surface_material() writes and friction() and restitution() read, so writing it is visible
+ through all three. The index guard is the one mesh_surface_material() carries, and here what it
+ stops is a write past the end of the array rather than a read.
+
+ @return "void, or INDEX_OUT_OF_RANGE when index is negative or not below mesh_material_count()"
+*>
+fn void? ShapeId.set_mesh_material(self, SurfaceMaterial material, int index) {
+    if (index < 0 || index >= self.mesh_material_count()) return INDEX_OUT_OF_RANGE~;
+    set_mesh_material_raw(self, material, index);
+}

@@ -42,11 +42,12 @@ Do not assume `docs/style.md`'s `c3c build`/`c3c test` commands run in *this* re
 - **Never bind from memory.** Read the actual declaration in the submodule's `include/box3d/*.h` before writing C3. A wrong parameter or return type is a silent cross-ABI memory bug.
 - **Bind incrementally** — only the surface actually needed. The binding grows over time.
 
-Three deliberate, recorded carve-outs from `docs/style.md`, so they are not re-flagged as drift:
+Four deliberate, recorded carve-outs from `docs/style.md`, so they are not re-flagged as drift:
 
 - **§6 (`create_x`/`destroy_x` free functions) does not apply to world destruction.** `create_world` stays a free function — it has no receiver yet — but destruction is `world.destroy()`, a method, not `destroy_world()`. The C API is handle-oriented: `b3DestroyWorld` takes the same `b3WorldId` every other world method does, and a method reads the same way every other world operation does.
 - **§6 also does not apply once a creation function has a natural receiver at call time.** `world.create_body(def)` is a method, not `create_body(world, def)`, because the world it belongs to already exists when it is called — `create_world` stays free only because that carve-out does not apply to it: there is no world yet to receive the call. The same test governs the shape and joint constructors that follow: `body.create_shape(...)`, `world.create_joint(...)` become methods on whatever object already exists at the call site, and only a constructor with no existing receiver stays a free function.
 - **§3's file-order rule (typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions) does not apply within `box3d.c3i`.** Declarations there are grouped by area (math, base hooks, world, …) instead, so a reader looking for one area finds every kind of declaration for it together rather than scattered by declaration kind.
+- **§7's lean-docstring rule — the 1-3 line cap the `c3-style` skill reads it as — does not bind the docstrings in `box3d.c3i` and the wrapper files.** The contract a bound declaration carries here is routinely box3d's own: which assertion the release build compiles out, which argument is silently corrected instead of refused, which zero is the type's and which is the state's. None of that fits in three lines, and a caller who does not read it writes a call that runs and produces wrong numbers. The extra length still licenses only the contract plus the one dangerous property — narration of the body remains a defect under §7, and so does prose restating what the signature already says.
 
 ## Wrappers are where errors become faults
 

@@ -11,18 +11,20 @@ module b3;
  one of the bodies is dynamic and neither is disabled, and a static body carries no island of its
  own, so against one the joint simply joins the dynamic body's.
 
- The definition must come from default_filter_joint_def() and must name two bodies of this world.
- This release build compiles box3d's own checks out, so an unmarked definition would be accepted
- and would carry a force threshold of zero rather than float::max, reporting a joint event on every
- awake step, while a body identifier this world cannot resolve — unset, stale, or belonging to
- another world — would be indexed and written through, since creating the joint writes that body's
- joint list head and count. Those three are the only checks restored: box3d also asserts valid
- local frames and non-negative finite thresholds, neither of those assertions is restored here, and
- that is a deliberate limit rather than an oversight — an unvalidated frame or threshold produces a
- wrong simulation, while an unvalidated identifier is dereferenced and written through.
+ The definition must come from default_filter_joint_def() and must name two bodies of this world,
+ and this world must itself still exist. This release build compiles box3d's own checks out, so an
+ unmarked definition would be accepted and would carry a force threshold of zero rather than
+ float::max, reporting a joint event on every awake step; a body identifier this world cannot
+ resolve — unset, stale, or belonging to another world — would be indexed and written through,
+ since creating the joint writes that body's joint list head and count; and a handle to a destroyed
+ world would reach whatever world has since taken its slot. Those four are the only checks
+ restored: box3d also asserts valid local frames and non-negative finite thresholds, neither of
+ those assertions is restored here, and that is a deliberate limit rather than an oversight — an
+ unvalidated frame or threshold produces a wrong simulation, while an unvalidated identifier is
+ dereferenced and written through.
 
  @param [&in] def : "a definition obtained from default_filter_joint_def(), naming two bodies of this world"
- @return "the joint, INVALID_DEFINITION if the definition did not come from default_filter_joint_def() or names a body this world cannot resolve, or INVALID_HANDLE if box3d returns a null identifier — which b3CreateFilterJoint does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
+ @return "the joint, INVALID_DEFINITION if this world no longer exists, if the definition did not come from its type's default definition, or if it names a body this world cannot resolve, or INVALID_HANDLE if box3d returns a null identifier — which the type's constructor does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
 *>
 fn JointId? WorldId.create_filter_joint(self, FilterJointDef* def) {
     check_joint_def(self, &def.base)!;
@@ -60,13 +62,21 @@ fn JointId[] BodyId.joints(self, JointId[] buffer) {
  The one implementation of the checks every joint constructor must run. Every joint definition
  embeds the same base, and every default carries the same cookie, and box3d's own b3Body_IsValid
  answers for the world an identifier came from rather than the world the call was handed, so the
- two worlds are compared separately. See WorldId.create_filter_joint for what the three checks buy
+ two worlds are compared separately. See WorldId.create_filter_joint for what the four checks buy
  and where the guard deliberately stops.
 
+ The world is validated outright rather than taken for live because a body of it resolved, so each
+ check stands on its own and reordering or dropping a line narrows what the guard catches instead
+ of quietly reopening a hole another line was closing. The world check is not redundant either:
+ box3d's generation test on a world identifier is an assertion this release build compiles out, so
+ a handle to a destroyed world whose slot has since been re-allocated would otherwise reach the
+ live world standing in its place.
+
  @param [&in] def : "the base embedded in the caller's definition"
- @return "void, or INVALID_DEFINITION when the definition is unmarked or names a body this world cannot resolve"
+ @return "void, or INVALID_DEFINITION when this world no longer exists, when the definition is unmarked, or when it names a body this world cannot resolve"
 *>
 fn void? check_joint_def(WorldId world_id, JointDef* def) @private {
+    if (!world_id.is_valid()) return INVALID_DEFINITION~;
     if (def.internal_value != default_filter_joint_def().internal_value) return INVALID_DEFINITION~;
     if (!def.body_id_a.is_valid() || !def.body_id_b.is_valid()) return INVALID_DEFINITION~;
 

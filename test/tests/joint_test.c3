@@ -252,13 +252,18 @@ struct RecycledWorldOutcome {
 // A body identifier outlives the world it came from, and box3d hands the next world the slot the
 // destroyed one left. The dead world gets two bodies and the live one gets a single body, so the
 // stale identifier names the live world's slot at an index that world never issued, with both of
-// the fields a hand-written guard can compare still matching.
+// the fields a hand-written guard can compare still matching. The first world is scoped so that
+// its defer destroys it before the second is created, which is what hands the slot on.
 fn RecycledWorldOutcome the_refusal_of_a_definition_naming_a_recycled_world() {
     b3::WorldDef world_def = b3::default_world_def();
-    b3::WorldId gone = b3::create_world(&world_def)!!;
-    a_dynamic_sphere_at(gone, -1.0);
-    b3::BodyId stale = a_dynamic_sphere_at(gone, 1.0);
-    gone.destroy();
+
+    b3::BodyId stale;
+    {
+        b3::WorldId gone = b3::create_world(&world_def)!!;
+        defer gone.destroy();
+        a_dynamic_sphere_at(gone, -1.0);
+        stale = a_dynamic_sphere_at(gone, 1.0);
+    }
 
     b3::WorldId world = b3::create_world(&world_def)!!;
     defer world.destroy();
@@ -283,6 +288,52 @@ fn void a_joint_definition_naming_a_body_of_a_destroyed_world_is_refused() @test
     assert(outcome.not_null, "and the identifier is set, so the null comparison passes too");
     assert(outcome.refusal == b3::INVALID_DEFINITION,
         "a body identifier the live world never issued is indexed and written through all the same");
+}
+
+struct RecycledWorldHandleOutcome {
+    bool same_slot;
+    bool bodies_valid;
+    fault refusal;
+}
+
+// The mirror of the case above: the two bodies are live and it is the world handle that is stale.
+// box3d's generation test on a world identifier is an assertion this release build compiles out,
+// so the constructor would resolve the destroyed world's handle to the world that has since taken
+// its slot and build the joint in that one instead. The first world exists only long enough to
+// hand its slot on, so only its handle outlives it and the world itself is scoped.
+fn RecycledWorldHandleOutcome the_refusal_of_a_joint_built_through_a_recycled_world_handle() {
+    b3::WorldDef world_def = b3::default_world_def();
+
+    b3::WorldId gone;
+    {
+        gone = b3::create_world(&world_def)!!;
+        defer gone.destroy();
+    }
+
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+
+    b3::FilterJointDef joint_def = b3::default_filter_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+
+    RecycledWorldHandleOutcome outcome = {
+        .same_slot = gone.index1 == world.index1,
+        .bodies_valid = a.is_valid() && b.is_valid(),
+    };
+    if (catch err = gone.create_filter_joint(&joint_def)) outcome.refusal = err;
+    return outcome;
+}
+
+fn void a_joint_built_through_a_handle_to_a_destroyed_world_is_refused() @test {
+    RecycledWorldHandleOutcome outcome = the_refusal_of_a_joint_built_through_a_recycled_world_handle();
+
+    assert(outcome.same_slot, "the live world took the destroyed one's slot, so the world comparison passes");
+    assert(outcome.bodies_valid, "and both bodies are live, so the identifier checks pass too");
+    assert(outcome.refusal == b3::INVALID_DEFINITION,
+        "only the world's own generation separates the stale handle from the live world it names");
 }
 
 struct JointIdentity {
@@ -1173,7 +1224,7 @@ fn void the_shared_constraint_torque_reports_twice_a_revolute_motor_torque() @te
 // The same motor as the drive above with a limit in its definition, run for twice as long as an
 // unlimited hinge needs to pass 0.5, so the reading is the limit holding rather than the run
 // stopping early.
-fn float the_angle_of_a_motor_driven_hinge_held_by_its_limit() {
+fn float the_angle_of_a_motor_driven_hinge_after_two_seconds(bool enable_limit) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
@@ -1188,7 +1239,7 @@ fn float the_angle_of_a_motor_driven_hinge_held_by_its_limit() {
     joint_def.enable_motor = true;
     joint_def.motor_speed = 2.0;
     joint_def.max_motor_torque = 1000.0;
-    joint_def.enable_limit = true;
+    joint_def.enable_limit = enable_limit;
     joint_def.lower_angle = -0.5;
     joint_def.upper_angle = 0.5;
     b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
@@ -1309,11 +1360,22 @@ fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_
 }
 
 // The closing condition for the limit family. The band holds 0.500134 and excludes both a hinge
-// the limit never caught and the 1.899400 the same motor reaches unlimited.
+// the limit never caught and the angle the same motor reaches with the limit cleared.
 fn void a_limit_stops_the_motor_that_drives_the_hinge_into_it() @test {
-    float angle = the_angle_of_a_motor_driven_hinge_held_by_its_limit();
+    float angle = the_angle_of_a_motor_driven_hinge_after_two_seconds(true);
 
     assert(angle > 0.49 && angle < 0.51, "the motor is held at the limit rather than turning past it");
+}
+
+// The control for the one above: the same definition with only the limit flag cleared. Two seconds
+// at 2 rad/s carries the hinge past half a turn and angle() is kept in [-pi, pi], so the unlimited
+// outcome is the 1.899400 the motor test measures over the first second plus another two radians,
+// wrapped. The band holds the measured -2.383774 and excludes both the 0.500134 the limit holds
+// and a hinge that never turned.
+fn void a_hinge_whose_limit_is_disabled_turns_past_it() @test {
+    float angle = the_angle_of_a_motor_driven_hinge_after_two_seconds(false);
+
+    assert(angle > -2.44 && angle < -2.34, "the two angles a disabled limit carries hold nothing back");
 }
 
 // 1 and -1 are exactly representable and need no clamping, so the swap shows up exactly.

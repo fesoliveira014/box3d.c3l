@@ -1255,7 +1255,12 @@ extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce
 
 <*
  The torque this joint is applying to hold its constraint, in newton-metres. A zero is read
- against the joint's type rather than taken for an idle joint — see constraint_force.
+ against the joint's type rather than taken for an idle joint — see constraint_force. A non-zero
+ needs care too: some types double-count an axis here, the revolute joint's hinge axis among them,
+ so a per-type torque getter such as RevoluteJointId.motor_torque() is the honest reading wherever
+ one exists. Nor is it a pure getter on a revolute joint, where box3d writes the joint's two
+ perpendicular warm-starting axes on the way past — a write the next substep recomputes from the
+ same frames.
 *>
 extern fn Vec3 JointId.constraint_torque(self) @cname("b3Joint_GetConstraintTorque");
 
@@ -1412,7 +1417,9 @@ extern fn bool RevoluteJointId.is_motor_enabled(self) @cname("b3RevoluteJoint_Is
 <*
  Sets the speed the motor drives the hinge at, in radians per second about the z axis of the two
  local frames. It is a target the motor pursues only as far as max_motor_torque() lets it, not a
- speed the hinge is made to hold.
+ speed the hinge is made to hold. box3d asserts the value is finite and nothing further — a
+ negative speed drives the hinge the other way; this package links a release build where that
+ assertion is compiled out, and the wrappers do not restore it.
 *>
 extern fn void RevoluteJointId.set_motor_speed(self, float motor_speed) @cname("b3RevoluteJoint_SetMotorSpeed");
 
@@ -1464,8 +1471,12 @@ extern fn void RevoluteJointId.enable_limit(self, bool enable_limit) @cname("b3R
 
 <*
  Whether this joint's limit is enabled. False on a joint built from a default definition. While it
- is off the shared angular_separation() reports zero for this joint whatever the hinge angle is —
- the state-dependent zero JointId.constraint_force describes, not a permanent one.
+ is off — and while it is on but not exceeded — the shared angular_separation() strips the hinge
+ angle out of the relative rotation and reports what is left of the misalignment, which is zero for
+ a hinge whose perpendicular constraint is holding and non-zero for one bent off its axis under
+ load. Once the limit is on and the angle is past it the full relative rotation is reported
+ instead, which is the state-dependent zero JointId.constraint_force describes rather than a
+ permanent one.
 *>
 extern fn bool RevoluteJointId.is_limit_enabled(self) @cname("b3RevoluteJoint_IsLimitEnabled");
 
@@ -1488,7 +1499,9 @@ extern fn float RevoluteJointId.upper_limit(self) @cname("b3RevoluteJoint_GetUpp
  pair as the lower and the larger as the upper, so a reversed pair is quietly corrected rather than
  refused, and then clamps both into [-0.99 pi, 0.99 pi]. A wrapper faulting on a reversed pair would
  contradict the library, so the binding documents the swap instead of guarding it. The limit acts
- only while enable_limit() is on.
+ only while enable_limit() is on. box3d asserts both values are finite — their order and their
+ range it corrects rather than asserts; this package links a release build where that assertion is
+ compiled out, and the wrappers do not restore it.
 *>
 extern fn void RevoluteJointId.set_limits(self, float lower_radians, float upper_radians) @cname("b3RevoluteJoint_SetLimits");
 
@@ -1536,9 +1549,9 @@ extern fn float RevoluteJointId.spring_damping_ratio(self) @cname("b3RevoluteJoi
  frames and carries no target term, so a hinge a spring has settled on a target of 0.7 reads 0.7.
 
  The value is stored as handed. box3d clamps a definition's target_angle into [-pi, pi] on the way
- through the constructor but this setter only asserts the same range, and this package links a
- release build where that assertion is compiled out — a target set here can sit outside the range
- the same target in a definition would have been clamped into.
+ through the constructor but this setter only asserts that the value is finite and inside the same
+ range, and this package links a release build where that assertion is compiled out — a target set
+ here can sit outside the range the same target in a definition would have been clamped into.
 *>
 extern fn void RevoluteJointId.set_target_angle(self, float target_radians) @cname("b3RevoluteJoint_SetTargetAngle");
 

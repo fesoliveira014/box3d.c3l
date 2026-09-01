@@ -255,3 +255,52 @@ fn ShapeId[] WorldId.overlap_shape_all(
     );
     return buffer[:collector.count];
 }
+
+<*
+ The contact manifolds behind this contact.
+
+ The slice borrows box3d's own memory: the next step() recomputes it and destroying the world
+ frees it, so anything that must outlive either is copied out. The durable handle is the contact
+ id, which fetches the geometry again through ContactId.data().
+
+ @return "the manifolds, empty when the contact carries none"
+*>
+fn Manifold[] ContactData.contact_manifolds(self) {
+    return self.manifolds[:self.manifold_count];
+}
+
+<*
+ The valid contact points of this manifold — the first point_count of its four slots.
+
+ @return "the points that carry contact geometry, between none and MAX_MANIFOLD_POINTS of them"
+*>
+fn ManifoldPoint[] Manifold.contact_points(&self) {
+    return self.points[:self.point_count];
+}
+
+<*
+ Writes this body's touching contacts into the caller's buffer.
+
+ Only touching contacts are reported, which is why contact_capacity() is an upper bound rather
+ than a count. Nothing is allocated: the returned slice is the filled prefix of the buffer, and a
+ result as long as the buffer means there may have been more. Each ContactData carries manifolds
+ that borrow live state — see ContactData.contact_manifolds().
+
+ @return "the prefix of buffer that was filled"
+*>
+fn ContactData[] BodyId.contact_data(self, ContactData[] buffer) {
+    int written = body_contact_data_raw(self, buffer.ptr, (int)buffer.len);
+    return buffer[:written];
+}
+
+<*
+ Writes the touching contacts involving this shape into the caller's buffer. This shape is
+ shape_id_a or shape_id_b on every contact reported. A sensor reports none. Buffer behaviour
+ matches BodyId.contact_data().
+
+ @return "the prefix of buffer that was filled"
+*>
+fn ContactData[] ShapeId.contact_data(self, ContactData[] buffer) {
+    int written = shape_contact_data_raw(self, buffer.ptr, (int)buffer.len);
+    return buffer[:written];
+}

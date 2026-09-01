@@ -1007,3 +1007,42 @@ struct CastHit {
     int triangle_index;
     int child_index;
 }
+
+<*
+ The touching contact behind a contact id. The manifolds it carries point into live internal
+ state — read them through ContactData.contact_manifolds() and do not hold the result.
+*>
+extern fn ContactData ContactId.data(self) @cname("b3Contact_GetData");
+
+<*
+ An upper bound on the contacts BodyId.contact_data() will write. It counts every contact on the
+ body, including ones that are not touching and so never appear in the data, and it reports zero
+ while the world is locked.
+*>
+extern fn int BodyId.contact_capacity(self) @cname("b3Body_GetContactCapacity");
+
+<*
+ Raw body contact filler. Private because it reports its count through a return value;
+ BodyId.contact_data() returns the filled prefix instead.
+*>
+extern fn int body_contact_data_raw(
+  BodyId body_id,
+  ContactData* contact_data,
+  int capacity,
+) @cname("b3Body_GetContactData") @private;
+
+<*
+ An upper bound on the contacts ShapeId.contact_data() will write. It is the whole body's contact
+ count, not this shape's, so it over-reports for a body carrying several shapes. It is zero for a
+ sensor and zero while the world is locked.
+*>
+extern fn int ShapeId.contact_capacity(self) @cname("b3Shape_GetContactCapacity");
+
+<*
+ Raw shape contact filler. Private for the same reason as body_contact_data_raw.
+*>
+extern fn int shape_contact_data_raw(
+  ShapeId shape_id,
+  ContactData* contact_data,
+  int capacity,
+) @cname("b3Shape_GetContactData") @private;

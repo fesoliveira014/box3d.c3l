@@ -1854,3 +1854,195 @@ fn void a_rest_length_under_box3ds_slop_is_raised_to_it() @test {
         "a rest length below the slop is clamped up to it rather than refused");
     assert(lengths.round_tripped == 3.5, "and a length inside the range is stored as it was given");
 }
+
+// The rope is built at twice the separation the bodies start at, so the fall takes up its slack
+// under the world's default gravity of -10 and five seconds at 1/60 s is long past the settling.
+// A rigid rope ends at its rest length and a sprung one hangs well below it, and the two are far
+// enough apart that a single reading tells them apart. The four settings the callers pass differ
+// from each other one flag at a time, which is what pins the condition down: any three of them
+// on their own are consistent with a wrong reading of it.
+fn float the_measured_length_of_a_hanging_rope(
+  bool enable_spring,
+  bool enable_limit,
+  float min_length,
+  float max_length,
+) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.hertz = 1.0;
+    joint_def.damping_ratio = 0.5;
+    joint_def.enable_spring = enable_spring;
+    joint_def.enable_limit = enable_limit;
+    joint_def.min_length = min_length;
+    joint_def.max_length = max_length;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return rope.current_length();
+}
+
+struct RopeLengthRange {
+    float from_construction_min;
+    float from_construction_max;
+    float reversed_min;
+    float reversed_max;
+    float under_the_slop_min;
+    float under_the_slop_max;
+}
+
+// One rope read three times, the pair construction stored first so that the setter cannot have
+// touched it. The reversed pair sits well inside the range box3d clamps to, so it separates the
+// ordering from the clamping, and the pair under the floor is read afterwards to show that the
+// second call replaces the first rather than accumulating.
+fn RopeLengthRange the_length_ranges_a_rope_takes_from_its_setter() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, anchor, hanging);
+
+    RopeLengthRange range = {
+        .from_construction_min = rope.min_length(),
+        .from_construction_max = rope.max_length(),
+    };
+
+    rope.set_length_range(3.0, 1.0);
+    range.reversed_min = rope.min_length();
+    range.reversed_max = rope.max_length();
+
+    rope.set_length_range(-9.0, -9.0);
+    range.under_the_slop_min = rope.min_length();
+    range.under_the_slop_max = rope.max_length();
+    return range;
+}
+
+struct RopeLimitFlags {
+    bool on_a_default_rope;
+    bool from_the_definition;
+    bool after_enabling;
+    bool after_disabling;
+}
+
+fn RopeLimitFlags the_limit_flags_of_a_bare_rope_and_a_limited_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId bare = link_with_a_distance_joint(world, anchor, hanging);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.enable_limit = true;
+    joint_def.min_length = 1.0;
+    joint_def.max_length = 3.0;
+    b3::DistanceJointId limited = world.create_distance_joint(&joint_def)!!;
+
+    RopeLimitFlags flags = {
+        .on_a_default_rope = bare.is_limit_enabled(),
+        .from_the_definition = limited.is_limit_enabled(),
+    };
+
+    bare.enable_limit(true);
+    limited.enable_limit(false);
+    flags.after_enabling = bare.is_limit_enabled();
+    flags.after_disabling = limited.is_limit_enabled();
+    return flags;
+}
+
+// The first half of the condition, with the limit on and a range the rope can move inside for
+// both readings, so the spring flag is the only thing that differs between them.
+fn void a_distance_joint_with_room_inside_its_limit_is_rigid_until_its_spring_is_on() @test {
+    float rigid = the_measured_length_of_a_hanging_rope(
+      enable_spring: false,
+      enable_limit: true,
+      min_length: 1.0,
+      max_length: 3.0,
+    );
+    float sprung = the_measured_length_of_a_hanging_rope(
+      enable_spring: true,
+      enable_limit: true,
+      min_length: 1.0,
+      max_length: 3.0,
+    );
+
+    assert(rigid > 1.999f && rigid < 2.001f, "with no spring the rope holds the body at its rest length");
+    assert(sprung > 2.25f && sprung < 2.26f, "and with one it stretches under the weight it carries");
+}
+
+// The second half, and the counter-intuitive one: both readings have the spring on and a range
+// that pins the rope to a single length, so the limit flag is the only thing that differs — and
+// it is the joint whose limit is on that comes back rigid, because min_length < max_length is
+// false and the limit being on is what stops that short-circuiting.
+fn void a_sprung_distance_joint_goes_rigid_when_its_limit_pins_the_range_shut() @test {
+    float rigid = the_measured_length_of_a_hanging_rope(
+      enable_spring: true,
+      enable_limit: true,
+      min_length: 2.0,
+      max_length: 2.0,
+    );
+    float sprung = the_measured_length_of_a_hanging_rope(
+      enable_spring: true,
+      enable_limit: false,
+      min_length: 2.0,
+      max_length: 2.0,
+    );
+
+    assert(rigid > 1.999f && rigid < 2.001f, "a shut range with the limit on sends the rope down the rigid branch");
+    assert(sprung > 2.25f && sprung < 2.26f, "and clearing the limit on that same range leaves it sprung");
+}
+
+fn void a_reversed_length_range_is_swapped_into_order_rather_than_refused() @test {
+    RopeLengthRange range = the_length_ranges_a_rope_takes_from_its_setter();
+
+    assert(range.reversed_min == 1.0, "box3d takes the smaller of the pair as the minimum");
+    assert(range.reversed_max == 3.0, "and the larger as the maximum, whichever order they arrived in");
+}
+
+// The floor is box3d's linear slop, which is not a fixed number: it scales with the length unit,
+// so the assertion is against that expression and not against the 0.005 it takes at unit scale.
+fn void a_length_range_under_box3ds_slop_is_raised_to_it() @test {
+    RopeLengthRange range = the_length_ranges_a_rope_takes_from_its_setter();
+
+    assert(range.under_the_slop_min == 0.005f * b3::length_units_per_meter(),
+        "both ends of a range below the slop are clamped up to it rather than refused");
+    assert(range.under_the_slop_max == 0.005f * b3::length_units_per_meter(),
+        "and the swap then leaves the pair equal rather than inverted");
+}
+
+// Construction does not run the setter's clamp: it raises the definition's minimum to the slop
+// and takes the maximum as the larger of the two it was handed, with no ceiling of its own. Both
+// bounds scale with the length unit, so neither is asserted as a bare number.
+fn void the_length_range_of_a_new_rope_is_the_one_construction_stored() @test {
+    RopeLengthRange range = the_length_ranges_a_rope_takes_from_its_setter();
+
+    assert(range.from_construction_min == 0.005f * b3::length_units_per_meter(),
+        "a default definition's zero minimum arrives raised to the slop");
+    assert(range.from_construction_max == 1.0e5f * b3::length_units_per_meter(),
+        "and its huge maximum arrives untouched");
+}
+
+fn void the_limit_flag_of_a_rope_starts_off_and_round_trips() @test {
+    RopeLimitFlags flags = the_limit_flags_of_a_bare_rope_and_a_limited_one();
+
+    assert(!flags.on_a_default_rope, "a default distance joint carries no limit");
+    assert(flags.from_the_definition, "the joint reports the limit its definition asked for");
+    assert(flags.after_enabling);
+    assert(!flags.after_disabling);
+}

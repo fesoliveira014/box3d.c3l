@@ -1657,3 +1657,61 @@ extern fn float DistanceJointId.length(self) @cname("b3DistanceJoint_GetLength")
  box3d runs during one.
 *>
 extern fn float DistanceJointId.current_length(self) @cname("b3DistanceJoint_GetCurrentLength");
+
+<*
+ Enables or disables this joint's limit, which holds the anchors' separation between min_length
+ and max_length. box3d reaches the limit only inside the branch it solves the spring in, so the
+ flag acts under the compound condition DistanceJointDef describes rather than on its own:
+ enabling it on a joint whose spring is off changes nothing, and enabling it with min_length equal
+ to max_length turns the joint rigid rather than tightening it, because that is the other half of
+ the same condition.
+
+ Unlike the revolute joint's flag of the same name, this one leaves the joint's accumulated
+ impulses alone.
+*>
+extern fn void DistanceJointId.enable_limit(self, bool enable_limit) @cname("b3DistanceJoint_EnableLimit");
+
+<*
+ Whether this joint's limit is enabled. False on a joint built from a default definition. The flag
+ is stored whatever the rest of the joint is set to, so a true reading says the limit was asked
+ for and not that it is acting: whether the solver reaches the limit at all follows the compound
+ condition DistanceJointDef describes.
+*>
+extern fn bool DistanceJointId.is_limit_enabled(self) @cname("b3DistanceJoint_IsLimitEnabled");
+
+<*
+ Sets the two lengths the limit holds the anchors' separation between. box3d clamps each of the
+ pair between its linear slop and its huge value — 0.005 length units and 1.0e5 of them, so the
+ floor is 0.010 once the length unit is 2 — and then stores the smaller of the clamped pair as the
+ minimum and the larger as the maximum. A reversed pair is accepted and quietly corrected rather
+ than refused, and a pair under the floor comes back as two equal lengths. Both corrections are
+ silent: min_length() and max_length() report what was stored, not what was asked for.
+
+ The clamp and the swap are this setter's own, and none of the joint's three range setters agrees
+ with another: set_length clamps its single value and has nothing to order, and the setter for the
+ spring's force range neither clamps nor orders its pair. Read each rather than carrying one over.
+
+ Setting the range also zeroes the joint's three accumulated impulses, discarding the warm-start
+ state the solver had built, so the joint rebuilds its hold over the following steps rather than
+ resuming the one it had.
+*>
+extern fn void DistanceJointId.set_length_range(self, float min_length, float max_length) @cname("b3DistanceJoint_SetLengthRange");
+
+<*
+ The low end of the separation the limit holds the anchors above. It is what box3d stored, not
+ what it was handed: see set_length_range. On a joint fresh from its definition it is neither,
+ because construction is its own path — it raises the definition's min_length to the linear slop
+ and applies none of the setter's ceiling, so a default definition's 0 arrives as 0.005 length
+ units.
+*>
+extern fn float DistanceJointId.min_length(self) @cname("b3DistanceJoint_GetMinLength");
+
+<*
+ The high end of the separation the limit holds the anchors below. It is what box3d stored, not
+ what it was handed: see set_length_range. On a joint fresh from its definition it is the larger
+ of the definition's two lengths and nothing else — no floor, no ceiling — so a default
+ definition's max_length, box3d's huge value of 1.0e5 scaled by the length unit, arrives
+ unchanged, while a definition whose max_length is under the slop leaves this reading below
+ min_length().
+*>
+extern fn float DistanceJointId.max_length(self) @cname("b3DistanceJoint_GetMaxLength");

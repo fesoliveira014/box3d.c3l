@@ -193,3 +193,54 @@ fn HeightFieldData*? create_height_field(HeightFieldDef* def) {
     if (def.global_minimum_height > def.global_maximum_height) return INVALID_DEFINITION~;
     return create_height_field_raw(def);
 }
+
+<*
+ Attaches a mesh to this body. The definition must come from default_shape_def() — see
+ create_sphere_shape, and the cookie is the only one of box3d's compiled-out checks restored
+ here too.
+
+ The shape borrows the mesh rather than copying it. box3d stores the pointer it is handed and
+ reads through it on every step, so the mesh must outlive every shape built from it: destroying
+ it first is a use-after-free that nothing reports, and which was measured to both carry a ball
+ and drop it through the floor depending on what reused the freed memory. Destroying the world
+ takes the shape with it but not the mesh, which stays the caller's to destroy.
+
+ The null guard is the difference between a fault and a segmentation fault: box3d reads a
+ version field through the pointer before it tests anything. Scale multiplies the mesh's
+ vertices and may be non-uniform or mirrored, and a component of zero is pushed away from zero
+ rather than refused.
+
+ @param [&in] def : "a definition obtained from default_shape_def()"
+ @param mesh : "the mesh, which must outlive the shape; null is refused rather than dereferenced"
+ @param scale : "how far the mesh's vertices are stretched along each axis before collision"
+ @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the mesh is null, or INVALID_HANDLE if box3d returns a null identifier"
+*>
+fn ShapeId? BodyId.create_mesh_shape(self, ShapeDef* def, MeshData* mesh, Vec3 scale) {
+    if (def.internal_value != default_shape_def().internal_value) return INVALID_DEFINITION~;
+    if (mesh == null) return INVALID_DEFINITION~;
+    return create_mesh_shape_raw(
+      body_id: self,
+      def: def,
+      mesh: mesh,
+      scale: scale,
+    ).checked();
+}
+
+<*
+ Attaches a height field to this body. The definition and null guards, the borrowed geometry and
+ the use-after-free that follows destroying it early all work as they do for create_mesh_shape.
+
+ box3d takes a height field only on a static body and hands back a null identifier for a
+ kinematic or dynamic one, so INVALID_HANDLE here usually means the body was the wrong type
+ rather than that anything is wrong with the field. There is no scale: the one the field was
+ built with is the only one it has.
+
+ @param [&in] def : "a definition obtained from default_shape_def()"
+ @param height_field : "the field, which must outlive the shape; null is refused rather than dereferenced"
+ @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the height field is null, or INVALID_HANDLE if box3d returns a null identifier"
+*>
+fn ShapeId? BodyId.create_height_field_shape(self, ShapeDef* def, HeightFieldData* height_field) {
+    if (def.internal_value != default_shape_def().internal_value) return INVALID_DEFINITION~;
+    if (height_field == null) return INVALID_DEFINITION~;
+    return create_height_field_shape_raw(self, def, height_field).checked();
+}

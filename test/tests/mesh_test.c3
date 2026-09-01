@@ -380,3 +380,264 @@ fn void the_reported_height_is_the_hierarchy_depth_and_not_a_dimension() @test {
     assert(heights[0] == 0, "a one by one grid of cells is a single leaf");
     assert(heights[1] == 3, "a four by four grid of cells is three levels deep");
 }
+
+struct RolledBall {
+    float x;
+    float y;
+    float k;
+    bool awake;
+}
+
+// The grid runs sixteen unit cells along x and z from the origin corner, so a ball dropped at
+// (4, 1, 8) is over it for the whole run and leaves it with metres to spare. The control keeps
+// the field and drops only the shape, so the two runs differ in exactly one thing. Every
+// resource is destroyed here and nothing is asserted: C3 skips defer on a panicking assertion,
+// and a stranded height field sits on byte_count() for the rest of the process.
+fn RolledBall the_ball_after_two_seconds(bool attach_the_height_field) {
+    b3::HeightFieldData* field = b3::create_height_field_grid(
+      row_count: 16,
+      column_count: 16,
+      scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
+      make_holes: false,
+    )!!;
+    defer field.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+
+    if (attach_the_height_field) {
+        b3::BodyDef ground_def = b3::default_body_def();
+        b3::BodyId ground = world.create_body(&ground_def)!!;
+        ground.create_height_field_shape(&shape_def, field)!!;
+    }
+
+    b3::BodyDef ball_def = b3::default_body_def();
+    ball_def.type = b3::BodyType.DYNAMIC;
+    ball_def.position = (b3::Pos){ 4.0, 1.0, 8.0 };
+    b3::BodyId ball = world.create_body(&ball_def)!!;
+
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    ball.set_linear_velocity((b3::Vec3){ 4.0, 0.0, 0.0 });
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    b3::Pos resting = ball.position();
+    return {
+        .x = resting.x,
+        .y = resting.y,
+        .k = ball.rotation().k,
+        .awake = ball.is_awake(),
+    };
+}
+
+// The spin is what makes this a rolling test rather than a positional one: a ball skating across
+// a frictionless plane would hold the same height and much the same travel and never turn at all,
+// so the k component is the half of the reading the geometry has to earn.
+fn void a_ball_rolls_across_a_height_field() @test {
+    RolledBall rolled = the_ball_after_two_seconds(attach_the_height_field: true);
+    RolledBall fell = the_ball_after_two_seconds(attach_the_height_field: false);
+
+    assert(rolled.awake, "a reading taken after the ball fell asleep would not be a reading");
+    assert(rolled.x > 10.0 && rolled.x < 10.15, "rolling costs it most of a metre of the travel");
+    assert(rolled.y > 0.49 && rolled.y < 0.51, "and leaves it resting its own radius above the field");
+    assert(rolled.k > 0.99 && rolled.k < 1.0, "turned about z, which is what a slide would not do");
+
+    assert(fell.awake);
+    assert(fell.x > 11.9 && fell.x < 12.1, "with no shape under it the ball keeps all four metres per second");
+    assert(fell.y > -19.1 && fell.y < -19.0, "and falls through where the field would have been");
+    assert(fell.k > -0.01 && fell.k < 0.01, "with nothing to turn it");
+}
+
+fn b3::ShapeType[2] the_types_of_a_mesh_and_a_height_field_shape() {
+    b3::Vec3 unit = { 1.0, 1.0, 1.0 };
+
+    b3::MeshData* mesh = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: true,
+    )!!;
+    defer mesh.destroy();
+
+    b3::HeightFieldData* field = b3::create_height_field_grid(
+      row_count: 4,
+      column_count: 4,
+      scale: unit,
+      make_holes: false,
+    )!!;
+    defer field.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+
+    b3::ShapeId mesh_shape = ground.create_mesh_shape(&shape_def, mesh, unit)!!;
+    b3::ShapeId field_shape = ground.create_height_field_shape(&shape_def, field)!!;
+
+    return { mesh_shape.type(), field_shape.type() };
+}
+
+fn void the_two_geometry_shapes_report_their_own_types() @test {
+    b3::ShapeType[2] types = the_types_of_a_mesh_and_a_height_field_shape();
+
+    assert(types[0] == b3::ShapeType.MESH);
+    assert(types[1] == b3::ShapeType.HEIGHT_FIELD);
+}
+
+fn fault[2] the_refusals_of_a_zeroed_shape_definition() {
+    b3::Vec3 unit = { 1.0, 1.0, 1.0 };
+
+    b3::MeshData* mesh = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: true,
+    )!!;
+    defer mesh.destroy();
+
+    b3::HeightFieldData* field = b3::create_height_field_grid(
+      row_count: 4,
+      column_count: 4,
+      scale: unit,
+      make_holes: false,
+    )!!;
+    defer field.destroy();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::ShapeDef zeroed;
+
+    fault[2] refusals;
+    if (catch err = ground.create_mesh_shape(&zeroed, mesh, unit)) refusals[0] = err;
+    if (catch err = ground.create_height_field_shape(&zeroed, field)) refusals[1] = err;
+    return refusals;
+}
+
+fn void a_geometry_shape_without_the_definition_cookie_is_refused() @test {
+    fault[2] refusals = the_refusals_of_a_zeroed_shape_definition();
+
+    assert(refusals[0] == b3::INVALID_DEFINITION,
+        "box3d accepts a zeroed shape definition in a release build; the binding must not");
+    assert(refusals[1] == b3::INVALID_DEFINITION);
+}
+
+fn fault[2] the_refusals_of_a_null_geometry() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::ShapeDef shape_def = b3::default_shape_def();
+
+    fault[2] refusals;
+    if (catch err = ground.create_mesh_shape(&shape_def, null, (b3::Vec3){ 1.0, 1.0, 1.0 })) refusals[0] = err;
+    if (catch err = ground.create_height_field_shape(&shape_def, null)) refusals[1] = err;
+    return refusals;
+}
+
+// The definition here is a real one, so only the null guard can refuse these. Without it box3d
+// reads a version field straight through the pointer and the process dies.
+fn void a_geometry_shape_built_on_nothing_is_refused() @test {
+    fault[2] refusals = the_refusals_of_a_null_geometry();
+
+    assert(refusals[0] == b3::INVALID_DEFINITION, "a mesh shape needs a mesh");
+    assert(refusals[1] == b3::INVALID_DEFINITION, "and a height field shape needs a field");
+}
+
+// Five readings around one mesh shape. The world is destroyed here rather than in a defer so the
+// count after it is gone can be read while the mesh is still alive.
+fn int[5] the_byte_counts_around_a_mesh_shape() {
+    b3::Vec3 unit = { 1.0, 1.0, 1.0 };
+    int baseline = b3::byte_count();
+
+    b3::MeshData* mesh = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: true,
+    )!!;
+    defer mesh.destroy();
+    int with_mesh = b3::byte_count();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    int with_world = b3::byte_count();
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    ground.create_mesh_shape(&shape_def, mesh, unit)!!;
+    int with_shape = b3::byte_count();
+
+    world.destroy();
+    return { baseline, with_mesh, with_world, with_shape, b3::byte_count() };
+}
+
+fn int[5] the_byte_counts_around_a_height_field_shape() {
+    int baseline = b3::byte_count();
+
+    b3::HeightFieldData* field = b3::create_height_field_grid(
+      row_count: 16,
+      column_count: 16,
+      scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
+      make_holes: false,
+    )!!;
+    defer field.destroy();
+    int with_field = b3::byte_count();
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = world.create_body(&ground_def)!!;
+    int with_world = b3::byte_count();
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    ground.create_height_field_shape(&shape_def, field)!!;
+    int with_shape = b3::byte_count();
+
+    world.destroy();
+    return { baseline, with_field, with_world, with_shape, b3::byte_count() };
+}
+
+// A copy would cost at least what the mesh itself costs, and the world would carry it away. The
+// shape costs a fraction of that and the mesh survives the world, which is the whole lifetime
+// contract: the shape borrows the pointer, and destroying the mesh first would leave it reading
+// freed memory. That last half cannot be pinned by a test without a use-after-free in the suite,
+// so it lives in create_mesh_shape's docstring.
+fn void a_mesh_shape_borrows_the_mesh_rather_than_copying_it() @test {
+    int[5] around = the_byte_counts_around_a_mesh_shape();
+    int mesh_bytes = around[1] - around[0];
+    int shape_bytes = around[3] - around[2];
+
+    assert(mesh_bytes > 0, "the mesh box3d allocates shows up in the byte count");
+    assert(shape_bytes > 0 && shape_bytes < mesh_bytes, "attaching it costs a shape, not a second mesh");
+    assert(around[4] == around[1], "and the mesh outlives the world that was reading it");
+}
+
+fn void a_height_field_shape_borrows_the_field_rather_than_copying_it() @test {
+    int[5] around = the_byte_counts_around_a_height_field_shape();
+    int field_bytes = around[1] - around[0];
+    int shape_bytes = around[3] - around[2];
+
+    assert(field_bytes > 0, "the field box3d allocates shows up in the byte count");
+    assert(shape_bytes > 0 && shape_bytes < field_bytes, "attaching it costs a shape, not a second field");
+    assert(around[4] == around[1], "and the field outlives the world that was reading it");
+}

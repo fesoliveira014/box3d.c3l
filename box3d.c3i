@@ -617,6 +617,26 @@ extern fn ShapeId create_capsule_shape_raw(BodyId body_id, ShapeDef* def, Capsul
 extern fn ShapeId create_hull_shape_raw(BodyId body_id, ShapeDef* def, HullData* hull) @cname("b3CreateHullShape") @private;
 extern fn ShapeId create_transformed_hull_shape_raw(BodyId body_id, ShapeDef* def, HullData* hull, Transform transform, Vec3 scale) @cname("b3CreateTransformedHullShape") @private;
 
+<*
+ Raw mesh and height field shape constructors. Both bypass the guards their wrappers in
+ box3d_mesh.c3 apply, so they are private to the module. Those wrappers carry one guard the
+ other shape constructors have no need of: box3d reads a version field through the geometry
+ pointer before it tests anything, so a null mesh or height field faults inside box3d rather
+ than coming back as a null identifier.
+*>
+extern fn ShapeId create_mesh_shape_raw(
+  BodyId body_id,
+  ShapeDef* def,
+  MeshData* mesh,
+  Vec3 scale,
+) @cname("b3CreateMeshShape") @private;
+
+extern fn ShapeId create_height_field_shape_raw(
+  BodyId body_id,
+  ShapeDef* def,
+  HeightFieldData* height_field,
+) @cname("b3CreateHeightFieldShape") @private;
+
 extern fn void ShapeId.destroy(self, bool update_body_mass) @cname("b3DestroyShape");
 extern fn bool ShapeId.is_valid(self) @cname("b3Shape_IsValid");
 extern fn ShapeType ShapeId.type(self) @cname("b3Shape_GetType");

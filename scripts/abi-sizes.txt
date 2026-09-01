@@ -68,3 +68,8 @@ b3WheelJointDef 184 8 base=0 enableSuspensionSpring=112 suspensionHertz=116 susp
 b3MeshDef 40 8 vertices=0 indices=8 materialIndices=16 weldTolerance=24 vertexCount=28 triangleCount=32 weldVertices=36 useMedianSplit=37 identifyEdges=38
 b3HeightFieldDef 48 8 heights=0 materialIndices=8 scale=16 countX=28 countZ=32 globalMinimumHeight=36 globalMaximumHeight=40 clockwiseWinding=44
 b3Mesh 24 8 data=0 scale=8
+b3CompoundSphereDef 56 8 sphere=0 material=16
+b3CompoundCapsuleDef 72 8 capsule=0 material=32
+b3CompoundHullDef 80 8 hull=0 transform=8 material=40
+b3CompoundMeshDef 64 8 meshData=0 transform=8 scale=36 materials=48 materialCount=56
+b3CompoundDef 64 8 capsules=0 capsuleCount=8 hulls=16 hullCount=24 meshes=32 meshCount=40 spheres=48 sphereCount=56

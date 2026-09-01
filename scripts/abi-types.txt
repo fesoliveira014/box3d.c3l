@@ -68,3 +68,8 @@ b3WheelJointDef base,enableSuspensionSpring,suspensionHertz,suspensionDampingRat
 b3MeshDef vertices,indices,materialIndices,weldTolerance,vertexCount,triangleCount,weldVertices,useMedianSplit,identifyEdges
 b3HeightFieldDef heights,materialIndices,scale,countX,countZ,globalMinimumHeight,globalMaximumHeight,clockwiseWinding
 b3Mesh data,scale
+b3CompoundSphereDef sphere,material
+b3CompoundCapsuleDef capsule,material
+b3CompoundHullDef hull,transform,material
+b3CompoundMeshDef meshData,transform,scale,materials,materialCount
+b3CompoundDef capsules,capsuleCount,hulls,hullCount,meshes,meshCount,spheres,sphereCount

@@ -619,6 +619,102 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
 
 <*
+ The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened
+ into one tree that a world populates as a single shape. Ownership, the byte count and the
+ trailing arrays all work exactly as they do for MeshData — see there.
+
+ Build one with create_compound() in box3d_compound.c3.
+*>
+typedef CompoundData = void;
+
+<*
+ The number of children one compound can hold. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which
+ the C API does not expose as a function.
+*>
+const int MAX_CHILD_SHAPES = 1048576;
+
+<*
+ The number of surface materials one mesh child of a compound can carry. Mirrors
+ B3_MAX_COMPOUND_MESH_MATERIALS in types.h, which the C API does not expose as a function. A mesh
+ with more materials than this has to be used outside a compound.
+*>
+const int MAX_COMPOUND_MESH_MATERIALS = 4;
+
+<*
+ A sphere child of a compound. The sphere carries its own centre in compound local space, so
+ there is no separate transform.
+*>
+struct CompoundSphereDef {
+    Sphere sphere;
+    SurfaceMaterial material;
+}
+
+<*
+ A capsule child of a compound. The capsule carries its own two centres in compound local space,
+ so there is no separate transform.
+*>
+struct CompoundCapsuleDef {
+    Capsule capsule;
+    SurfaceMaterial material;
+}
+
+<*
+ A hull child of a compound. The hull is cloned into the compound, so it does not have to outlive
+ create_compound(), and children naming the same hull store it once between them.
+*>
+struct CompoundHullDef {
+    HullData* hull;
+    Transform transform;
+    SurfaceMaterial material;
+}
+
+<*
+ A mesh child of a compound. The mesh is cloned into the compound, so it does not have to outlive
+ create_compound(), and children naming the same mesh store it once between them.
+
+ materials holds material_count entries and lines up with the material indices the mesh's own
+ triangles carry. That count is capped at MAX_COMPOUND_MESH_MATERIALS, which is why a mesh
+ carrying more materials than a compound has room for belongs outside one.
+*>
+struct CompoundMeshDef {
+    MeshData* mesh_data;
+    Transform transform;
+    Vec3 scale;
+    SurfaceMaterial* materials;
+    int material_count;
+}
+
+<*
+ The children create_compound() bakes into a compound, a pointer and a count per kind. box3d
+ clones everything it reads, so none of the arrays has to outlive the call. There is no
+ default_compound_def() upstream and no cookie, so a definition is written field by field, and an
+ all-zero one is a legal request for a compound with no children rather than a malformed one.
+*>
+struct CompoundDef {
+    CompoundCapsuleDef* capsules;
+    int capsule_count;
+    CompoundHullDef* hulls;
+    int hull_count;
+    CompoundMeshDef* meshes;
+    int mesh_count;
+    CompoundSphereDef* spheres;
+    int sphere_count;
+}
+
+<*
+ Raw compound constructor. Exactly one definition makes it return a null pointer — one naming
+ MAX_CHILD_SHAPES children or more — and it reads the four child arrays, and the hull and mesh
+ each child names, without testing any of them for null. The wrapper in box3d_compound.c3 carries
+ the guards for all of it and is the only public way in.
+*>
+extern fn CompoundData* create_compound_raw(CompoundDef* def) @cname("b3CreateCompound") @private;
+
+<*
+ Releases the compound. The caller owns it and must call this exactly once — see MeshData.
+*>
+extern fn void CompoundData.destroy(&self) @cname("b3DestroyCompound");
+
+<*
  Raw shape constructors. Each bypasses the definition-cookie guard its wrapper in
  box3d_shape.c3 applies, so they are private to the module.
 *>

@@ -1040,3 +1040,331 @@ fn void a_geometry_replaced_by_nothing_is_refused() @test {
     assert(the_refusal_of_a_replacement_that_is_not_there() == b3::INVALID_DEFINITION,
         "a mesh shape needs a mesh, whether it is built or replaced");
 }
+
+// The children below sit where their own geometry puts them, so every child transform in this
+// file is the identity one.
+const b3::Transform CHILD_TRANSFORM = {
+  .p = { 0.0, 0.0, 0.0 },
+  .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 },
+};
+
+fn void the_compound_definition_types_match_the_c_layout() @test {
+    assert(b3::CompoundDef::size == 64);
+    assert(b3::CompoundDef::alignment == 8);
+    assert(b3::CompoundSphereDef::size == 56);
+    assert(b3::CompoundCapsuleDef::size == 72);
+    assert(b3::CompoundHullDef::size == 80);
+    assert(b3::CompoundMeshDef::size == 64);
+}
+
+// Same shape as the mesh helpers above: the count is read while the compound is alive, the
+// caller reads it again once the defer has run, and nothing here asserts, because a panic would
+// strand the compound on byte_count() for the rest of the process.
+fn int[2] the_byte_count_around_a_live_two_sphere_compound() {
+    b3::CompoundSphereDef[2] spheres = {
+      {
+        .sphere = { .center = { -0.5, 0.0, 0.0 }, .radius = 0.5 },
+        .material = b3::default_surface_material(),
+      },
+      {
+        .sphere = { .center = { 0.5, 0.0, 0.0 }, .radius = 0.5 },
+        .material = b3::default_surface_material(),
+      },
+    };
+
+    b3::CompoundDef def;
+    def.spheres = &spheres[0];
+    def.sphere_count = 2;
+
+    int baseline = b3::byte_count();
+
+    b3::CompoundData* compound = b3::create_compound(&def)!!;
+    defer compound.destroy();
+
+    return { baseline, b3::byte_count() };
+}
+
+fn void a_destroyed_compound_gives_back_every_byte_it_took() @test {
+    int[2] around = the_byte_count_around_a_live_two_sphere_compound();
+
+    assert(around[1] > around[0], "a compound box3d bakes must show up in the byte count");
+    assert(b3::byte_count() == around[0], "and destroying it must give every byte back");
+}
+
+struct BuiltCompound {
+    bool built;
+    int baseline;
+    int live;
+}
+
+fn BuiltCompound the_compound_an_empty_definition_builds() {
+    b3::CompoundDef empty;
+
+    int baseline = b3::byte_count();
+
+    b3::CompoundData*? compound = b3::create_compound(&empty);
+    defer if (try compound) compound.destroy();
+
+    return {
+      .built = @ok(compound),
+      .baseline = baseline,
+      .live = b3::byte_count(),
+    };
+}
+
+// A definition naming no children is a request box3d honours, not one it turns away — which is
+// the opposite of what create_mesh() does with a definition naming no triangles. The compound
+// that comes back is empty and is owned like any other.
+fn void an_empty_compound_definition_is_accepted() @test {
+    BuiltCompound empty = the_compound_an_empty_definition_builds();
+
+    assert(empty.built, "a compound with no children is still a compound");
+    assert(empty.live > empty.baseline, "which box3d allocates for like any other");
+    assert(b3::byte_count() == empty.baseline, "and which the caller still owes destroy() on");
+}
+
+// The mesh outlives the compound here only because the defers unwind in reverse: box3d clones
+// the mesh into the compound, so the order is a convention of this fixture, not a requirement.
+fn BuiltCompound the_compound_every_child_kind_builds() {
+    b3::SurfaceMaterial material = b3::default_surface_material();
+    b3::BoxHull cube = b3::make_cube_hull(0.5);
+
+    int baseline = b3::byte_count();
+
+    b3::MeshData* mesh = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: true,
+    )!!;
+    defer mesh.destroy();
+
+    b3::CompoundSphereDef[1] spheres = {
+      {
+        .sphere = { .center = { -1.0, 0.0, 0.0 }, .radius = 0.5 },
+        .material = material,
+      },
+    };
+    b3::CompoundCapsuleDef[1] capsules = {
+      {
+        .capsule = { .center1 = { 1.0, -0.5, 0.0 }, .center2 = { 1.0, 0.5, 0.0 }, .radius = 0.25 },
+        .material = material,
+      },
+    };
+    b3::CompoundHullDef[1] hulls = {
+      {
+        .hull = &cube.base,
+        .transform = CHILD_TRANSFORM,
+        .material = material,
+      },
+    };
+    b3::CompoundMeshDef[1] meshes = {
+      {
+        .mesh_data = mesh,
+        .transform = CHILD_TRANSFORM,
+        .scale = { 1.0, 1.0, 1.0 },
+        .materials = &material,
+        .material_count = 1,
+      },
+    };
+
+    b3::CompoundDef def;
+    def.spheres = &spheres[0];
+    def.sphere_count = 1;
+    def.capsules = &capsules[0];
+    def.capsule_count = 1;
+    def.hulls = &hulls[0];
+    def.hull_count = 1;
+    def.meshes = &meshes[0];
+    def.mesh_count = 1;
+
+    b3::CompoundData*? compound = b3::create_compound(&def);
+    defer if (try compound) compound.destroy();
+
+    return {
+      .built = @ok(compound),
+      .baseline = baseline,
+      .live = b3::byte_count(),
+    };
+}
+
+// One child of each kind, so every definition struct the binding declares is filled in and
+// handed to box3d at least once. What the children report is the child accessors' business.
+fn void a_compound_takes_a_child_of_every_kind() @test {
+    BuiltCompound every = the_compound_every_child_kind_builds();
+
+    assert(every.built, "spheres, capsules, hulls and meshes bake into one compound");
+    assert(every.live > every.baseline, "which box3d allocates for");
+    assert(b3::byte_count() == every.baseline, "and which gives its bytes back, mesh included");
+}
+
+fn Refusal the_refusal_of_a_compound_definition(b3::CompoundDef* def) {
+    int baseline = b3::byte_count();
+
+    b3::CompoundData*? compound = b3::create_compound(def);
+    defer if (try compound) compound.destroy();
+
+    if (catch err = compound) return { .refusal = err, .baseline = baseline, .after = b3::byte_count() };
+    return { .refusal = {}, .baseline = baseline, .after = b3::byte_count() };
+}
+
+// box3d reads each child array without testing it, so without these guards the definition is a
+// dead process rather than a refusal. The byte count is the evidence nothing was taken first.
+fn void a_compound_definition_naming_an_array_it_does_not_carry_is_refused() @test {
+    b3::CompoundDef spheres;
+    spheres.sphere_count = 2;
+    b3::CompoundDef capsules;
+    capsules.capsule_count = 2;
+    b3::CompoundDef hulls;
+    hulls.hull_count = 2;
+    b3::CompoundDef meshes;
+    meshes.mesh_count = 2;
+
+    Refusal no_spheres = the_refusal_of_a_compound_definition(&spheres);
+
+    assert(no_spheres.refusal == b3::INVALID_DEFINITION, "two spheres need somewhere to read two spheres from");
+    assert(no_spheres.after == no_spheres.baseline, "and the definition is turned away before allocating");
+    assert(the_refusal_of_a_compound_definition(&capsules).refusal == b3::INVALID_DEFINITION);
+    assert(the_refusal_of_a_compound_definition(&hulls).refusal == b3::INVALID_DEFINITION);
+    assert(the_refusal_of_a_compound_definition(&meshes).refusal == b3::INVALID_DEFINITION);
+}
+
+// A negative count passes box3d's only check and then becomes the byte count of an allocation,
+// which is where the process ends.
+fn void a_compound_definition_with_a_negative_count_is_refused() @test {
+    b3::CompoundDef spheres;
+    spheres.sphere_count = -1;
+    b3::CompoundDef capsules;
+    capsules.capsule_count = -1;
+    b3::CompoundDef hulls;
+    hulls.hull_count = -1;
+    b3::CompoundDef meshes;
+    meshes.mesh_count = -1;
+
+    Refusal refused = the_refusal_of_a_compound_definition(&spheres);
+
+    assert(refused.refusal == b3::INVALID_DEFINITION, "a count below zero names no children");
+    assert(refused.after == refused.baseline, "and is turned away before allocating");
+    assert(the_refusal_of_a_compound_definition(&capsules).refusal == b3::INVALID_DEFINITION);
+    assert(the_refusal_of_a_compound_definition(&hulls).refusal == b3::INVALID_DEFINITION);
+    assert(the_refusal_of_a_compound_definition(&meshes).refusal == b3::INVALID_DEFINITION);
+}
+
+fn void a_compound_hull_child_naming_no_hull_is_refused() @test {
+    b3::CompoundHullDef[1] hulls = {
+      {
+        .hull = null,
+        .transform = CHILD_TRANSFORM,
+        .material = b3::default_surface_material(),
+      },
+    };
+
+    b3::CompoundDef def;
+    def.hulls = &hulls[0];
+    def.hull_count = 1;
+
+    Refusal refused = the_refusal_of_a_compound_definition(&def);
+
+    assert(refused.refusal == b3::INVALID_DEFINITION, "box3d computes the child's bounds through this pointer");
+    assert(refused.after == refused.baseline, "and the definition is turned away before allocating");
+}
+
+// The same dereference the hull child guard stands in for, one level down: box3d computes the
+// child's bounds through the mesh pointer and reads the material array without testing either.
+fn void a_compound_mesh_child_naming_no_geometry_is_refused() @test {
+    b3::SurfaceMaterial material = b3::default_surface_material();
+
+    b3::CompoundMeshDef[1] no_mesh = {
+      {
+        .mesh_data = null,
+        .transform = CHILD_TRANSFORM,
+        .scale = { 1.0, 1.0, 1.0 },
+        .materials = &material,
+        .material_count = 1,
+      },
+    };
+    b3::CompoundMeshDef[1] no_materials = {
+      {
+        .mesh_data = null,
+        .transform = CHILD_TRANSFORM,
+        .scale = { 1.0, 1.0, 1.0 },
+        .materials = null,
+        .material_count = 1,
+      },
+    };
+
+    b3::CompoundDef missing_mesh;
+    missing_mesh.meshes = &no_mesh[0];
+    missing_mesh.mesh_count = 1;
+    b3::CompoundDef missing_materials;
+    missing_materials.meshes = &no_materials[0];
+    missing_materials.mesh_count = 1;
+
+    Refusal refused = the_refusal_of_a_compound_definition(&missing_mesh);
+
+    assert(refused.refusal == b3::INVALID_DEFINITION, "a mesh child needs a mesh");
+    assert(refused.after == refused.baseline, "and is turned away before allocating");
+    assert(the_refusal_of_a_compound_definition(&missing_materials).refusal == b3::INVALID_DEFINITION,
+        "and the materials its triangles index into");
+}
+
+fn Refusal the_refusal_of_a_mesh_child_carrying(int material_count) {
+    b3::SurfaceMaterial[8] materials;
+    for (int i = 0; i < 8; i++) materials[i] = b3::default_surface_material();
+
+    b3::MeshData* mesh = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: true,
+    )!!;
+    defer mesh.destroy();
+
+    b3::CompoundMeshDef[1] meshes = {
+      {
+        .mesh_data = mesh,
+        .transform = CHILD_TRANSFORM,
+        .scale = { 1.0, 1.0, 1.0 },
+        .materials = &materials[0],
+        .material_count = material_count,
+      },
+    };
+
+    b3::CompoundDef def;
+    def.meshes = &meshes[0];
+    def.mesh_count = 1;
+
+    return the_refusal_of_a_compound_definition(&def);
+}
+
+// box3d writes one index per material into a fixed array of MAX_COMPOUND_MESH_MATERIALS and
+// keeps writing past the end of it for a larger count, so this refusal stands in for a heap it
+// would otherwise corrupt. A count of zero is refused too: box3d asserts against it, and the
+// assertion is compiled out of this build.
+fn void a_compound_mesh_child_carrying_the_wrong_number_of_materials_is_refused() @test {
+    fault none;
+
+    Refusal too_many = the_refusal_of_a_mesh_child_carrying(b3::MAX_COMPOUND_MESH_MATERIALS + 1);
+    Refusal no_materials = the_refusal_of_a_mesh_child_carrying(0);
+    Refusal allowed = the_refusal_of_a_mesh_child_carrying(b3::MAX_COMPOUND_MESH_MATERIALS);
+
+    assert(too_many.refusal == b3::INVALID_DEFINITION, "a mesh child has room for four materials");
+    assert(too_many.after == too_many.baseline, "and is turned away before allocating");
+    assert(no_materials.refusal == b3::INVALID_DEFINITION, "and needs at least one");
+    assert(allowed.refusal == none, "while a count between the two bounds builds");
+}
+
+// The one definition box3d itself refuses, and it refuses on the counts alone: the arrays are
+// never read, which is what makes a test for it affordable.
+fn void a_compound_definition_naming_more_children_than_box3d_holds_is_refused() @test {
+    b3::CompoundDef def;
+    def.sphere_count = b3::MAX_CHILD_SHAPES / 2;
+    def.capsule_count = b3::MAX_CHILD_SHAPES / 2;
+
+    Refusal refused = the_refusal_of_a_compound_definition(&def);
+
+    assert(refused.refusal == b3::CHILD_LIMIT_REACHED, "the ceiling is on the children together, not per kind");
+    assert(refused.after == refused.baseline, "and it is reached before anything is allocated");
+}

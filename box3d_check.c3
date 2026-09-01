@@ -9,6 +9,7 @@ faultdef
     WRONG_JOINT_TYPE,
     DEGENERATE_GEOMETRY,
     INDEX_OUT_OF_RANGE,
+    CHILD_LIMIT_REACHED,
     NO_HIT;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;

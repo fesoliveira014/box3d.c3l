@@ -79,4 +79,4 @@ b3CompoundCapsule capsule,materialIndex
 b3CompoundHull hull,transform,materialIndex
 b3CompoundMesh meshData,transform,scale,materialIndices
 b3CompoundSphere sphere,materialIndex
-b3ChildShape
+b3ChildShape @capsule,transform,materialIndices,type

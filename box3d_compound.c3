@@ -89,6 +89,9 @@ fn CompoundCapsule? CompoundData.capsule(&self, int index) {
  The hull child at index, counting hulls alone. box3d's own bound on the index is an assertion the
  release build compiles out — see child().
 
+ The hull it reports points inside the compound and belongs to it; destroying it separately frees
+ a pointer that was never separately allocated — see CompoundHull.
+
  @return "the hull child, or INDEX_OUT_OF_RANGE when the index is outside 0 to hull_count - 1"
 *>
 fn CompoundHull? CompoundData.hull(&self, int index) {
@@ -99,6 +102,9 @@ fn CompoundHull? CompoundData.hull(&self, int index) {
 <*
  The mesh child at index, counting meshes alone. box3d's own bound on the index is an assertion
  the release build compiles out — see child().
+
+ The mesh it reports is the compound's clone, not the mesh create_compound() was given, and
+ belongs to the compound; destroying it aborts the process — see CompoundMesh.
 
  @return "the mesh child, or INDEX_OUT_OF_RANGE when the index is outside 0 to mesh_count - 1"
 *>
@@ -130,6 +136,10 @@ fn CompoundSphere? CompoundData.sphere(&self, int index) {
  compound with no children has no materials and the slice is empty; box3d hands back a non-null
  pointer even then, addressing the first byte past its allocation, so the count is the only thing
  that reports the emptiness.
+
+ C hands this array back as const and C3 has no way to say so. Writing through the slice reaches
+ the compound's baked materials, which every shape built from it copied at creation and no longer
+ reads. Treat it as a view.
 *>
 fn SurfaceMaterial[] CompoundData.materials(&self) {
     return compound_materials_raw(self)[:self.material_count];

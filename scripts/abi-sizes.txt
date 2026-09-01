@@ -79,4 +79,4 @@ b3CompoundCapsule 32 4 capsule=0 materialIndex=28
 b3CompoundHull 40 8 hull=0 transform=8 materialIndex=36
 b3CompoundMesh 64 8 meshData=0 transform=8 scale=36 materialIndices=48
 b3CompoundSphere 20 4 sphere=0 materialIndex=16
-b3ChildShape 80 8
+b3ChildShape 80 8 @capsule=0 transform=32 materialIndices=60 type=76

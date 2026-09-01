@@ -547,6 +547,9 @@ struct MeshDef {
  A mesh shape's geometry as the shape holds it: the mesh it borrows and the scale it reads that
  mesh through. ShapeId.mesh() hands back a copy of the pair, never of the geometry — data is the
  caller's own mesh pointer, still the caller's to destroy and still bound to outlive the shape.
+
+ That ownership belongs to ShapeId.mesh() alone. The same struct is the mesh arm of ChildShape,
+ where data addresses the compound's own allocation instead and destroying it aborts the process.
 *>
 struct Mesh {
     MeshData* data;
@@ -660,8 +663,9 @@ struct DynamicTree {
 
 <*
  The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened
- into one tree that a world populates as a single shape. Ownership, the byte count and the
- trailing arrays all work exactly as they do for MeshData — see there.
+ into one tree that a world populates as a single shape. Ownership and the byte count work as they
+ do for MeshData — see there — with one difference: this type is declared in full rather than left
+ opaque, because the counts the accessors need are reachable nowhere else.
 
  The children themselves live past the end of the struct and are reached through the byte offsets
  it carries, so a bare CompoundData must never be copied, and a caller reaches a child through the
@@ -670,6 +674,11 @@ struct DynamicTree {
  index into. The flat index child() takes runs over the four kinds together — see child_count().
  shared_hull_count and shared_mesh_count count distinct geometry rather than children and are
  box3d's own diagnostics.
+
+ Every field here is box3d's, written once when the compound was baked and never again — box3d
+ takes a const pointer everywhere it reads one. The accessors trust the counts, so writing one is
+ not refused: it moves the bound they check and an index the guard would otherwise reject reads
+ past the array instead. Read these fields; do not assign to them.
 
  Build one with create_compound() in box3d_compound.c3.
 *>
@@ -782,9 +791,9 @@ struct CompoundHull {
 
  material_indices is a second level of indirection: a triangle's own material index, clamped to
  MAX_COMPOUND_MESH_MATERIALS, selects a slot here, and that slot selects an entry of
- CompoundData.materials(). All MAX_COMPOUND_MESH_MATERIALS slots are always filled, and a slot the
- child never uses reads 0, which is a real material index rather than a marker, so this struct
- cannot say how many of its slots are meaningful.
+ CompoundData.materials(). box3d fills one slot per material the child named and zeroes the whole
+ compound beforehand, so every unused slot reads 0 — a real material index rather than a marker,
+ which is why this struct cannot say how many of its slots are meaningful.
 *>
 struct CompoundMesh {
     MeshData* mesh_data;
@@ -813,9 +822,15 @@ struct CompoundSphere {
 
  transform is identity for a capsule and a sphere however the child is placed, because those two
  carry their placement in their own geometry; only a hull and a mesh have a transform of their
- own. material_indices works as it does on CompoundMesh — a mesh child fills all
- MAX_COMPOUND_MESH_MATERIALS slots and the other three kinds use slot 0 and leave the rest 0,
- which is a real material index rather than a marker.
+ own. material_indices works as it does on CompoundMesh — a mesh child fills as many slots as it
+ has materials and the rest read 0, which is a real material index rather than a marker, so this
+ struct cannot say how many of its slots are meaningful.
+
+ The hull and mesh arms are borrows into the compound's own allocation, not geometry of their
+ own: hull and mesh.data address bytes inside the compound and are owned by it. Destroying either
+ frees a pointer that was never separately allocated and aborts the process. Only geometry a
+ constructor handed back is the caller's to destroy — see CompoundHull and CompoundMesh, which
+ carry the same warning for the typed accessors.
 *>
 struct ChildShape {
     union {

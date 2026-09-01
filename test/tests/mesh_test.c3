@@ -1041,8 +1041,8 @@ fn void a_geometry_replaced_by_nothing_is_refused() @test {
         "a mesh shape needs a mesh, whether it is built or replaced");
 }
 
-// The children below sit where their own geometry puts them, so every child transform in this
-// file is the identity one.
+// A sphere and a capsule child sit where their own geometry puts them, so the children below take
+// the identity transform.
 const b3::Transform CHILD_TRANSFORM = {
   .p = { 0.0, 0.0, 0.0 },
   .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 },
@@ -1895,7 +1895,13 @@ fn PerKindChildren the_children_the_per_kind_accessors_report() {
     b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
     defer compound.destroy();
 
+    // Seeded away from zero so a material index that reads 0 proves the accessor ran, rather than
+    // agreeing with the struct's own default.
     PerKindChildren read;
+    read.capsule_material_index = -1;
+    read.hull_material_index = -1;
+    read.mesh_material_indices = { -1, -1, -1, -1 };
+    read.sphere_material_index = { -1, -1 };
 
     if (try capsule = compound.capsule(0)) {
         read.capsule_radius = capsule.capsule.radius;

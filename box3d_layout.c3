@@ -581,3 +581,7 @@ $assert CompoundSphere::members[0].offset == 0 && CompoundSphere::members[0].nam
 $assert CompoundSphere::members[1].offset == 16 && CompoundSphere::members[1].name == "material_index";
 $assert ChildShape::size == 80;
 $assert ChildShape::alignment == 8;
+$assert ChildShape::members[0].offset == 0;
+$assert ChildShape::members[1].offset == 32 && ChildShape::members[1].name == "transform";
+$assert ChildShape::members[2].offset == 60 && ChildShape::members[2].name == "material_indices";
+$assert ChildShape::members[3].offset == 76 && ChildShape::members[3].name == "type";

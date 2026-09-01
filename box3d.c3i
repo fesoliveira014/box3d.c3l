@@ -622,8 +622,10 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
 
 <*
- The number of children one compound can hold. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which
- the C API does not expose as a function.
+ The ceiling on a compound's children, which is one more than the number it can hold: box3d
+ refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
+ API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER
+ upstream moves the real ceiling without moving this.
 *>
 const int MAX_CHILD_SHAPES = 1048576;
 
@@ -733,9 +735,15 @@ struct CompoundHullDef {
  A mesh child of a compound. The mesh is cloned into the compound, so it does not have to outlive
  create_compound(), and children naming the same mesh store it once between them.
 
- materials holds material_count entries and lines up with the material indices the mesh's own
- triangles carry. That count is capped at MAX_COMPOUND_MESH_MATERIALS, which is why a mesh
- carrying more materials than a compound has room for belongs outside one.
+ material_count must equal the mesh's own material count, not merely be compatible with it: box3d
+ asserts the two are equal and this build compiles the assertion out. Naming fewer folds every
+ triangle material above the last one named onto entry 0, silently and with no refusal, so a mesh
+ built for four materials and given one here reports one surface everywhere. The count is also
+ capped at MAX_COMPOUND_MESH_MATERIALS, which is why a mesh carrying more materials than a
+ compound has room for belongs outside one.
+
+ scale is stored as given. Unlike a mesh shape's, it is not pushed away from zero, and a zero
+ component reaches the tree and the child's bounds as a zero.
 *>
 struct CompoundMeshDef {
     MeshData* mesh_data;
@@ -822,9 +830,12 @@ struct CompoundSphere {
 
  transform is identity for a capsule and a sphere however the child is placed, because those two
  carry their placement in their own geometry; only a hull and a mesh have a transform of their
- own. material_indices works as it does on CompoundMesh — a mesh child fills as many slots as it
- has materials and the rest read 0, which is a real material index rather than a marker, so this
- struct cannot say how many of its slots are meaningful.
+ own.
+
+ material_indices holds one useful slot for a capsule, a hull or a sphere: slot 0 is that child's
+ material index, and the rest are zero fill. For a mesh child it works as it does on CompoundMesh
+ — one slot per material the child named, and the rest read 0. Since 0 is a real material index
+ rather than a marker, the struct cannot say which reading applies without its type.
 
  The hull and mesh arms are borrows into the compound's own allocation, not geometry of their
  own: hull and mesh.data address bytes inside the compound and are owned by it. Destroying either
@@ -931,10 +942,21 @@ extern fn void* ShapeId.user_data(self) @cname("b3Shape_GetUserData");
 extern fn void ShapeId.set_density(self, float density, bool update_body_mass) @cname("b3Shape_SetDensity");
 extern fn float ShapeId.density(self) @cname("b3Shape_GetDensity");
 extern fn void ShapeId.set_friction(self, float friction) @cname("b3Shape_SetFriction");
-extern fn float ShapeId.friction(self) @cname("b3Shape_GetFriction");
 extern fn void ShapeId.set_restitution(self, float restitution) @cname("b3Shape_SetRestitution");
-extern fn float ShapeId.restitution(self) @cname("b3Shape_GetRestitution");
 extern fn void ShapeId.set_surface_material(self, SurfaceMaterial surface_material) @cname("b3Shape_SetSurfaceMaterial");
+
+<*
+ The shape's surface material, and the two of its fields that have accessors of their own. All
+ three read the shape's first material.
+
+ A shape whose mesh_material_count() is 0 has no first material to read, and answers with an
+ inline one box3d never assigned — in a recycled shape slot that is the previous shape's material,
+ and the definition's own base_material is not it. Only a shape built from an empty compound
+ reports 0, so only such a shape can read this way; mesh_surface_material() refuses every index on
+ it instead, which is the honest answer these three cannot give.
+*>
+extern fn float ShapeId.friction(self) @cname("b3Shape_GetFriction");
+extern fn float ShapeId.restitution(self) @cname("b3Shape_GetRestitution");
 extern fn SurfaceMaterial ShapeId.surface_material(self) @cname("b3Shape_GetSurfaceMaterial");
 
 <*

@@ -19,8 +19,13 @@ module b3;
  MAX_COMPOUND_MESH_MATERIALS without testing the count against it; and it turns a negative count
  into an unbounded allocation. Each of those was measured as a dead process, not a refusal.
 
+ The guard above stands between the caller and box3d's own one refusal, so box3d's null is not
+ reachable through it today. It is still tested for, because MAX_CHILD_SHAPES is a mirrored
+ constant no layout pin can check: if box3d ever raises its ceiling, the mirror becomes the looser
+ of the two and a null would otherwise be returned as a compound.
+
  @param [&in] def : "the children to bake"
- @return "the compound, CHILD_LIMIT_REACHED when the definition names MAX_CHILD_SHAPES children or more, or INVALID_DEFINITION when a count is negative, a named array is missing, a hull or mesh child names no geometry, or a mesh child's material count is outside 1 to MAX_COMPOUND_MESH_MATERIALS"
+ @return "the compound, CHILD_LIMIT_REACHED when the definition names MAX_CHILD_SHAPES children or more or box3d refuses one for its own ceiling, or INVALID_DEFINITION when a count is negative, a named array is missing, a hull or mesh child names no geometry, or a mesh child's material count is outside 1 to MAX_COMPOUND_MESH_MATERIALS"
 *>
 fn CompoundData*? create_compound(CompoundDef* def) {
     if (def.capsule_count < 0 || def.hull_count < 0) return INVALID_DEFINITION~;
@@ -44,7 +49,7 @@ fn CompoundData*? create_compound(CompoundDef* def) {
         if (mesh.material_count < 1 || mesh.material_count > MAX_COMPOUND_MESH_MATERIALS) return INVALID_DEFINITION~;
     }
 
-    return create_compound_raw(def);
+    return checked_compound(create_compound_raw(def));
 }
 
 <*

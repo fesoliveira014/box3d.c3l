@@ -1313,11 +1313,13 @@ fn Refusal the_refusal_of_a_mesh_child_carrying(int material_count) {
     b3::SurfaceMaterial[8] materials;
     for (int i = 0; i < 8; i++) materials[i] = b3::default_surface_material();
 
+    // The mesh carries MAX_COMPOUND_MESH_MATERIALS of its own, so the accepted count is one box3d
+    // agrees with rather than one it asserts against.
     b3::MeshData* mesh = b3::create_grid_mesh(
       x_count: 4,
       z_count: 4,
       cell_width: 1.0,
-      material_count: 1,
+      material_count: b3::MAX_COMPOUND_MESH_MATERIALS,
       identify_edges: true,
     )!!;
     defer mesh.destroy();

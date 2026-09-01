@@ -1,22 +1,13 @@
 module b3;
 
 <*
- Builds a flat grid of triangles in the x-z plane, centred on the origin and x_count by z_count
- cells across.
+ Builds a flat grid of triangles in the x-z plane, x_count by z_count cells around the origin.
 
- The caller owns the mesh: call destroy() on it, and note that box3d's byte_count() carries the
- allocation until that happens — see MeshData for why the binding still allocates nothing of
- its own. Every mesh constructor below shares that contract and returns the same fault, and
- none of them touches a world, so none carries a locked-world caveat.
-
- The refusal is not free of consequence. box3d rejects geometry holding no triangle with area,
- and a hierarchy too deep for its traversal stack, only after cloning the vertices and indices,
- and it frees only part of what it took: the rest stays on byte_count() for the life of the
- process. Only what box3d can refuse on the counts alone — fewer than three vertices or no
- triangles, so a grid with no cells, and a torus whose two resolutions multiply below three —
- is taken before it allocates anything. Nothing else about the arguments says which path a
- refusal takes: a torus of two by two or one by three resolution leaks, and so does a box with
- two zero extents.
+ The caller owns the mesh and must destroy() it; byte_count() carries it until then, as for every
+ mesh constructor below. A refusal leaks: box3d clones the vertices before rejecting geometry with
+ no triangle of area or a hierarchy too deep to traverse, and frees back only part. Only its
+ refusals on the counts alone — fewer than three vertices or no triangles — are allocation-free,
+ and nothing else about the arguments predicts which.
 
  @param material_count : "how many distinct material indices to spread over the triangles"
  @param identify_edges : "compute the shared-edge adjacency the solver uses to hide inner edges"
@@ -128,15 +119,10 @@ fn MeshData*? create_mesh(MeshDef* def) {
  Builds a flat height field of row_count by column_count grid points, sampled at the origin
  corner and running along positive x and z.
 
- The caller owns the height field: call destroy() on it, and note that byte_count() carries the
- allocation until that happens — see MeshData. None of the three height field constructors
- touches a world, so none carries a locked-world caveat.
-
- Unlike the mesh constructors, box3d never refuses here. It builds whatever it is asked for,
- including a grid of one row that has no cell and no triangle in it, and its own check that a
- grid holds at least four points is an assertion this release build compiles out. The count
- guard below restores it, and rules out the negative counts that would satisfy it by
- multiplying to a positive product.
+ The caller owns the field and must destroy() it; byte_count() carries the allocation until then,
+ and none of the three height field constructors touches a world. box3d itself never refuses: its
+ check that a grid holds at least four points is an assertion this release build compiles out, and
+ the count guard below restores it, negative counts that multiply to a positive product included.
 
  @param scale : "how far apart the grid points sit in x and z, and what the heights are multiplied by in y"
  @param make_holes : "punch every sixteenth cell out of the field"
@@ -197,24 +183,17 @@ fn HeightFieldData*? create_height_field(HeightFieldDef* def) {
 }
 
 <*
- Attaches a mesh to this body. The definition must come from default_shape_def() — see
- create_sphere_shape, and the cookie is the only one of box3d's compiled-out checks restored
- here too.
+ Attaches a mesh to this body, under the definition guard create_sphere_shape describes.
 
- The shape borrows the mesh rather than copying it. box3d stores the pointer it is handed and
- reads through it on every step, so the mesh must outlive every shape built from it: destroying
- it first is a use-after-free that nothing reports, and which was measured to both carry a ball
- and drop it through the floor depending on what reused the freed memory. Destroying the world
- takes the shape with it but not the mesh, which stays the caller's to destroy.
-
- The null guard is the difference between a fault and a segmentation fault: box3d reads a
- version field through the pointer before it tests anything. Scale multiplies the mesh's
- vertices and may be non-uniform or mirrored, and a component of zero is pushed away from zero
- rather than refused.
+ The shape borrows the mesh and reads through the pointer on every step, so the mesh must outlive
+ every shape built from it: destroying it first is a use-after-free that nothing reports, and
+ destroying the world takes the shape with it but not the mesh. The null guard is the difference
+ between a fault and a segmentation fault: box3d reads a version field through the pointer before
+ it tests anything.
 
  @param [&in] def : "a definition obtained from default_shape_def()"
  @param mesh : "the mesh, which must outlive the shape; null is refused rather than dereferenced"
- @param scale : "how far the mesh's vertices are stretched along each axis before collision"
+ @param scale : "how far the mesh's vertices are stretched along each axis, non-uniform or mirrored; a zero component is pushed away from zero rather than refused"
  @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the mesh is null, or INVALID_HANDLE if box3d returns a null identifier"
 *>
 fn ShapeId? BodyId.create_mesh_shape(self, ShapeDef* def, MeshData* mesh, Vec3 scale) {

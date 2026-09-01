@@ -72,10 +72,9 @@ macro ContactId? ContactId.checked(self) {
 }
 
 <*
- A null pointer here is not a bad handle but a refusal to build: box3d returns one when the
- vertices and indices it was given hold no triangle with area. This is the one member of the
- family that cannot be a method, because C3 traps a method call on a null receiver before the
- body can test it.
+ A null pointer here is not a bad handle but a refusal to build: box3d returns one when the given
+ vertices and indices hold no triangle with area. A macro rather than a method because C3 traps a
+ method call on a null receiver before the body can test it.
 
  @return "the mesh, or DEGENERATE_GEOMETRY when box3d returned a null pointer"
 *>
@@ -86,8 +85,8 @@ macro MeshData*? checked_mesh(MeshData* mesh) {
 
 <*
  A null compound is box3d refusing to bake one, which it does for a single reason: a definition
- naming as many children as its own ceiling allows. A macro rather than a method for the reason
- checked_mesh() gives.
+ naming as many children as its own ceiling allows. A macro rather than a method, as checked_mesh()
+ is.
 
  @return "the compound, or CHILD_LIMIT_REACHED when box3d returned a null pointer"
 *>

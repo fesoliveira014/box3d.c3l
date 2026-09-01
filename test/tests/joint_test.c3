@@ -684,3 +684,65 @@ fn void a_buffer_takes_only_the_joints_that_fit_in_it() @test {
     assert(joints.filled_empty == 0, "a buffer with no room at all takes nothing");
     assert(joints.untouched[0].index1 == 0, "and the buffer it was handed comes back as it went in");
 }
+
+struct JointEventReport {
+    int count;
+    b3::JointId joint;
+    b3::JointId reported;
+    void* user_data;
+}
+
+// The events are read on the step right after the joint is built rather than after a long run:
+// box3d reports awake joints only, and this pair falls asleep well inside a hundred steps, so a
+// later read finds an empty slice whatever the threshold and passes for the wrong reason. The one
+// event is copied out because the slice points into world-owned memory that the next step()
+// replaces and destroy() frees.
+fn JointEventReport the_joint_events_of_a_filter_joint(bool arm_the_threshold, void* sentinel) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
+    b3::JointId joint = link_with_a_filter_joint(world, a, b);
+    joint.set_user_data(sentinel);
+    if (arm_the_threshold) joint.set_force_threshold(0.0f);
+
+    world.step(1.0f / 60.0f, 4);
+
+    b3::JointEvent[] events = world.joint_events();
+    if (events.len == 0) return {.count = 0, .joint = joint};
+
+    return {
+        .count = events.len,
+        .joint = joint,
+        .reported = events[0].joint_id,
+        .user_data = events[0].user_data,
+    };
+}
+
+// The threshold is the only difference between the two rows. A filter joint's reaction force is
+// always zero, and box3d reports a joint when its force reaches the threshold, so zero is the
+// only setting a filter joint ever meets — and the default puts both thresholds out of reach.
+fn void a_joint_that_reaches_its_force_threshold_is_reported_in_the_joint_events() @test {
+    int sentinel = 11;
+
+    JointEventReport armed = the_joint_events_of_a_filter_joint(true, &sentinel);
+    assert(armed.count == 1, "an armed joint is reported once for the step it was awake through");
+    assert(armed.reported.index1 == armed.joint.index1, "and the event names the joint that reached it");
+    assert(armed.reported.generation == armed.joint.generation);
+    assert(armed.reported.world0 == armed.joint.world0);
+
+    JointEventReport unarmed = the_joint_events_of_a_filter_joint(false, &sentinel);
+    assert(unarmed.count == 0, "a joint holding both thresholds out of reach is reported in nothing");
+}
+
+fn void a_joint_event_carries_the_user_data_its_joint_was_given() @test {
+    int sentinel = 11;
+
+    JointEventReport armed = the_joint_events_of_a_filter_joint(true, &sentinel);
+
+    assert(armed.count == 1, "the length is what makes the event safe to read");
+    assert(armed.user_data == &sentinel, "the event hands back what set_user_data wrote on the joint");
+}

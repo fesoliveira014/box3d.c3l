@@ -641,7 +641,8 @@ struct ContactEvents @private {
 <*
  A body moved under simulation during the last step. Bodies the caller moved itself are not
  reported. The transform is the pose the body ended the step at, so a caller updating render
- transforms reads it here instead of calling BodyId.transform() per body.
+ transforms reads it here instead of calling BodyId.transform() per body, and the user data is
+ the pointer BodyId.set_user_data() wrote on that body.
 *>
 struct BodyMoveEvent {
     void* user_data;
@@ -657,7 +658,7 @@ struct BodyEvents @private {
 
 <*
  An awake joint whose force or torque exceeded its threshold. The forces themselves are not
- reported.
+ reported, and the user data is the pointer JointId.set_user_data() wrote on that joint.
 *>
 struct JointEvent {
     JointId joint_id;

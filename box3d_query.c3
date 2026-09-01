@@ -109,3 +109,149 @@ fn ClosestPoint BodyId.closest_point(self, Vec3 target) {
     float distance = body_closest_point_raw(self, &point, target);
     return { .point = point, .distance = distance };
 }
+
+struct CastCollector @private {
+    CastHit[] buffer;
+    usz count;
+}
+
+struct OverlapCollector @private {
+    ShapeId[] buffer;
+    usz count;
+}
+
+fn float collect_cast_hit(
+  ShapeId shape_id,
+  Pos point,
+  Vec3 normal,
+  float fraction,
+  ulong user_material_id,
+  int triangle_index,
+  int child_index,
+  void* context,
+) @private {
+    CastCollector* collector = (CastCollector*)context;
+    if (collector.count >= collector.buffer.len) return 0.0f;
+
+    collector.buffer[collector.count] = {
+      .shape_id = shape_id,
+      .point = point,
+      .normal = normal,
+      .fraction = fraction,
+      .user_material_id = user_material_id,
+      .triangle_index = triangle_index,
+      .child_index = child_index,
+    };
+    collector.count++;
+
+    return collector.count < collector.buffer.len ? 1.0f : 0.0f;
+}
+
+fn bool collect_overlap(ShapeId shape_id, void* context) @private {
+    OverlapCollector* collector = (OverlapCollector*)context;
+    if (collector.count >= collector.buffer.len) return false;
+
+    collector.buffer[collector.count] = shape_id;
+    collector.count++;
+
+    return collector.count < collector.buffer.len;
+}
+
+<*
+ Fires a ray into the world and collects every shape along it into the caller's buffer, in no
+ particular order — the ray is not clipped, so a shape behind another is still reported.
+
+ The buffer is the only limit: once it is full the cast ends, so a result as long as the buffer
+ means there may have been more. Nothing is allocated and the returned slice points into the
+ buffer, so it lives exactly as long as the buffer does.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn CastHit[] WorldId.cast_ray_all(
+  self,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+  CastHit[] buffer,
+) {
+    CastCollector collector = { .buffer = buffer, .count = 0 };
+    self.cast_ray(
+      origin: origin,
+      translation: translation,
+      filter: filter,
+      fcn: &collect_cast_hit,
+      context: &collector,
+    );
+    return buffer[:collector.count];
+}
+
+<*
+ Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
+ buffer. The proxy's points are borrowed for the call and its count must not exceed
+ MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions stop short of
+ true contact by box3d's speculative margin.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn CastHit[] WorldId.cast_shape_all(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  Vec3 translation,
+  QueryFilter filter,
+  CastHit[] buffer,
+) {
+    CastCollector collector = { .buffer = buffer, .count = 0 };
+    self.cast_shape(
+      origin: origin,
+      proxy: proxy,
+      translation: translation,
+      filter: filter,
+      fcn: &collect_cast_hit,
+      context: &collector,
+    );
+    return buffer[:collector.count];
+}
+
+<*
+ Collects the shapes whose broad-phase bounds overlap the given box. This is the broad-phase
+ test, so a reported shape may not truly intersect the box. Buffer behaviour matches
+ cast_ray_all.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn ShapeId[] WorldId.overlap_aabb_all(self, Aabb aabb, QueryFilter filter, ShapeId[] buffer) {
+    OverlapCollector collector = { .buffer = buffer, .count = 0 };
+    self.overlap_aabb(
+      aabb: aabb,
+      filter: filter,
+      fcn: &collect_overlap,
+      context: &collector,
+    );
+    return buffer[:collector.count];
+}
+
+<*
+ Collects the shapes that overlap a convex proxy placed at origin. The proxy's points are
+ borrowed for the call and its count must not exceed MAX_SHAPE_CAST_POINTS. Buffer behaviour
+ matches cast_ray_all.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn ShapeId[] WorldId.overlap_shape_all(
+  self,
+  Pos origin,
+  ShapeProxy* proxy,
+  QueryFilter filter,
+  ShapeId[] buffer,
+) {
+    OverlapCollector collector = { .buffer = buffer, .count = 0 };
+    self.overlap_shape(
+      origin: origin,
+      proxy: proxy,
+      filter: filter,
+      fcn: &collect_overlap,
+      context: &collector,
+    );
+    return buffer[:collector.count];
+}

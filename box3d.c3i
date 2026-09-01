@@ -992,3 +992,18 @@ extern fn TreeStats WorldId.overlap_shape(
   OverlapResultFn fcn,
   void* context,
 ) @cname("b3World_OverlapShape");
+
+<*
+ One shape a collecting cast found, carrying exactly what the cast callback is given. This is a
+ C3 type with no C counterpart: RayResult is the closest-hit result and its traversal counters
+ and hit flag mean nothing for a collected hit.
+*>
+struct CastHit {
+    ShapeId shape_id;
+    Pos point;
+    Vec3 normal;
+    float fraction;
+    ulong user_material_id;
+    int triangle_index;
+    int child_index;
+}

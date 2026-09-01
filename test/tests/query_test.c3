@@ -310,3 +310,97 @@ fn void an_overlap_callback_sees_the_shapes_in_the_box() @test {
     );
     assert(probe.calls == 1, "a probe at the origin overlaps only the sphere there");
 }
+
+fn void collecting_a_cast_fills_the_caller_buffer() @test {
+    b3::WorldId world = a_world_holding_three_spheres_in_a_line();
+    defer world.destroy();
+
+    b3::QueryFilter filter = b3::default_query_filter();
+
+    b3::CastHit[8] roomy;
+    b3::CastHit[] all = world.cast_ray_all(
+      origin: {0.0, 4.0, 0.0},
+      translation: {0.0, -12.0, 0.0},
+      filter: filter,
+      buffer: roomy[..],
+    );
+    assert(all.len == 3, "a buffer with room collects every sphere");
+    assert(all[0].fraction > 0.0f && all[0].fraction < 1.0f, "each hit carries its fraction");
+
+    b3::CastHit[2] cramped;
+    b3::CastHit[] some = world.cast_ray_all(
+      origin: {0.0, 4.0, 0.0},
+      translation: {0.0, -12.0, 0.0},
+      filter: filter,
+      buffer: cramped[..],
+    );
+    assert(some.len == 2, "a full buffer ends the cast rather than dropping hits");
+
+    b3::CastHit[] none = world.cast_ray_all(
+      origin: {0.0, 4.0, 0.0},
+      translation: {0.0, -12.0, 0.0},
+      filter: filter,
+      buffer: roomy[:0],
+    );
+    assert(none.len == 0, "an empty buffer collects nothing and writes nothing");
+}
+
+fn void collecting_an_overlap_fills_the_caller_buffer() @test {
+    b3::WorldId world = a_world_holding_three_spheres_in_a_line();
+    defer world.destroy();
+
+    b3::QueryFilter filter = b3::default_query_filter();
+    b3::Aabb box = {
+      .lower_bound = {-1.0, -5.0, -1.0},
+      .upper_bound = {1.0, 1.0, 1.0},
+    };
+
+    b3::ShapeId[8] roomy;
+    b3::ShapeId[] found = world.overlap_aabb_all(box, filter, roomy[..]);
+    assert(found.len == 3, "all three spheres are collected");
+
+    b3::ShapeId[1] cramped;
+    b3::ShapeId[] one = world.overlap_aabb_all(box, filter, cramped[..]);
+    assert(one.len == 1, "a full buffer ends the query");
+
+    b3::Vec3[1] proxy_points = { {0.0, 0.0, 0.0} };
+    b3::ShapeProxy proxy = {
+      .points = &proxy_points[0],
+      .count = 1,
+      .radius = 0.25,
+    };
+    b3::ShapeId[] probed = world.overlap_shape_all(
+      origin: {0.0, 0.0, 0.0},
+      proxy: &proxy,
+      filter: filter,
+      buffer: roomy[..],
+    );
+    assert(probed.len == 1, "a probe at the origin collects only the sphere there");
+}
+
+fn void collecting_a_shape_cast_reports_the_swept_fraction() @test {
+    b3::ShapeId sphere_shape;
+    b3::WorldId world = a_world_holding_one_sphere(&sphere_shape);
+    defer world.destroy();
+
+    b3::QueryFilter filter = b3::default_query_filter();
+    b3::Vec3[1] proxy_points = { {0.0, 0.0, 0.0} };
+    b3::ShapeProxy proxy = {
+      .points = &proxy_points[0],
+      .count = 1,
+      .radius = 0.25,
+    };
+
+    b3::CastHit[4] buffer;
+    b3::CastHit[] hits = world.cast_shape_all(
+      origin: {0.0, 4.0, 0.0},
+      proxy: &proxy,
+      translation: {0.0, -8.0, 0.0},
+      filter: filter,
+      buffer: buffer[..],
+    );
+    assert(hits.len == 1, "the swept sphere reaches the resting one");
+    assert(hits[0].fraction > 0.4055f && hits[0].fraction < 0.4075f,
+        "stopping a quarter unit early, less box3d's speculative margin");
+    assert(hits[0].shape_id.index1 == sphere_shape.index1, "and names the shape it reached");
+}

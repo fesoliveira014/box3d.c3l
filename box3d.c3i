@@ -1145,3 +1145,20 @@ struct ConstraintTuning {
     float hertz;
     float damping_ratio;
 }
+
+<*
+ Raw filter joint constructor. Bypasses WorldId.create_filter_joint's definition-cookie guard, so
+ it is private to the module — box3d_joint.c3's WorldId.create_filter_joint is the only caller and
+ is the only public way to a live joint.
+*>
+extern fn JointId create_filter_joint_raw(
+  WorldId world_id,
+  FilterJointDef* def,
+) @cname("b3CreateFilterJoint") @private;
+
+<*
+ Removes this joint from its world, dropping whatever it constrained between the two bodies.
+
+ @param wake_attached : "false leaves two sleeping attached bodies asleep; true wakes both"
+*>
+extern fn void JointId.destroy(self, bool wake_attached) @cname("b3DestroyJoint");

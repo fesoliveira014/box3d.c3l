@@ -3442,3 +3442,231 @@ fn void toggling_the_spring_discards_the_force_it_had_where_the_other_two_flags_
     assert(forces.after_the_spring_flag > -0.001f && forces.after_the_spring_flag < 0.001f,
         "while toggling the spring throws that force away, before any step could rebuild it");
 }
+
+// A metre out from a static anchor, with local frame A placed where the hanging sphere's own
+// origin is, so a joint that holds the transform it was built from leaves the sphere exactly
+// where it started while gravity pulls on it. Five seconds at 1/60 s is well past where either
+// row settles: doubling the run leaves both readings unchanged.
+fn b3::Pos the_position_a_welded_sphere_hangs_at(bool soften_the_translation) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_at(world, 1.0);
+
+    b3::WeldJointDef joint_def = b3::default_weld_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.local_frame_a.p = {1.0, 0.0, 0.0};
+    b3::WeldJointId weld = world.create_weld_joint(&joint_def)!!;
+
+    if (soften_the_translation) {
+        weld.set_linear_hertz(1.0);
+        weld.set_linear_damping_ratio(0.5);
+    }
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return hanging.position();
+}
+
+struct WeldSpringSettings {
+    float linear_hertz;
+    float angular_hertz;
+    float linear_damping_ratio;
+    float angular_damping_ratio;
+    float linear_hertz_after;
+    float angular_hertz_after;
+    float linear_damping_ratio_after;
+    float angular_damping_ratio_after;
+}
+
+fn WeldSpringSettings the_spring_settings_of_a_weld_joint_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId held = a_dynamic_sphere_at(world, 1.0);
+
+    b3::WeldJointDef joint_def = b3::default_weld_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = held;
+    joint_def.linear_hertz = 3.0;
+    joint_def.angular_hertz = 5.0;
+    joint_def.linear_damping_ratio = 0.25;
+    joint_def.angular_damping_ratio = 0.75;
+    b3::WeldJointId weld = world.create_weld_joint(&joint_def)!!;
+
+    WeldSpringSettings settings = {
+        .linear_hertz = weld.linear_hertz(),
+        .angular_hertz = weld.angular_hertz(),
+        .linear_damping_ratio = weld.linear_damping_ratio(),
+        .angular_damping_ratio = weld.angular_damping_ratio(),
+    };
+
+    weld.set_linear_hertz(7.0);
+    weld.set_angular_hertz(11.0);
+    weld.set_linear_damping_ratio(0.125);
+    weld.set_angular_damping_ratio(0.375);
+
+    settings.linear_hertz_after = weld.linear_hertz();
+    settings.angular_hertz_after = weld.angular_hertz();
+    settings.linear_damping_ratio_after = weld.linear_damping_ratio();
+    settings.angular_damping_ratio_after = weld.angular_damping_ratio();
+    return settings;
+}
+
+struct SpunBody {
+    b3::Quat rotation;
+    float spin;
+}
+
+// Zero gravity, so the spring between the two local frames is the only thing acting on the sphere
+// — the parallel joint leaves it free to translate, and there is nothing to translate it. Five
+// seconds at 1/60 s: the upright row has settled and gone to sleep by the end, and doubling the
+// run leaves it at the same reading.
+fn SpunBody a_sphere_spun_about_x_under_a_parallel_joint(float max_torque) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::ParallelJointDef joint_def = b3::default_parallel_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = spinning;
+    b3::ParallelJointId joint = world.create_parallel_joint(&joint_def)!!;
+    joint.set_max_torque(max_torque);
+
+    spinning.set_angular_velocity((b3::Vec3){ 3.0, 0.0, 0.0 });
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    b3::Vec3 rate = spinning.angular_velocity();
+    return {.rotation = spinning.rotation(), .spin = rate.x};
+}
+
+struct ParallelSpringSettings {
+    float hertz;
+    float damping_ratio;
+    float max_torque;
+    float hertz_after;
+    float damping_ratio_after;
+    float max_torque_after;
+}
+
+fn ParallelSpringSettings the_spring_settings_of_a_parallel_joint_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId held = a_dynamic_sphere_at(world, 1.0);
+
+    b3::ParallelJointDef joint_def = b3::default_parallel_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = held;
+    joint_def.hertz = 4.0;
+    joint_def.damping_ratio = 0.5;
+    joint_def.max_torque = 25.0;
+    b3::ParallelJointId joint = world.create_parallel_joint(&joint_def)!!;
+
+    ParallelSpringSettings settings = {
+        .hertz = joint.spring_hertz(),
+        .damping_ratio = joint.spring_damping_ratio(),
+        .max_torque = joint.max_torque(),
+    };
+
+    joint.set_spring_hertz(9.0);
+    joint.set_spring_damping_ratio(0.125);
+    joint.set_max_torque(12.5);
+
+    settings.hertz_after = joint.spring_hertz();
+    settings.damping_ratio_after = joint.spring_damping_ratio();
+    settings.max_torque_after = joint.max_torque();
+    return settings;
+}
+
+// A default weld joint is rigid in both channels, and this is what that buys: five seconds of
+// gravity pulling on the hanging sphere move it 70 micrometres, less than box3d's own linear slop.
+fn void a_weld_joint_holds_the_body_at_the_transform_its_frames_describe() @test {
+    b3::Pos held = the_position_a_welded_sphere_hangs_at(false);
+
+    assert(held.x > 0.999f && held.x < 1.001f, "the welded sphere is still the metre out its frames put it");
+    assert(held.y > -0.005f && held.y < 0.005f, "and gravity has pulled it nowhere");
+    assert(held.z > -0.001f && held.z < 0.001f);
+}
+
+// The control for the one above, and the reading that shows a weld's zero hertz is its rigid
+// setting rather than its softest: raising the linear hertz off 0 is what lets the same load pull
+// the sphere down. The two bands are disjoint, so neither row can be mistaken for the other.
+fn void a_weld_joint_whose_translation_is_softened_sags_under_the_same_load() @test {
+    b3::Pos sagging = the_position_a_welded_sphere_hangs_at(true);
+
+    assert(sagging.y > -0.27f && sagging.y < -0.24f,
+        "a spring at one hertz lets the sphere hang a quarter metre lower than a rigid channel does");
+    assert(sagging.x > 0.99f && sagging.x < 1.01f, "while the axis the load does not pull along is barely touched");
+}
+
+// Four distinct values down each path, because the definition interleaves its four fields —
+// linear hertz, angular hertz, linear damping ratio, angular damping ratio — rather than laying a
+// linear pair down before an angular one, and a transposition of two equal values reads back the
+// same either way. All eight are exactly representable, so they compare exactly.
+fn void the_four_weld_spring_settings_come_back_from_the_fields_they_went_to() @test {
+    WeldSpringSettings settings = the_spring_settings_of_a_weld_joint_before_and_after_the_setters();
+
+    assert(settings.linear_hertz == 3.0, "the definition's four values, none of them crossed with another");
+    assert(settings.angular_hertz == 5.0);
+    assert(settings.linear_damping_ratio == 0.25);
+    assert(settings.angular_damping_ratio == 0.75);
+    assert(settings.linear_hertz_after == 7.0, "and then the four the setters gave it");
+    assert(settings.angular_hertz_after == 11.0);
+    assert(settings.linear_damping_ratio_after == 0.125);
+    assert(settings.angular_damping_ratio_after == 0.375);
+}
+
+// The spin is about x and the spring pulls it back about x, so j and k stay at zero in both rows
+// and it is i and l that tell the two apart.
+fn void a_parallel_joint_brings_a_spun_body_back_upright() @test {
+    SpunBody returned = a_sphere_spun_about_x_under_a_parallel_joint(1000.0);
+
+    assert(returned.rotation.i > -0.01f && returned.rotation.i < 0.01f,
+        "three radians a second of spin is gone five seconds later");
+    assert(returned.rotation.j > -0.001f && returned.rotation.j < 0.001f);
+    assert(returned.rotation.k > -0.001f && returned.rotation.k < 0.001f);
+    assert(returned.rotation.l > 0.999f && returned.rotation.l < 1.001f, "and the sphere is back upright");
+    assert(returned.spin > -0.01f && returned.spin < 0.01f, "with nothing left turning it");
+}
+
+// The control: the same spin with the joint's torque ceiling at 0. box3d gates the whole
+// constraint on that ceiling being above 0, so a parallel joint at 0 holds nothing at all — and
+// this joint has nothing else to hold with. Fifteen radians on from where it started, still
+// turning at the rate it was given.
+fn void a_parallel_joint_with_no_torque_to_spend_leaves_the_body_spinning() @test {
+    SpunBody turning = a_sphere_spun_about_x_under_a_parallel_joint(0.0);
+
+    assert(turning.rotation.i > 0.92f && turning.rotation.i < 0.95f, "the sphere is nowhere near upright");
+    assert(turning.rotation.l > 0.33f && turning.rotation.l < 0.36f);
+    assert(turning.spin > 2.99f && turning.spin < 3.01f, "and the spin it was given is untouched");
+}
+
+// 4, 0.5, 25, 9, 0.125 and 12.5 are all exactly representable as floats, so they compare exactly.
+fn void the_parallel_spring_settings_round_trip() @test {
+    ParallelSpringSettings settings = the_spring_settings_of_a_parallel_joint_before_and_after_the_setters();
+
+    assert(settings.hertz == 4.0, "the values the definition asked for");
+    assert(settings.damping_ratio == 0.5);
+    assert(settings.max_torque == 25.0);
+    assert(settings.hertz_after == 9.0, "and then the ones the setters gave it");
+    assert(settings.damping_ratio_after == 0.125);
+    assert(settings.max_torque_after == 12.5);
+}

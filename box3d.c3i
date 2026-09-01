@@ -2144,6 +2144,68 @@ extern fn JointId create_weld_joint_raw(
 ) @cname("b3CreateWeldJoint") @private;
 
 <*
+ Sets the stiffness in hertz of the spring over the two bodies' relative translation. 0 on a joint
+ built from a default definition, where it asks for a rigid channel rather than an absent spring,
+ as WeldJointDef describes. The value is stored as handed: nothing is clamped, and the joint's
+ accumulated impulses stand rather than being discarded the way a prismatic joint's flags discard
+ theirs.
+
+ box3d asserts the value is finite and at or above 0, and this package links a release build where
+ that assertion is compiled out. A negative value is where the two halves of the solver part
+ company: the prepare step tests for exactly 0, so it builds a spring out of the negative number,
+ while the solve engages that spring of its own accord only above 0 and otherwise leaves it to the
+ passes that already carry bias.
+*>
+extern fn void WeldJointId.set_linear_hertz(self, float hertz) @cname("b3WeldJoint_SetLinearHertz");
+
+<*
+ The stiffness in hertz of the spring over the two bodies' relative translation. 0 on a joint built
+ from a default definition, and 0 is this joint's rigid setting rather than its softest.
+*>
+extern fn float WeldJointId.linear_hertz(self) @cname("b3WeldJoint_GetLinearHertz");
+
+<*
+ Sets the damping ratio of the spring over the two bodies' relative translation, non-dimensional.
+ box3d reads it only while linear_hertz() is away from 0, the channel otherwise being solved with
+ the joint's own constraint tuning, which carries a damping ratio of its own. Asserted finite and
+ at or above 0 under the same compiled-out assertion set_linear_hertz describes, and stored as
+ handed.
+*>
+extern fn void WeldJointId.set_linear_damping_ratio(self, float damping_ratio) @cname("b3WeldJoint_SetLinearDampingRatio");
+
+<*
+ The damping ratio of the spring over the two bodies' relative translation, non-dimensional. 0 on
+ a joint built from a default definition.
+*>
+extern fn float WeldJointId.linear_damping_ratio(self) @cname("b3WeldJoint_GetLinearDampingRatio");
+
+<*
+ Sets the stiffness in hertz of the spring over the two bodies' relative rotation. This is the
+ joint's other channel and box3d tests the two separately, so the rotation may be rigid at 0 while
+ the translation is soft, or the other way about. Everything set_linear_hertz describes holds here
+ too, the disagreement over a negative value included.
+*>
+extern fn void WeldJointId.set_angular_hertz(self, float hertz) @cname("b3WeldJoint_SetAngularHertz");
+
+<*
+ The stiffness in hertz of the spring over the two bodies' relative rotation. 0 on a joint built
+ from a default definition, and 0 is this joint's rigid setting rather than its softest.
+*>
+extern fn float WeldJointId.angular_hertz(self) @cname("b3WeldJoint_GetAngularHertz");
+
+<*
+ Sets the damping ratio of the spring over the two bodies' relative rotation, non-dimensional.
+ Read only while angular_hertz() is away from 0, on the terms set_linear_damping_ratio describes.
+*>
+extern fn void WeldJointId.set_angular_damping_ratio(self, float damping_ratio) @cname("b3WeldJoint_SetAngularDampingRatio");
+
+<*
+ The damping ratio of the spring over the two bodies' relative rotation, non-dimensional. 0 on a
+ joint built from a default definition.
+*>
+extern fn float WeldJointId.angular_damping_ratio(self) @cname("b3WeldJoint_GetAngularDampingRatio");
+
+<*
  A joint known to be a parallel joint. box3d resolves every per-type accessor through a
  joint-type assertion this release build compiles out, so a parallel accessor reaching a joint of
  another type reinterprets that joint's solver union instead: a getter hands back nonsense and a
@@ -2187,3 +2249,52 @@ extern fn JointId create_parallel_joint_raw(
   WorldId world_id,
   ParallelJointDef* def,
 ) @cname("b3CreateParallelJoint") @private;
+
+<*
+ Sets the spring's stiffness in hertz. 1 on a joint built from a default definition, where the weld
+ joint's two are 0 — and 0 does not mean here what it means there: box3d's softness for a zero
+ hertz carries a zero mass scale, so a parallel spring at 0 applies no torque at all rather than
+ going rigid, leaving the two frames as free as a max_torque of 0 leaves them.
+
+ box3d asserts the value is finite and at or above 0, and this package links a release build where
+ that assertion is compiled out. The value is stored as handed, nothing is clamped, and the
+ spring's accumulated impulse stands.
+*>
+extern fn void ParallelJointId.set_spring_hertz(self, float hertz) @cname("b3ParallelJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz. 1 on a joint built from a default definition.
+*>
+extern fn float ParallelJointId.spring_hertz(self) @cname("b3ParallelJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional. 1 on a joint built from a default definition.
+ Asserted finite and at or above 0 under the same compiled-out assertion set_spring_hertz
+ describes, and stored as handed.
+*>
+extern fn void ParallelJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3ParallelJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional. 1 on a joint built from a default definition.
+*>
+extern fn float ParallelJointId.spring_damping_ratio(self) @cname("b3ParallelJoint_GetSpringDampingRatio");
+
+<*
+ Sets the ceiling in newton-metres on the torque the spring may apply: box3d bounds the spring's
+ accumulated impulse to the time step times this value. float::max on a joint built from a default
+ definition. The ceiling gates the constraint as well as bounding it, so set_max_torque(0) leaves
+ the joint solving nothing at all and the two bodies turning as freely as if it were not there —
+ this joint holds nothing else. Upstream names the parameter a force; what it stores and everything
+ that reads it is a torque.
+
+ box3d asserts the value is finite and at or above 0, and this package links a release build where
+ that assertion is compiled out. The value is stored as handed, and the spring's accumulated
+ impulse stands.
+*>
+extern fn void ParallelJointId.set_max_torque(self, float torque) @cname("b3ParallelJoint_SetMaxTorque");
+
+<*
+ The ceiling in newton-metres on the torque the spring may apply. float::max on a joint built from
+ a default definition.
+*>
+extern fn float ParallelJointId.max_torque(self) @cname("b3ParallelJoint_GetMaxTorque");

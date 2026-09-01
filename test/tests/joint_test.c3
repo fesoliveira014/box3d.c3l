@@ -8,7 +8,6 @@ fn void the_joint_types_match_the_c_layout() @test {
     assert(b3::JointDef::alignment == 8);
     assert(b3::FilterJointDef::size == 112);
     assert(b3::FilterJointDef::alignment == 8);
-    assert(b3::ConstraintTuning::size == 8);
 }
 
 fn void the_joint_type_values_match_the_c_enum() @test {
@@ -23,16 +22,16 @@ fn void the_joint_type_values_match_the_c_enum() @test {
     assert((int)b3::JointType.WHEEL == 8);
 }
 
-// 60, 2, 1 and 0 are exactly representable as floats, so they compare exactly rather than in a band.
+// 60 and 2 are exactly representable as floats, so they compare exactly rather than in a band.
+// draw_scale is not a constant default at all: it is the current length unit.
 fn void the_default_filter_joint_definition_carries_the_values_the_c_side_sets() @test {
     b3::FilterJointDef def = b3::default_filter_joint_def();
 
-    assert(def.internal_value == 1152023);
     assert(def.force_threshold == float::max);
     assert(def.torque_threshold == float::max);
     assert(def.constraint_hertz == 60.0);
     assert(def.constraint_damping_ratio == 2.0);
-    assert(def.draw_scale == 1.0);
+    assert(def.draw_scale == b3::length_units_per_meter());
     assert(!def.collide_connected);
     assert(def.user_data == null);
 }

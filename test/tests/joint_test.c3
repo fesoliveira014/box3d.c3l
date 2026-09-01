@@ -1360,8 +1360,8 @@ fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_
     return {.while_the_limit_is_off = off, .once_the_limit_is_exceeded = hinge.angular_separation()};
 }
 
-// The closing condition for the limit family. The band holds 0.500134 and excludes both a hinge
-// the limit never caught and the angle the same motor reaches with the limit cleared.
+// The band holds 0.500134 and excludes both a hinge the limit never caught and the angle the same
+// motor reaches with the limit cleared.
 fn void a_limit_stops_the_motor_that_drives_the_hinge_into_it() @test {
     float angle = the_angle_of_a_motor_driven_hinge_after_two_seconds(true);
 
@@ -1497,8 +1497,7 @@ fn SpringSettings the_spring_settings_of_a_hinge_before_and_after_the_setters() 
     return settings;
 }
 
-// The closing condition for the spring family. The band holds the measured 0.699938 and excludes
-// a hinge the spring never moved.
+// The band holds the measured 0.699938 and excludes a hinge the spring never moved.
 fn void a_spring_settles_the_hinge_on_its_target_angle() @test {
     float angle = the_angle_of_a_sprung_hinge_after_five_seconds(true, 0.7);
 
@@ -1811,8 +1810,7 @@ fn RopeRestLengths the_rest_lengths_a_rope_takes_from_its_setter() {
     return {.clamped = clamped, .round_tripped = round_tripped};
 }
 
-// The closing condition for the length family: the rope takes up the fall and holds the body at
-// the length it was built with. The band excludes both the separation the pair starts at and the
+// The rope takes up the fall and holds the body at the length it was built with. The band excludes both the separation the pair starts at and the
 // fall a body nothing held would have taken. The separation is worked out from the two body
 // positions as well as read off the joint, so the accessor answers to where the bodies are and
 // not only to itself.

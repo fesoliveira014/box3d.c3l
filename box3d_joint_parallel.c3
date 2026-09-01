@@ -1,11 +1,11 @@
 module b3;
 
 <*
- Links two bodies by a spring between the z axis of one and the z axis of the other, holding them
- parallel and holding nothing else — the gate on max_torque that ParallelJointDef describes turns
- even that off. The definition must come from default_parallel_joint_def() and must name two
- bodies of this world, the same guard on the same embedded base that create_filter_joint
- describes, stopping in the same place.
+ Links two bodies by a spring between the z axis of local frame A and the z axis of local frame B,
+ holding those parallel and holding nothing else — the gate on max_torque that ParallelJointDef
+ describes turns even that off. The definition must come from default_parallel_joint_def() and
+ must name two bodies of this world, the same guard on the same embedded base that
+ create_filter_joint describes, stopping in the same place.
 
  @param [&in] def : "a definition obtained from default_parallel_joint_def(), naming two bodies of this world"
  @return "the joint, or the faults create_filter_joint documents"

@@ -2571,6 +2571,14 @@ fn void the_default_prismatic_joint_definition_zeroes_every_field_it_adds_to_the
     assert(def.motor_speed == 0.0);
 }
 
+fn void a_default_prismatic_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::PrismaticJointDef def = b3::default_prismatic_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
 // Zero is what this type asks for a rigid channel with, so a default weld joint is the stiff one
 // rather than the free one the same zeroes mean on the other sprung types.
 fn void the_default_weld_joint_definition_zeroes_all_four_fields_it_adds_to_the_base() @test {
@@ -2582,6 +2590,14 @@ fn void the_default_weld_joint_definition_zeroes_all_four_fields_it_adds_to_the_
     assert(def.angular_damping_ratio == 0.0);
 }
 
+fn void a_default_weld_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::WeldJointDef def = b3::default_weld_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
 // The odd one of the three: 1 and float::max are exactly representable as floats and are copied
 // straight out of the definition, so they too compare exactly.
 fn void the_default_parallel_joint_definition_zeroes_nothing_it_adds_to_the_base() @test {
@@ -2590,6 +2606,14 @@ fn void the_default_parallel_joint_definition_zeroes_nothing_it_adds_to_the_base
     assert(def.hertz == 1.0, "a default parallel joint is already sprung");
     assert(def.damping_ratio == 1.0);
     assert(def.max_torque == float::max, "and its spring is uncapped, where 0 would switch it off");
+}
+
+fn void a_default_parallel_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::ParallelJointDef def = b3::default_parallel_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
 }
 
 fn b3::PrismaticJointId link_with_a_prismatic_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {

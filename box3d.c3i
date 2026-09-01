@@ -1945,9 +1945,15 @@ typedef WeldJointId = inline JointId;
 
  Zero hertz means rigid here rather than "no spring", which inverts the reading every other
  sprung joint type invites: box3d solves a channel with the joint's own constraint softness while
- its hertz is exactly 0 and builds a soft spring only above it, so raising linear_hertz off 0
+ its hertz is exactly 0 and builds a soft spring at any other value, so raising linear_hertz off 0
  makes the weld sag where raising a distance joint's hertz makes it firmer. The two channels are
  tested separately, so one may be rigid while the other is soft.
+
+ box3d asserts all four fields are at or above 0 and this release build compiles that assertion
+ out, so a negative or NaN value is stored verbatim. A negative hertz is where the two halves of
+ the solver part company: the prepare step tests for exactly 0, so it builds a soft spring out of
+ the negative value, while the solve's bias gate tests for above 0 and so does not engage that
+ spring on its own.
 *>
 struct WeldJointDef {
     inline JointDef base;
@@ -1980,15 +1986,19 @@ extern fn JointId create_weld_joint_raw(
 typedef ParallelJointId = inline JointId;
 
 <*
- A parallel joint definition. The joint constrains the angle between the z axis of body A and the
- z axis of body B with a spring and holds nothing else — the two bodies are left free to
- translate and to spin about that shared axis — which is what keeps a body upright. Must come
- from default_parallel_joint_def(), which, unlike the prismatic and the weld default, zeroes
+ A parallel joint definition. The joint constrains the angle between the z axis of local frame A
+ and the z axis of local frame B with a spring and holds nothing else — the two bodies are left
+ free to translate and to spin about that shared axis — which is what keeps a body upright. Must
+ come from default_parallel_joint_def(), which, unlike the prismatic and the weld default, zeroes
  nothing it adds to the base: hertz is 1, damping_ratio is 1 and max_torque is float::max. A
  default parallel joint is already sprung.
 
  The spring is gated on max_torque rather than merely bounded by it: box3d solves it only while
  the ceiling is above 0, so a max_torque of 0 stops the joint constraining anything at all.
+
+ box3d asserts hertz, damping_ratio and max_torque are each a real number at or above 0 and this
+ release build compiles that assertion out, so a negative or NaN value is stored verbatim and
+ reaches the solver.
 *>
 struct ParallelJointDef {
     inline JointDef base;

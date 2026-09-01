@@ -2854,10 +2854,16 @@ extern fn Vec3 SphericalJointId.motor_velocity(self) @cname("b3SphericalJoint_Ge
  constraint_torque() sums this vector with the spring's and with the two limits' along axes it
  recomputes from the bodies' current rotations, so on a joint whose spring and limits are all
  silent the two accessors report the same vector, and on one whose spring is working the shared
- accessor is their sum with neither counted twice and no axis permuted. The cone limit is the
- exception: its impulse enters that sum with the sign opposite to the one box3d applies it with,
- so a cone holding a motor still means the two torques add there instead of cancelling, and the
- shared accessor reports twice what the motor is applying rather than the nothing the two come to.
+ accessor is their sum with neither counted twice and no axis permuted. The two limits are what
+ break it, and each breaks it in its own way. The cone's impulse enters that sum with the sign
+ opposite to the one box3d applies it with, so a cone holding a motor still means the two torques
+ add there instead of cancelling, and the shared accessor reports twice what the motor is applying
+ rather than the nothing the two come to. The twist's impulse is laid along local frame B's z
+ axis, where the solve and the warm start drive it along a jacobian box3d builds instead from
+ local frame A's cone axis and the swing between the two frames. Those two are the same vector
+ only while the swing angle is 0, which is why a joint that only twists reads correctly. So a ball
+ that is both swung and twisted is wrong on the twist channel as well as on the cone, by no fixed
+ factor: correcting the cone's sign alone would still not make the shared reading the joint's.
 *>
 extern fn Vec3 SphericalJointId.motor_torque(self) @cname("b3SphericalJoint_GetMotorTorque");
 

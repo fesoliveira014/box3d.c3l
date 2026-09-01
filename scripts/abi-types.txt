@@ -57,3 +57,4 @@ b3Manifold points,normal,twistImpulse,frictionImpulse,rollingImpulse,pointCount
 b3JointType
 b3JointDef userData,bodyIdA,bodyIdB,localFrameA,localFrameB,forceThreshold,torqueThreshold,constraintHertz,constraintDampingRatio,drawScale,collideConnected,internalValue
 b3FilterJointDef base
+b3RevoluteJointDef base,targetAngle,enableSpring,hertz,dampingRatio,enableLimit,lowerAngle,upperAngle,enableMotor,maxMotorTorque,motorSpeed

@@ -1148,9 +1148,9 @@ struct ConstraintTuning {
 }
 
 <*
- Raw filter joint constructor. Bypasses WorldId.create_filter_joint's definition-cookie guard, so
- it is private to the module — box3d_joint.c3's WorldId.create_filter_joint is the only caller and
- is the only public way to a live joint.
+ Raw filter joint constructor. Bypasses WorldId.create_filter_joint's definition guard, so it is
+ private to the module — box3d_joint.c3's WorldId.create_filter_joint is the only caller and is the
+ only public way to a live filter joint.
 *>
 extern fn JointId create_filter_joint_raw(
   WorldId world_id,
@@ -1255,7 +1255,12 @@ extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce
 
 <*
  The torque this joint is applying to hold its constraint, in newton-metres. A zero is read
- against the joint's type rather than taken for an idle joint — see constraint_force.
+ against the joint's type rather than taken for an idle joint — see constraint_force. A non-zero
+ needs care too: some types double-count an axis here, the revolute joint's hinge axis among them,
+ so a per-type torque getter such as RevoluteJointId.motor_torque() is the honest reading wherever
+ one exists. Nor is it a pure getter on a revolute joint, where box3d writes the joint's two
+ perpendicular warm-starting axes on the way past — a write the next substep recomputes from the
+ same frames.
 *>
 extern fn Vec3 JointId.constraint_torque(self) @cname("b3Joint_GetConstraintTorque");
 
@@ -1347,3 +1352,212 @@ extern fn int body_joints_raw(
   JointId* joint_array,
   int capacity,
 ) @cname("b3Body_GetJoints") @private;
+
+<*
+ A joint known to be revolute. box3d resolves every per-type accessor through a joint-type
+ assertion this release build compiles out, so a revolute accessor reaching a joint of another
+ type reinterprets that joint's solver union instead: a getter hands back nonsense and a setter
+ writes over the other type's state. The distinct handle moves that check to the one place the
+ type is genuinely in question. A RevoluteJointId converts to a JointId on its own, so every
+ shared joint accessor reaches it uncast; the way back is JointId.as_revolute(), which checks.
+*>
+typedef RevoluteJointId = inline JointId;
+
+<*
+ A revolute joint definition. The joint fixes a point on body B to a point on body A and leaves
+ the two free to turn about the z axis of their local frames, with an optional spring, limit and
+ motor. Must come from default_revolute_joint_def(), which zeroes every field it adds to the
+ base: no spring, no limit, no motor, and hertz, damping_ratio and max_motor_torque all 0 rather
+ than the float::max thresholds the base defaults to. A default revolute joint is a bare hinge.
+
+ Three of the angles are corrected on the way in rather than taken as written: target_angle is
+ clamped into [-pi, pi], and lower_angle and upper_angle are swapped into order if they are
+ reversed and then both clamped into [-0.99 pi, 0.99 pi] — the same correction set_limits applies
+ at runtime. A joint's limits need not read back as the definition set them.
+*>
+struct RevoluteJointDef {
+    inline JointDef base;
+    float target_angle;
+    bool enable_spring;
+    float hertz;
+    float damping_ratio;
+    bool enable_limit;
+    float lower_angle;
+    float upper_angle;
+    bool enable_motor;
+    float max_motor_torque;
+    float motor_speed;
+}
+
+extern fn RevoluteJointDef default_revolute_joint_def() @cname("b3DefaultRevoluteJointDef");
+
+<*
+ Raw revolute joint constructor. Bypasses WorldId.create_revolute_joint's definition guard and
+ hands back a joint of no particular type, so it is private to the module —
+ box3d_joint_revolute.c3's WorldId.create_revolute_joint is the only caller and is the only public
+ way to a live revolute joint.
+*>
+extern fn JointId create_revolute_joint_raw(
+  WorldId world_id,
+  RevoluteJointDef* def,
+) @cname("b3CreateRevoluteJoint") @private;
+
+<*
+ Enables or disables this joint's motor. A change to the flag discards the motor's accumulated
+ impulse, so motor_torque() reads zero until the next step rather than the torque the motor was
+ applying before.
+*>
+extern fn void RevoluteJointId.enable_motor(self, bool enable_motor) @cname("b3RevoluteJoint_EnableMotor");
+
+<*
+ Whether this joint's motor is enabled. False on a joint built from a default definition.
+*>
+extern fn bool RevoluteJointId.is_motor_enabled(self) @cname("b3RevoluteJoint_IsMotorEnabled");
+
+<*
+ Sets the speed the motor drives the hinge at, in radians per second about the z axis of the two
+ local frames. It is a target the motor pursues only as far as max_motor_torque() lets it, not a
+ speed the hinge is made to hold. box3d asserts the value is finite and nothing further — a
+ negative speed drives the hinge the other way; this package links a release build where that
+ assertion is compiled out, and the wrappers do not restore it.
+*>
+extern fn void RevoluteJointId.set_motor_speed(self, float motor_speed) @cname("b3RevoluteJoint_SetMotorSpeed");
+
+<*
+ The speed the motor drives the hinge at, in radians per second. What was set, not what the hinge
+ is turning at.
+*>
+extern fn float RevoluteJointId.motor_speed(self) @cname("b3RevoluteJoint_GetMotorSpeed");
+
+<*
+ The torque the motor applied over the last step, in newton-metres, bounded by
+ max_motor_torque(). This is the honest reading of the two available. The shared
+ constraint_torque() double-counts the hinge axis: box3d adds the joint's axial impulse — spring
+ plus motor plus limit — along the frame z axis and then, under a note leaving pivot torque
+ unwritten, adds that identical quantity along the same axis a second time. On a joint with no
+ spring and no limit that makes constraint_torque() report exactly twice this value about the
+ hinge axis.
+*>
+extern fn float RevoluteJointId.motor_torque(self) @cname("b3RevoluteJoint_GetMotorTorque");
+
+<*
+ Sets the largest torque the motor may apply, in newton-metres. 0 on a joint built from a default
+ definition, which leaves an enabled motor unable to turn anything. box3d asserts the value is
+ finite and non-negative; this package links a release build where that assertion is compiled
+ out, and the wrappers do not restore it.
+*>
+extern fn void RevoluteJointId.set_max_motor_torque(self, float torque) @cname("b3RevoluteJoint_SetMaxMotorTorque");
+
+<*
+ The largest torque the motor may apply, in newton-metres.
+*>
+extern fn float RevoluteJointId.max_motor_torque(self) @cname("b3RevoluteJoint_GetMaxMotorTorque");
+
+<*
+ The hinge angle in radians: the twist about the frames' z axis of body B's local frame relative
+ to body A's, kept in [-pi, pi]. It is measured from the alignment of those two frames and from
+ nothing else — not from target_angle, and not from any reference angle, whatever box3d's header
+ comment on this function says. The sign follows the frame z axis, so a positive motor speed
+ drives the angle positive.
+*>
+extern fn float RevoluteJointId.angle(self) @cname("b3RevoluteJoint_GetAngle");
+
+<*
+ Enables or disables this joint's limit. A change to the flag discards the limit's accumulated
+ impulses, so a limit switched back on rebuilds its hold over the following steps rather than
+ resuming the one it had.
+*>
+extern fn void RevoluteJointId.enable_limit(self, bool enable_limit) @cname("b3RevoluteJoint_EnableLimit");
+
+<*
+ Whether this joint's limit is enabled. False on a joint built from a default definition. While it
+ is off — and while it is on but not exceeded — the shared angular_separation() strips the hinge
+ angle out of the relative rotation and reports what is left of the misalignment, which is zero for
+ a hinge whose perpendicular constraint is holding and non-zero for one bent off its axis under
+ load. Once the limit is on and the angle is past it the full relative rotation is reported
+ instead, which is the state-dependent zero JointId.constraint_force describes rather than a
+ permanent one.
+*>
+extern fn bool RevoluteJointId.is_limit_enabled(self) @cname("b3RevoluteJoint_IsLimitEnabled");
+
+<*
+ The low end of the angle the limit holds the hinge above, in radians about the frames' z axis. It
+ is what box3d stored, not what it was handed: see set_limits. 0 on a joint built from a default
+ definition.
+*>
+extern fn float RevoluteJointId.lower_limit(self) @cname("b3RevoluteJoint_GetLowerLimit");
+
+<*
+ The high end of the angle the limit holds the hinge below, in radians about the frames' z axis. It
+ is what box3d stored, not what it was handed: see set_limits. 0 on a joint built from a default
+ definition.
+*>
+extern fn float RevoluteJointId.upper_limit(self) @cname("b3RevoluteJoint_GetUpperLimit");
+
+<*
+ Sets the two angles in radians the limit holds the hinge between. box3d takes the smaller of the
+ pair as the lower and the larger as the upper, so a reversed pair is quietly corrected rather than
+ refused, and then clamps both into [-0.99 pi, 0.99 pi]. A wrapper faulting on a reversed pair would
+ contradict the library, so the binding documents the swap instead of guarding it. The limit acts
+ only while enable_limit() is on. box3d asserts both values are finite — their order and their
+ range it corrects rather than asserts; this package links a release build where that assertion is
+ compiled out, and the wrappers do not restore it.
+*>
+extern fn void RevoluteJointId.set_limits(self, float lower_radians, float upper_radians) @cname("b3RevoluteJoint_SetLimits");
+
+<*
+ Enables or disables this joint's angular spring. A change to the flag discards the spring's
+ accumulated impulse, so a spring switched back on rebuilds its pull over the following steps
+ rather than resuming the one it had.
+*>
+extern fn void RevoluteJointId.enable_spring(self, bool enable_spring) @cname("b3RevoluteJoint_EnableSpring");
+
+<*
+ Whether this joint's angular spring is enabled. False on a joint built from a default definition.
+*>
+extern fn bool RevoluteJointId.is_spring_enabled(self) @cname("b3RevoluteJoint_IsSpringEnabled");
+
+<*
+ Sets the spring's stiffness in hertz. 0 on a joint built from a default definition, which leaves
+ an enabled spring pulling on nothing. box3d asserts the value is finite and non-negative; this
+ package links a release build where that assertion is compiled out, and the wrappers do not
+ restore it.
+*>
+extern fn void RevoluteJointId.set_spring_hertz(self, float hertz) @cname("b3RevoluteJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz.
+*>
+extern fn float RevoluteJointId.spring_hertz(self) @cname("b3RevoluteJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional: 1 settles the hinge on its target without
+ overshooting it. box3d asserts the value is finite and non-negative under the same compiled-out
+ assertion set_spring_hertz describes.
+*>
+extern fn void RevoluteJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3RevoluteJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional.
+*>
+extern fn float RevoluteJointId.spring_damping_ratio(self) @cname("b3RevoluteJoint_GetSpringDampingRatio");
+
+<*
+ Sets the spring's rest angle in radians about the frames' z axis: the angle the spring pulls the
+ hinge toward while enable_spring() is on. The spring is the only thing box3d reads it for, and
+ angle() in particular is not measured against it — angle() is the twist between the two local
+ frames and carries no target term, so a hinge a spring has settled on a target of 0.7 reads 0.7.
+
+ The value is stored as handed. box3d clamps a definition's target_angle into [-pi, pi] on the way
+ through the constructor but this setter only asserts that the value is finite and inside the same
+ range, and this package links a release build where that assertion is compiled out — a target set
+ here can sit outside the range the same target in a definition would have been clamped into.
+*>
+extern fn void RevoluteJointId.set_target_angle(self, float target_radians) @cname("b3RevoluteJoint_SetTargetAngle");
+
+<*
+ The spring's rest angle in radians. 0 on a joint built from a default definition. What box3d
+ stored, which is the definition's value clamped into [-pi, pi] or the setter's value unclamped:
+ see set_target_angle.
+*>
+extern fn float RevoluteJointId.target_angle(self) @cname("b3RevoluteJoint_GetTargetAngle");

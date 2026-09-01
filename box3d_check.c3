@@ -6,6 +6,7 @@ faultdef
     INVALID_HANDLE,
     DOUBLE_PRECISION_LIBRARY,
     WRONG_SHAPE_TYPE,
+    WRONG_JOINT_TYPE,
     NO_HIT;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;

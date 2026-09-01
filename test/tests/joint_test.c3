@@ -243,6 +243,99 @@ fn void a_filter_joint_definition_naming_no_bodies_is_refused() @test {
         "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
 }
 
+struct RecycledWorldOutcome {
+    bool same_slot;
+    bool not_null;
+    fault refusal;
+}
+
+// A body identifier outlives the world it came from, and box3d hands the next world the slot the
+// destroyed one left. The dead world gets two bodies and the live one gets a single body, so the
+// stale identifier names the live world's slot at an index that world never issued, with both of
+// the fields a hand-written guard can compare still matching. The first world is scoped so that
+// its defer destroys it before the second is created, which is what hands the slot on.
+fn RecycledWorldOutcome the_refusal_of_a_definition_naming_a_recycled_world() {
+    b3::WorldDef world_def = b3::default_world_def();
+
+    b3::BodyId stale;
+    {
+        b3::WorldId gone = b3::create_world(&world_def)!!;
+        defer gone.destroy();
+        a_dynamic_sphere_at(gone, -1.0);
+        stale = a_dynamic_sphere_at(gone, 1.0);
+    }
+
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+    b3::BodyId live = a_dynamic_sphere_at(world, 0.0);
+
+    b3::FilterJointDef joint_def = b3::default_filter_joint_def();
+    joint_def.body_id_a = live;
+    joint_def.body_id_b = stale;
+
+    RecycledWorldOutcome outcome = {
+        .same_slot = stale.world0 == world.index1 - 1,
+        .not_null = !stale.is_null(),
+    };
+    if (catch err = world.create_filter_joint(&joint_def)) outcome.refusal = err;
+    return outcome;
+}
+
+fn void a_joint_definition_naming_a_body_of_a_destroyed_world_is_refused() @test {
+    RecycledWorldOutcome outcome = the_refusal_of_a_definition_naming_a_recycled_world();
+
+    assert(outcome.same_slot, "the recycled world took the destroyed one's slot, so the world comparison passes");
+    assert(outcome.not_null, "and the identifier is set, so the null comparison passes too");
+    assert(outcome.refusal == b3::INVALID_DEFINITION,
+        "a body identifier the live world never issued is indexed and written through all the same");
+}
+
+struct RecycledWorldHandleOutcome {
+    bool same_slot;
+    bool bodies_valid;
+    fault refusal;
+}
+
+// The mirror of the case above: the two bodies are live and it is the world handle that is stale.
+// box3d's generation test on a world identifier is an assertion this release build compiles out,
+// so the constructor would resolve the destroyed world's handle to the world that has since taken
+// its slot and build the joint in that one instead. The first world exists only long enough to
+// hand its slot on, so only its handle outlives it and the world itself is scoped.
+fn RecycledWorldHandleOutcome the_refusal_of_a_joint_built_through_a_recycled_world_handle() {
+    b3::WorldDef world_def = b3::default_world_def();
+
+    b3::WorldId gone;
+    {
+        gone = b3::create_world(&world_def)!!;
+        defer gone.destroy();
+    }
+
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+
+    b3::FilterJointDef joint_def = b3::default_filter_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+
+    RecycledWorldHandleOutcome outcome = {
+        .same_slot = gone.index1 == world.index1,
+        .bodies_valid = a.is_valid() && b.is_valid(),
+    };
+    if (catch err = gone.create_filter_joint(&joint_def)) outcome.refusal = err;
+    return outcome;
+}
+
+fn void a_joint_built_through_a_handle_to_a_destroyed_world_is_refused() @test {
+    RecycledWorldHandleOutcome outcome = the_refusal_of_a_joint_built_through_a_recycled_world_handle();
+
+    assert(outcome.same_slot, "the live world took the destroyed one's slot, so the world comparison passes");
+    assert(outcome.bodies_valid, "and both bodies are live, so the identifier checks pass too");
+    assert(outcome.refusal == b3::INVALID_DEFINITION,
+        "only the world's own generation separates the stale handle from the live world it names");
+}
+
 struct JointIdentity {
     b3::JointType type;
     b3::BodyId a;
@@ -745,4 +838,697 @@ fn void a_joint_event_carries_the_user_data_its_joint_was_given() @test {
 
     assert(armed.count == 1, "the length is what makes the event safe to read");
     assert(armed.user_data == &sentinel, "the event hands back what set_user_data wrote on the joint");
+}
+
+fn void the_revolute_joint_types_match_the_c_layout() @test {
+    assert(b3::RevoluteJointDef::size == 152);
+    assert(b3::RevoluteJointDef::alignment == 8);
+}
+
+// 0 is exactly representable as a float, so these compare exactly rather than in a band.
+fn void the_default_revolute_joint_definition_zeroes_every_field_it_adds_to_the_base() @test {
+    b3::RevoluteJointDef def = b3::default_revolute_joint_def();
+
+    assert(def.target_angle == 0.0);
+    assert(!def.enable_spring, "a default revolute joint is a bare hinge");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(!def.enable_limit);
+    assert(def.lower_angle == 0.0);
+    assert(def.upper_angle == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_torque == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.motor_speed == 0.0);
+}
+
+fn void a_default_revolute_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::RevoluteJointDef def = b3::default_revolute_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+fn b3::RevoluteJointId link_with_a_revolute_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_revolute_joint(&joint_def)!!;
+}
+
+struct RevoluteHandleReport {
+    b3::JointType type;
+    b3::BodyId expected_a;
+    b3::BodyId reported_a;
+    bool valid;
+}
+
+// Every accessor here is a shared JointId one called on a RevoluteJointId with no cast, which is
+// what the inline typedef buys.
+fn RevoluteHandleReport the_shared_accessors_on_a_new_hinge() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::RevoluteJointId hinge = link_with_a_revolute_joint(world, a, b);
+
+    return {
+        .type = hinge.type(),
+        .expected_a = a,
+        .reported_a = hinge.body_a(),
+        .valid = hinge.is_valid(),
+    };
+}
+
+enum HingeBodies {
+    UNSET,
+    THIS_WORLD,
+    ANOTHER_WORLD,
+}
+
+// Two worlds every time, both destroyed, so that the cross-world row differs from the others in
+// nothing but which world its second body came from.
+fn fault refusal_of_a_revolute_joint_definition(b3::RevoluteJointDef* def, HingeBodies bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+    b3::WorldId elsewhere = b3::create_world(&world_def)!!;
+    defer elsewhere.destroy();
+
+    if (bodies != HingeBodies.UNSET) {
+        b3::WorldId home_of_b = bodies == HingeBodies.ANOTHER_WORLD ? elsewhere : world;
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(home_of_b, 1.0);
+    }
+
+    if (catch err = world.create_revolute_joint(def)) return err;
+    return {};
+}
+
+struct HingeConversion {
+    b3::JointId hinge;
+    b3::JointId narrowed;
+    bool converted;
+    fault filter_refusal;
+}
+
+fn HingeConversion the_conversions_of_a_hinge_and_a_filter_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+    b3::JointId filter = link_with_a_filter_joint(world, a, b);
+
+    HingeConversion conversion = {.hinge = hinge};
+    if (try narrowed = hinge.as_revolute()) {
+        conversion.narrowed = narrowed;
+        conversion.converted = true;
+    }
+    if (catch err = filter.as_revolute()) conversion.filter_refusal = err;
+    return conversion;
+}
+
+fn void a_revolute_joint_reports_its_own_type() @test {
+    RevoluteHandleReport report = the_shared_accessors_on_a_new_hinge();
+
+    assert(report.type == b3::JointType.REVOLUTE);
+}
+
+fn void the_shared_joint_accessors_reach_a_revolute_handle_uncast() @test {
+    RevoluteHandleReport report = the_shared_accessors_on_a_new_hinge();
+
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void a_zeroed_revolute_joint_definition_is_refused() @test {
+    b3::RevoluteJointDef zeroed;
+
+    fault refusal = refusal_of_a_revolute_joint_definition(&zeroed, HingeBodies.THIS_WORLD);
+
+    assert(refusal == b3::INVALID_DEFINITION, "box3d accepts a zeroed joint definition; the binding must not");
+}
+
+fn void a_revolute_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::RevoluteJointDef bodiless = b3::default_revolute_joint_def();
+
+    fault refusal = refusal_of_a_revolute_joint_definition(&bodiless, HingeBodies.UNSET);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+}
+
+// The control is the row above it: the same definition with both bodies from the calling world is
+// accepted, so the refusal here is the world the second body came from and nothing else.
+fn void a_revolute_joint_definition_naming_a_body_of_another_world_is_refused() @test {
+    b3::RevoluteJointDef stranger = b3::default_revolute_joint_def();
+
+    fault refusal = refusal_of_a_revolute_joint_definition(&stranger, HingeBodies.ANOTHER_WORLD);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "box3d resolves a body identifier against the world it was handed, not the world it came from");
+
+    fault none;
+    b3::RevoluteJointDef local = b3::default_revolute_joint_def();
+    fault accepted = refusal_of_a_revolute_joint_definition(&local, HingeBodies.THIS_WORLD);
+    assert(accepted == none, "the same definition with both bodies from the calling world is accepted");
+}
+
+fn void a_revolute_joint_converts_to_its_own_handle_and_a_filter_joint_does_not() @test {
+    HingeConversion conversion = the_conversions_of_a_hinge_and_a_filter_joint();
+
+    assert(conversion.converted, "as_revolute takes back the joint it was given");
+    assert(conversion.narrowed.index1 == conversion.hinge.index1);
+    assert(conversion.narrowed.world0 == conversion.hinge.world0);
+    assert(conversion.narrowed.generation == conversion.hinge.generation);
+    assert(conversion.filter_refusal == b3::WRONG_JOINT_TYPE,
+        "a revolute accessor on another joint type reinterprets that joint's solver union");
+}
+
+struct DestroyedHingeConversion {
+    bool valid_before;
+    b3::JointType type_after;
+    fault refusal;
+}
+
+// The joint is destroyed while its world lives on, so the handle names a joint slot box3d has
+// freed rather than a world that is gone. box3d leaves the slot's type where it was, which is why
+// reading the type is not on its own enough to refuse the handle.
+fn DestroyedHingeConversion the_conversion_of_a_destroyed_hinge() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+
+    DestroyedHingeConversion conversion = {.valid_before = hinge.is_valid()};
+    hinge.destroy(false);
+    conversion.type_after = hinge.type();
+    if (catch err = hinge.as_revolute()) conversion.refusal = err;
+    return conversion;
+}
+
+fn void a_destroyed_joint_does_not_narrow_to_a_revolute_handle() @test {
+    DestroyedHingeConversion conversion = the_conversion_of_a_destroyed_hinge();
+
+    assert(conversion.valid_before, "the joint was live before it was destroyed");
+    assert(conversion.type_after == b3::JointType.REVOLUTE,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversion.refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+}
+
+fn b3::BodyId a_static_sphere_at_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct HingeDrive {
+    float angle;
+    b3::Quat rotation;
+}
+
+// One second at 1/60 s, against a static body, so the whole rotation is the dynamic body's and
+// the motor is the only thing acting on it.
+fn HingeDrive a_hinge_after_a_second(bool enable_motor) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = enable_motor;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.angle = hinge.angle(), .rotation = turning.rotation()};
+}
+
+struct MotorSettings {
+    bool enabled;
+    float speed;
+    float max_torque;
+    bool enabled_after;
+    float speed_after;
+    float max_torque_after;
+}
+
+fn MotorSettings the_motor_settings_of_a_hinge_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    MotorSettings settings = {
+        .enabled = hinge.is_motor_enabled(),
+        .speed = hinge.motor_speed(),
+        .max_torque = hinge.max_motor_torque(),
+    };
+
+    hinge.enable_motor(false);
+    hinge.set_motor_speed(-0.5);
+    hinge.set_max_motor_torque(12.5);
+
+    settings.enabled_after = hinge.is_motor_enabled();
+    settings.speed_after = hinge.motor_speed();
+    settings.max_torque_after = hinge.max_motor_torque();
+    return settings;
+}
+
+struct HingeTorque {
+    float motor_torque;
+    float constraint_torque_z;
+}
+
+// The arm weighs far more than a 500 newton-metre motor can hold at this length, so the motor
+// stays at its ceiling for the whole run instead of settling at a load it balances. That is what
+// makes the reading exact enough to compare the two torques against each other.
+fn HingeTorque the_torques_of_an_arm_heavier_than_its_motor() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId arm = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1000.0;
+    b3::Capsule capsule = {.center1 = {0.0, 0.0, 0.0}, .center2 = {2.0, 0.0, 0.0}, .radius = 0.25};
+    arm.create_capsule_shape(&shape_def, &capsule)!!;
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = arm;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 0.0;
+    joint_def.max_motor_torque = 500.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 180; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.motor_torque = hinge.motor_torque(), .constraint_torque_z = hinge.constraint_torque().z};
+}
+
+// 1.8994 rather than the nominal 2.0 because the solver ramps the motor up over the first steps.
+// The band is wide enough to hold that and narrow enough to exclude both a hinge that never
+// turned and one that reached the nominal figure.
+fn void a_motor_turns_the_hinge_at_about_the_speed_it_was_given() @test {
+    HingeDrive driven = a_hinge_after_a_second(true);
+
+    assert(driven.angle > 1.85 && driven.angle < 1.95,
+        "a motor at 2 rad/s turns the hinge nearly two radians in a second");
+}
+
+fn void a_motor_turns_the_hinge_about_the_frames_z_axis_and_no_other() @test {
+    HingeDrive driven = a_hinge_after_a_second(true);
+
+    assert(driven.rotation.i > -0.001 && driven.rotation.i < 0.001,
+        "an axis confusion turns a plausible angle about the wrong axis");
+    assert(driven.rotation.j > -0.001 && driven.rotation.j < 0.001);
+    assert(driven.rotation.k > 0.80 && driven.rotation.k < 0.83);
+}
+
+// The control for the two above: the same definition with only the motor flag cleared.
+fn void a_hinge_whose_motor_is_disabled_does_not_turn() @test {
+    HingeDrive idle = a_hinge_after_a_second(false);
+
+    assert(idle.angle > -0.01 && idle.angle < 0.01, "the speed and torque a disabled motor carries drive nothing");
+}
+
+fn void the_motor_settings_of_a_hinge_round_trip() @test {
+    MotorSettings settings = the_motor_settings_of_a_hinge_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the motor its definition asked for");
+    assert(settings.speed == 2.0);
+    assert(settings.max_torque == 1000.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.speed_after == -0.5);
+    assert(settings.max_torque_after == 12.5);
+}
+
+// An upstream trait a consumer reaching for the shared accessor would otherwise be caught by:
+// box3d adds the hinge's axial impulse to the constraint torque twice about the same axis, so
+// only the per-type reading is the torque the motor applied.
+fn void the_shared_constraint_torque_reports_twice_a_revolute_motor_torque() @test {
+    HingeTorque torque = the_torques_of_an_arm_heavier_than_its_motor();
+
+    assert(torque.motor_torque > 499.9 && torque.motor_torque < 500.1,
+        "the motor is held at the ceiling it was given");
+    assert(torque.constraint_torque_z > 999.8 && torque.constraint_torque_z < 1000.2);
+
+    float ratio = torque.constraint_torque_z / torque.motor_torque;
+    assert(ratio > 1.999 && ratio < 2.001, "the shared accessor double-counts the hinge axis");
+}
+
+// The same motor as the drive above with a limit in its definition, run for twice as long as an
+// unlimited hinge needs to pass 0.5, so the reading is the limit holding rather than the run
+// stopping early.
+fn float the_angle_of_a_motor_driven_hinge_after_two_seconds(bool enable_limit) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    joint_def.enable_limit = enable_limit;
+    joint_def.lower_angle = -0.5;
+    joint_def.upper_angle = 0.5;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return hinge.angle();
+}
+
+struct HingeLimits {
+    float lower;
+    float upper;
+}
+
+fn HingeLimits the_limits_of_a_hinge_set_to(float lower, float upper) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+    b3::RevoluteJointId hinge = link_with_a_revolute_joint(world, anchor, turning);
+
+    hinge.set_limits(lower, upper);
+    return {.lower = hinge.lower_limit(), .upper = hinge.upper_limit()};
+}
+
+fn HingeLimits the_limits_of_a_hinge_whose_definition_reversed_them() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_limit = true;
+    joint_def.lower_angle = 1.0;
+    joint_def.upper_angle = -1.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    return {.lower = hinge.lower_limit(), .upper = hinge.upper_limit()};
+}
+
+struct HingeLimitFlags {
+    bool on_a_default_hinge;
+    bool from_the_definition;
+    bool after_enabling;
+    bool after_disabling;
+}
+
+fn HingeLimitFlags the_limit_flags_of_a_bare_hinge_and_a_limited_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+    b3::RevoluteJointId bare = link_with_a_revolute_joint(world, anchor, turning);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_limit = true;
+    joint_def.lower_angle = -0.5;
+    joint_def.upper_angle = 0.5;
+    b3::RevoluteJointId limited = world.create_revolute_joint(&joint_def)!!;
+
+    HingeLimitFlags flags = {
+        .on_a_default_hinge = bare.is_limit_enabled(),
+        .from_the_definition = limited.is_limit_enabled(),
+    };
+
+    bare.enable_limit(true);
+    limited.enable_limit(false);
+    flags.after_enabling = bare.is_limit_enabled();
+    flags.after_disabling = limited.is_limit_enabled();
+    return flags;
+}
+
+struct HingeSeparations {
+    float while_the_limit_is_off;
+    float once_the_limit_is_exceeded;
+}
+
+// The hinge is driven well past the limit first and the limit armed afterwards without a further
+// step, so the two readings differ in the limit's state and in nothing else.
+fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_limit() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    float off = hinge.angular_separation();
+    hinge.set_limits(-0.1, 0.1);
+    hinge.enable_limit(true);
+
+    return {.while_the_limit_is_off = off, .once_the_limit_is_exceeded = hinge.angular_separation()};
+}
+
+// The closing condition for the limit family. The band holds 0.500134 and excludes both a hinge
+// the limit never caught and the angle the same motor reaches with the limit cleared.
+fn void a_limit_stops_the_motor_that_drives_the_hinge_into_it() @test {
+    float angle = the_angle_of_a_motor_driven_hinge_after_two_seconds(true);
+
+    assert(angle > 0.49 && angle < 0.51, "the motor is held at the limit rather than turning past it");
+}
+
+// The control for the one above: the same definition with only the limit flag cleared. Two seconds
+// at 2 rad/s carries the hinge past half a turn and angle() is kept in [-pi, pi], so the unlimited
+// outcome is the 1.899400 the motor test measures over the first second plus another two radians,
+// wrapped. The band holds the measured -2.383774 and excludes both the 0.500134 the limit holds
+// and a hinge that never turned.
+fn void a_hinge_whose_limit_is_disabled_turns_past_it() @test {
+    float angle = the_angle_of_a_motor_driven_hinge_after_two_seconds(false);
+
+    assert(angle > -2.44 && angle < -2.34, "the two angles a disabled limit carries hold nothing back");
+}
+
+// 1 and -1 are exactly representable and need no clamping, so the swap shows up exactly.
+fn void a_reversed_pair_of_limits_is_swapped_into_order_rather_than_refused() @test {
+    HingeLimits limits = the_limits_of_a_hinge_set_to(1.0, -1.0);
+
+    assert(limits.lower == -1.0, "box3d takes the smaller of the two as the lower");
+    assert(limits.upper == 1.0);
+}
+
+fn void limits_beyond_the_half_turn_box3d_allows_are_clamped_to_it() @test {
+    HingeLimits limits = the_limits_of_a_hinge_set_to(-10.0, 10.0);
+
+    assert(limits.lower > -3.12 && limits.lower < -3.10, "0.99 pi, not the ten radians it was handed");
+    assert(limits.upper > 3.10 && limits.upper < 3.12);
+}
+
+// The constructor applies the same correction as set_limits, so a definition can name its two
+// angles in either order and the joint still comes out ordered.
+fn void a_definition_that_reverses_its_two_angles_still_builds_an_ordered_limit() @test {
+    HingeLimits limits = the_limits_of_a_hinge_whose_definition_reversed_them();
+
+    assert(limits.lower == -1.0);
+    assert(limits.upper == 1.0);
+}
+
+fn void the_limit_flag_of_a_hinge_starts_off_and_round_trips() @test {
+    HingeLimitFlags flags = the_limit_flags_of_a_bare_hinge_and_a_limited_one();
+
+    assert(!flags.on_a_default_hinge, "a default revolute joint is a bare hinge");
+    assert(flags.from_the_definition, "the joint reports the limit its definition asked for");
+    assert(flags.after_enabling);
+    assert(!flags.after_disabling);
+}
+
+// The concrete case of a shared accessor whose zero is the joint's state rather than its type:
+// the same hinge at the same angle reads zero with the limit off and the full quaternion angle
+// once the limit is armed inside it.
+fn void a_hinge_reports_no_angular_separation_until_its_limit_is_armed() @test {
+    HingeSeparations separations = the_angular_separations_of_a_turned_hinge_around_arming_its_limit();
+
+    assert(separations.while_the_limit_is_off == 0.0, "box3d strips the hinge angle while the limit is off");
+    assert(separations.once_the_limit_is_exceeded > 1.85 && separations.once_the_limit_is_exceeded < 1.95,
+        "the zero was the limit's state, not a separation this joint type never measures");
+}
+
+// Five seconds at 1/60 s against a static body with no gravity and no motor, so the spring is
+// the only thing that can turn the hinge and it has time to settle rather than still be swinging.
+fn float the_angle_of_a_sprung_hinge_after_five_seconds(bool enable_spring, float target) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_spring = enable_spring;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_angle = target;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return hinge.angle();
+}
+
+struct SpringSettings {
+    bool enabled;
+    float hertz;
+    float damping_ratio;
+    float target;
+    bool enabled_after;
+    float hertz_after;
+    float damping_ratio_after;
+    float target_after;
+}
+
+fn SpringSettings the_spring_settings_of_a_hinge_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_angle = 0.5;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    SpringSettings settings = {
+        .enabled = hinge.is_spring_enabled(),
+        .hertz = hinge.spring_hertz(),
+        .damping_ratio = hinge.spring_damping_ratio(),
+        .target = hinge.target_angle(),
+    };
+
+    hinge.enable_spring(false);
+    hinge.set_spring_hertz(8.0);
+    hinge.set_spring_damping_ratio(0.25);
+    hinge.set_target_angle(-1.5);
+
+    settings.enabled_after = hinge.is_spring_enabled();
+    settings.hertz_after = hinge.spring_hertz();
+    settings.damping_ratio_after = hinge.spring_damping_ratio();
+    settings.target_after = hinge.target_angle();
+    return settings;
+}
+
+// The closing condition for the spring family. The band holds the measured 0.699938 and excludes
+// a hinge the spring never moved.
+fn void a_spring_settles_the_hinge_on_its_target_angle() @test {
+    float angle = the_angle_of_a_sprung_hinge_after_five_seconds(true, 0.7);
+
+    assert(angle > 0.69 && angle < 0.71, "a critically damped spring arrives on its target and stays there");
+}
+
+// The same spring aimed the other way, so the test pins the target rather than one settled angle.
+fn void a_spring_settles_the_hinge_wherever_its_target_points() @test {
+    float angle = the_angle_of_a_sprung_hinge_after_five_seconds(true, -0.4);
+
+    assert(angle > -0.41 && angle < -0.39, "the hinge follows the target rather than a fixed angle");
+}
+
+// The control for the two above: the same stiffness, damping and target with only the spring flag
+// cleared. Without it a settle test could pass on a hinge that was never sprung at all.
+fn void a_hinge_whose_spring_is_disabled_does_not_turn() @test {
+    float angle = the_angle_of_a_sprung_hinge_after_five_seconds(false, 0.7);
+
+    assert(angle > -0.01 && angle < 0.01, "the stiffness and target a disabled spring carries pull on nothing");
+}
+
+// 2, 1, 0.5, 8, 0.25 and -1.5 are all exactly representable as floats, so they compare exactly.
+fn void the_spring_settings_of_a_hinge_round_trip() @test {
+    SpringSettings settings = the_spring_settings_of_a_hinge_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the spring its definition asked for");
+    assert(settings.hertz == 2.0);
+    assert(settings.damping_ratio == 1.0);
+    assert(settings.target == 0.5);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.hertz_after == 8.0);
+    assert(settings.damping_ratio_after == 0.25);
+    assert(settings.target_after == -1.5);
 }

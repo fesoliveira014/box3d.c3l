@@ -1447,7 +1447,9 @@ struct CompoundCast {
     int child_index;
     int material_index;
     float y;
+    float normal_x;
     float normal_y;
+    float normal_z;
 }
 
 struct CompoundShapeReading {
@@ -1466,7 +1468,9 @@ fn CompoundCast the_cast_straight_down_at(b3::ShapeId shape, float x) {
           .child_index = hit.child_index,
           .material_index = hit.material_index,
           .y = hit.point.y,
+          .normal_x = hit.normal.x,
           .normal_y = hit.normal.y,
+          .normal_z = hit.normal.z,
         };
     }
     return {};
@@ -1503,9 +1507,9 @@ fn CompoundShapeReading the_children_a_compound_shape_reports() {
     return read;
 }
 
-// The closing condition of this slice: a compound shape reports the children it was built from.
-// Each ray is answered by one child and names it, and the gap between the two is answered by
-// neither, so the shape is the pair of children rather than anything covering both.
+// A compound shape reports the children it was built from. Each ray is answered by one child and
+// names it, and the gap between the two is answered by neither, so the shape is the pair of
+// children rather than anything covering both.
 fn void a_compound_shape_reports_the_children_it_was_built_from() @test {
     CompoundShapeReading read = the_children_a_compound_shape_reports();
 
@@ -1513,13 +1517,19 @@ fn void a_compound_shape_reports_the_children_it_was_built_from() @test {
     assert(read.over_the_wide_child.child_index == 0, "and is answered by the first child");
     assert(read.over_the_wide_child.y > 0.49 && read.over_the_wide_child.y < 0.51,
         "at its own radius above the centre the definition gave it");
-    assert(read.over_the_wide_child.normal_y > 0.99, "square on the top of the sphere");
+    assert(read.over_the_wide_child.normal_y > 0.99 && read.over_the_wide_child.normal_y < 1.01,
+        "square on the top of the sphere");
+    assert(read.over_the_wide_child.normal_x > -0.01 && read.over_the_wide_child.normal_x < 0.01,
+        "with nothing sideways in it, which a transposed vector would show");
+    assert(read.over_the_wide_child.normal_z > -0.01 && read.over_the_wide_child.normal_z < 0.01);
 
     assert(read.over_the_narrow_child.hit, "and the second sphere is two metres away");
     assert(read.over_the_narrow_child.child_index == 1, "answered by the second child");
     assert(read.over_the_narrow_child.y > 0.24 && read.over_the_narrow_child.y < 0.26,
         "at half the first one's radius, which a swap of the two would not report");
-    assert(read.over_the_narrow_child.normal_y > 0.99);
+    assert(read.over_the_narrow_child.normal_y > 0.99 && read.over_the_narrow_child.normal_y < 1.01);
+    assert(read.over_the_narrow_child.normal_x > -0.01 && read.over_the_narrow_child.normal_x < 0.01);
+    assert(read.over_the_narrow_child.normal_z > -0.01 && read.over_the_narrow_child.normal_z < 0.01);
 
     assert(!read.hit_between_them, "and the gap between them belongs to neither child");
 

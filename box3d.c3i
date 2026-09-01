@@ -779,11 +779,15 @@ extern fn SurfaceMaterial ShapeId.surface_material(self) @cname("b3Shape_GetSurf
  How many surface materials this shape holds. Despite the name it is not a mesh-only count: a
  shape whose definition named fewer than two materials keeps one inline and reports 1 whatever
  its type, and only a definition naming several — one per material index the mesh's triangles
- carry — makes it larger. Replacing the geometry does not change it.
+ carry — makes it larger.
 
- A compound shape answers from the compound rather than from the definition, and is the one shape
- that can report 0: box3d copies the compound's materials, one per distinct child material, and a
- compound with no children has none.
+ A shape built from a compound answers from the compound rather than from the definition: box3d
+ copies the compound's materials, one per distinct child material, so a compound with no children
+ gives 0.
+
+ The count is fixed when the shape is created and replacing the geometry does not change it, so a
+ shape built from an empty compound still reports 0 once set_sphere() has made it a sphere. Do not
+ read the count as a statement about the geometry the shape holds now.
 *>
 extern fn int ShapeId.mesh_material_count(self) @cname("b3Shape_GetMeshMaterialCount");
 

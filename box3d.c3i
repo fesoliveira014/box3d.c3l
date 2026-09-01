@@ -756,6 +756,60 @@ extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount")
 extern fn int DynamicTree.rebuild(&self, bool full_build) @cname("b3DynamicTree_Rebuild");
 
 <*
+ Called once for each proxy a query finds. Returning false ends the traversal, and the tree must
+ not be modified from inside the call: the traversal carries node indices across it, and a proxy
+ created or destroyed there makes them name something else.
+*>
+alias TreeQueryFn = fn bool(int proxy_id, ulong user_data, void* context);
+
+<*
+ Called once for each proxy a closest query reaches, given the search bound as it stands. Only a
+ return value below that bound takes effect, so the callback is what measures anything — see
+ DynamicTree.query_closest(). TreeQueryFn's rule against modifying the tree holds here too, and
+ for the same reason.
+*>
+alias TreeClosestFn = fn float(float search_bound, int proxy_id, ulong user_data, void* context);
+
+<*
+ Reports every proxy whose box overlaps aabb, calling fcn once for each until it returns false.
+
+ The two mask flags are not a refinement of each other: without require_all_bits a node passes on
+ any bit in common, with it the node must carry every bit of the mask. They agree only on a
+ single-bit mask, and a zero mask reports nothing loosely and every proxy strictly.
+*>
+extern fn TreeStats DynamicTree.query(
+  &self,
+  Aabb aabb,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeQueryFn fcn,
+  void* context,
+) @cname("b3DynamicTree_Query");
+
+<*
+ The closest traversal, whose in-out float box3d calls minDistanceSqr. box3d_tree.c3 takes that
+ bound by value and returns it alongside the counters, and is the only public way in.
+*>
+extern fn TreeStats query_closest_raw(
+  DynamicTree* tree,
+  Vec3 point,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeClosestFn fcn,
+  void* context,
+  float* search_bound,
+) @cname("b3DynamicTree_QueryClosest") @private;
+
+<*
+ What a closest query gives back: box3d's traversal counters and the search bound the callback
+ left, which is the bound the query started with when nothing returned anything smaller.
+*>
+struct ClosestQueryResult {
+    TreeStats stats;
+    float search_bound;
+}
+
+<*
  The ceiling on a compound's children, which is one more than the number it can hold: box3d
  refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
  API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER

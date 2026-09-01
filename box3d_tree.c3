@@ -99,3 +99,34 @@ fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
     return self.nodes[proxy_id].aabb;
 }
+
+<*
+ Walks the proxies nearest point first, calling fcn for each one still inside the search bound.
+
+ The tree measures no distance of its own: it prunes a node on the distance from point to that
+ node's box against the bound, and the bound narrows only to what fcn returns, so a callback
+ handing its argument back prunes nothing and the bound comes out as it went in. The mask flags
+ are tested exactly as query() tests them.
+
+ @param search_bound : "the squared distance to search within; a large one reaches every proxy"
+*>
+fn ClosestQueryResult DynamicTree.query_closest(
+  &self,
+  Vec3 point,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeClosestFn fcn,
+  void* context,
+  float search_bound,
+) {
+    TreeStats stats = query_closest_raw(
+      tree: self,
+      point: point,
+      mask_bits: mask_bits,
+      require_all_bits: require_all_bits,
+      fcn: fcn,
+      context: context,
+      search_bound: &search_bound,
+    );
+    return { .stats = stats, .search_bound = search_bound };
+}

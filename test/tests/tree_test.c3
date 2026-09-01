@@ -675,3 +675,389 @@ fn void a_box_that_box3d_would_assert_against_is_refused_by_both_mutators() @tes
     assert(guards.enlarged[2] == b3::INVALID_DEFINITION);
     assert(guards.enlarged[3] == none);
 }
+
+struct QueryHits {
+    ulong[8] user_data;
+    usz count;
+    usz stop_after;
+}
+
+fn bool collect_proxy_user_data(int proxy_id, ulong user_data, void* context) {
+    QueryHits* hits = (QueryHits*)context;
+    if (hits.count < 8) hits.user_data[hits.count] = user_data;
+    hits.count++;
+    return hits.stop_after == 0 || hits.count < hits.stop_after;
+}
+
+fn bool hits_carry_exactly(QueryHits hits, ulong[] expected) {
+    if (hits.count != expected.len) return false;
+    foreach (want : expected) {
+        bool found = false;
+        for (usz i = 0; i < hits.count; i++) {
+            if (hits.user_data[i] == want) found = true;
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+fn void fill_with_six_proxies(b3::DynamicTree* tree) {
+    for (int i = 0; i < 6; i++) {
+        tree.create_proxy(
+          aabb: (b3::Aabb){
+            .lower_bound = { i * 4.0f - 1.0f, -1.0, -1.0 },
+            .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
+          },
+          category_bits: 1ul << i,
+          user_data: (ulong)i,
+        )!!;
+    }
+}
+
+struct MovedProxyHits {
+    QueryHits before;
+    QueryHits after;
+    int[2] proxy_count;
+    int before_leaf_visits;
+}
+
+fn MovedProxyHits the_hits_before_and_after_one_proxy_moves() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    b3::Aabb here = {
+        .lower_bound = { -1.0, -1.0, -1.0 },
+        .upper_bound = { 1.0, 1.0, 1.0 },
+    };
+    b3::Aabb away = {
+        .lower_bound = { 4.0, -1.0, -1.0 },
+        .upper_bound = { 6.0, 1.0, 1.0 },
+    };
+    b3::Aabb window = {
+        .lower_bound = { -2.0, -2.0, -2.0 },
+        .upper_bound = { 2.0, 2.0, 2.0 },
+    };
+
+    tree.create_proxy(
+      aabb: here,
+      category_bits: ulong::max,
+      user_data: 111,
+    )!!;
+    int moved = tree.create_proxy(
+      aabb: away,
+      category_bits: ulong::max,
+      user_data: 222,
+    )!!;
+
+    QueryHits before;
+    b3::TreeStats stats = tree.query(
+      aabb: window,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &before,
+    );
+    int count_before = tree.proxy_count;
+
+    tree.move_proxy(moved, here)!!;
+
+    QueryHits after;
+    tree.query(
+      aabb: window,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &after,
+    );
+
+    return {
+        .before = before,
+        .after = after,
+        .proxy_count = { count_before, tree.proxy_count },
+        .before_leaf_visits = stats.leaf_visits,
+    };
+}
+
+// The user data is what is asserted rather than the count: a count alone passes for a tree that
+// answered with the wrong proxy. The proxy count is asserted beside it so a query that reported
+// every proxy in the tree cannot pass for one that reported the two inside the box.
+fn void a_query_reports_the_proxies_overlapping_its_box_and_follows_one_that_moves() @test {
+    MovedProxyHits hits = the_hits_before_and_after_one_proxy_moves();
+
+    assert(hits.proxy_count[0] == 2 && hits.proxy_count[1] == 2, "a move creates and destroys nothing");
+    assert(hits.before.count == 1, "one of the two starts inside the query box");
+    assert(hits_carry_exactly(hits.before, (ulong[]){ 111 }), "and it is the one at the origin");
+    assert(hits.before_leaf_visits == 1, "which box3d counts as one leaf visit");
+    assert(hits.after.count == 2, "and both are inside it once the far one is moved in");
+    assert(hits_carry_exactly(hits.after, (ulong[]){ 111, 222 }),
+        "each carrying the user data its own proxy was created with");
+}
+
+struct MaskedHits {
+    QueryHits loose;
+    QueryHits strict;
+    QueryHits unfiltered;
+}
+
+fn MaskedHits the_hits_of_six_proxies_under_one_mask() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+    fill_with_six_proxies(&tree);
+
+    b3::Aabb everywhere = {
+        .lower_bound = { -100.0, -100.0, -100.0 },
+        .upper_bound = { 100.0, 100.0, 100.0 },
+    };
+
+    MaskedHits hits;
+    tree.query(
+      aabb: everywhere,
+      mask_bits: 0b101,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &hits.loose,
+    );
+    tree.query(
+      aabb: everywhere,
+      mask_bits: 0b101,
+      require_all_bits: true,
+      fcn: &collect_proxy_user_data,
+      context: &hits.strict,
+    );
+    tree.query(
+      aabb: everywhere,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &hits.unfiltered,
+    );
+
+    return hits;
+}
+
+// Each proxy carries a single category bit, so a mask of two bits is a value at which the two
+// flags actually differ: any bit in common reports the two proxies the mask names, while
+// demanding every bit reports none, since no proxy carries more than one.
+fn void a_query_mask_reports_two_proxies_loosely_and_none_strictly() @test {
+    MaskedHits hits = the_hits_of_six_proxies_under_one_mask();
+
+    assert(hits.unfiltered.count == 6, "every proxy is inside the query box to begin with");
+    assert(hits.loose.count == 2, "and two of them carry a bit the mask names");
+    assert(hits_carry_exactly(hits.loose, (ulong[]){ 0, 2 }), "the ones created with bits one and four");
+    assert(hits.strict.count == 0, "while none of them carries both bits");
+}
+
+struct StoppedHits {
+    QueryHits stopped;
+    QueryHits every;
+    int stopped_leaf_visits;
+    int every_leaf_visits;
+}
+
+fn StoppedHits the_hits_when_a_callback_stops_the_traversal() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+    fill_with_six_proxies(&tree);
+
+    b3::Aabb everywhere = {
+        .lower_bound = { -100.0, -100.0, -100.0 },
+        .upper_bound = { 100.0, 100.0, 100.0 },
+    };
+
+    QueryHits stopped = { .stop_after = 1 };
+    b3::TreeStats stopped_stats = tree.query(
+      aabb: everywhere,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &stopped,
+    );
+
+    QueryHits every;
+    b3::TreeStats every_stats = tree.query(
+      aabb: everywhere,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &every,
+    );
+
+    return {
+        .stopped = stopped,
+        .every = every,
+        .stopped_leaf_visits = stopped_stats.leaf_visits,
+        .every_leaf_visits = every_stats.leaf_visits,
+    };
+}
+
+// The same tree and the same query box answer both, so the only difference is what the callback
+// returned. Without the contrast a traversal that visited one proxy for its own reasons would
+// pass for one the callback stopped.
+fn void a_query_callback_returning_false_ends_the_traversal() @test {
+    StoppedHits hits = the_hits_when_a_callback_stops_the_traversal();
+
+    assert(hits.every.count == 6, "a callback that keeps returning true is offered every proxy");
+    assert(hits.every_leaf_visits == 6);
+    assert(hits.stopped.count == 1, "and one that returns false is not called again");
+    assert(hits.stopped_leaf_visits == 1, "which box3d counts as the one leaf it reached");
+}
+
+struct ClosestVisits {
+    float[8] bound_seen;
+    ulong[8] user_data;
+    usz count;
+}
+
+fn float visit_without_narrowing(float search_bound, int proxy_id, ulong user_data, void* context) {
+    ClosestVisits* visits = (ClosestVisits*)context;
+    if (visits.count < 8) {
+        visits.bound_seen[visits.count] = search_bound;
+        visits.user_data[visits.count] = user_data;
+    }
+    visits.count++;
+    return search_bound;
+}
+
+fn float visit_and_narrow_to_half(float search_bound, int proxy_id, ulong user_data, void* context) {
+    ClosestVisits* visits = (ClosestVisits*)context;
+    if (visits.count < 8) {
+        visits.bound_seen[visits.count] = search_bound;
+        visits.user_data[visits.count] = user_data;
+    }
+    visits.count++;
+    return 0.5f;
+}
+
+struct ClosestReadings {
+    ClosestVisits wide;
+    ClosestVisits narrowed;
+    float initial_bound;
+    float wide_bound;
+    float narrowed_bound;
+    int wide_leaf_visits;
+    int narrowed_leaf_visits;
+}
+
+fn ClosestReadings the_visits_of_two_closest_queries() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+    fill_with_six_proxies(&tree);
+
+    float initial = 1.0e9f;
+
+    ClosestVisits wide;
+    b3::ClosestQueryResult wide_result = tree.query_closest(
+      point: { 0.0, 0.0, 0.0 },
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_without_narrowing,
+      context: &wide,
+      search_bound: initial,
+    );
+
+    ClosestVisits narrowed;
+    b3::ClosestQueryResult narrowed_result = tree.query_closest(
+      point: { 0.0, 0.0, 0.0 },
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_and_narrow_to_half,
+      context: &narrowed,
+      search_bound: initial,
+    );
+
+    return {
+        .wide = wide,
+        .narrowed = narrowed,
+        .initial_bound = initial,
+        .wide_bound = wide_result.search_bound,
+        .narrowed_bound = narrowed_result.search_bound,
+        .wide_leaf_visits = wide_result.stats.leaf_visits,
+        .narrowed_leaf_visits = narrowed_result.stats.leaf_visits,
+    };
+}
+
+// The tree prunes on the bound it is handed and never measures anything itself, so the callback
+// that returns its argument unchanged is offered every proxy and gets its own starting value
+// back, while the one that returns something smaller cuts the rest of the tree off at the first
+// leaf. Both bounds are values this test chose and are exactly representable as floats, so they
+// are compared exactly rather than banded.
+fn void a_closest_query_narrows_only_through_what_its_callback_returns() @test {
+    ClosestReadings readings = the_visits_of_two_closest_queries();
+
+    assert(readings.wide.count == 6, "a callback that never narrows is offered every proxy");
+    assert(readings.wide_leaf_visits == 6, "one leaf visit per callback");
+    assert(readings.wide_bound == readings.initial_bound, "and the bound comes back as it went in");
+    assert(readings.wide.bound_seen[0] == readings.initial_bound, "the first call is handed that same bound");
+    assert(readings.wide.user_data[0] == 0, "and the proxy holding the query point is offered first");
+
+    assert(readings.narrowed.count == 1, "a callback that narrows cuts off the proxies beyond the bound");
+    assert(readings.narrowed_leaf_visits == 1);
+    assert(readings.narrowed_bound == 0.5f, "and the bound it returned is the one that comes back");
+    assert(readings.narrowed.bound_seen[0] == readings.initial_bound,
+        "its own first call having been handed the starting bound too");
+}
+
+struct EmptyTreeAnswers {
+    usz hits;
+    int query_node_visits;
+    usz closest_visits;
+    int closest_node_visits;
+    float initial_bound;
+    float closest_bound;
+    int proxy_count;
+}
+
+fn EmptyTreeAnswers the_answers_an_empty_tree_gives() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+
+    b3::Aabb everywhere = {
+        .lower_bound = { -100.0, -100.0, -100.0 },
+        .upper_bound = { 100.0, 100.0, 100.0 },
+    };
+
+    float initial = 1.0e9f;
+
+    QueryHits hits;
+    b3::TreeStats stats = tree.query(
+      aabb: everywhere,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &collect_proxy_user_data,
+      context: &hits,
+    );
+
+    ClosestVisits visits;
+    b3::ClosestQueryResult closest = tree.query_closest(
+      point: { 0.0, 0.0, 0.0 },
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_and_narrow_to_half,
+      context: &visits,
+      search_bound: initial,
+    );
+
+    return {
+        .hits = hits.count,
+        .query_node_visits = stats.node_visits,
+        .closest_visits = visits.count,
+        .closest_node_visits = closest.stats.node_visits,
+        .initial_bound = initial,
+        .closest_bound = closest.search_bound,
+        .proxy_count = tree.proxy_count,
+    };
+}
+
+// Both traversals leave before they read a root, which is what keeps them off the -1 box3d marks
+// an empty root with. A callback that would have narrowed the bound is used, so a bound that came
+// back changed would mean the traversal had reached a node.
+fn void an_empty_tree_answers_both_traversals_without_a_single_hit() @test {
+    EmptyTreeAnswers answers = the_answers_an_empty_tree_gives();
+
+    assert(answers.proxy_count == 0, "nothing was ever inserted");
+    assert(answers.hits == 0, "so the box query calls nothing");
+    assert(answers.query_node_visits == 0, "and visits no node at all");
+    assert(answers.closest_visits == 0, "the closest query calls nothing either");
+    assert(answers.closest_node_visits == 0);
+    assert(answers.closest_bound == answers.initial_bound, "and gives its search bound straight back");
+}

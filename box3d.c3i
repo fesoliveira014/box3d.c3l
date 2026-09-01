@@ -1639,10 +1639,18 @@ extern fn JointId create_distance_joint_raw(
 extern fn void DistanceJointId.set_length(self, float length) @cname("b3DistanceJoint_SetLength");
 
 <*
- The rest length this joint holds its two anchors at: what its definition carried, or what
- set_length last stored after clamping. Not the distance the anchors are at now, which is what
- current_length() reads — even a rigid joint sits a little off its rest length, by the residual
- the solver leaves. Both are plain floats, so either one compiles where the other is meant.
+ The rest length this joint holds its two anchors at. Not the distance the anchors are at now,
+ which is what current_length() reads — even a rigid joint sits a little off its rest length, by
+ the residual the solver leaves. Both are plain floats, so either one compiles where the other is
+ meant.
+
+ It is what box3d stored, and the two paths that store it disagree at both ends. Construction
+ raises the definition's length to the linear slop and gives it no ceiling at all, so a
+ definition's 0 arrives as 0.005 length units while a definition's 1.0e7 arrives untouched — and
+ a zero or negative definition length is not refused on the way, because the check that would
+ have refused it is compiled out of this release build. set_length clamps instead, between that
+ same floor and box3d's huge value of 1.0e5 scaled by the length unit, so the very length a
+ definition keeps comes back from the setter cut down to 1.0e5 length units.
 *>
 extern fn float DistanceJointId.length(self) @cname("b3DistanceJoint_GetLength");
 

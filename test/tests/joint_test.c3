@@ -160,6 +160,17 @@ fn DestroyedJointOutcome two_sleeping_jointed_spheres_after_destroy(bool wake_at
     };
 }
 
+// The refusal comes back as a plain value for the same reason the helpers above return one: the
+// world is finished before the caller asserts, so a failing assertion cannot strand it.
+fn fault refusal_of_a_filter_joint_definition(b3::FilterJointDef* def) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (catch err = world.create_filter_joint(def)) return err;
+    return {};
+}
+
 // Two spheres of radius 0.5 whose centres start 0.8 apart overlap by 0.2, so they separate until
 // they touch at 1.0 unless the pair is filtered out of collision. The control row is what makes
 // the jointed row mean anything.
@@ -206,14 +217,18 @@ fn void a_joint_is_valid_until_it_is_destroyed() @test {
 }
 
 fn void a_zeroed_filter_joint_definition_is_refused() @test {
-    b3::WorldDef world_def = b3::default_world_def();
-    b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
-
     b3::FilterJointDef zeroed;
-    if (catch err = world.create_filter_joint(&zeroed)) {
-        assert(err == b3::INVALID_DEFINITION);
-        return;
-    }
-    assert(false, "box3d accepts a zeroed joint definition; the binding must not");
+
+    fault refusal = refusal_of_a_filter_joint_definition(&zeroed);
+
+    assert(refusal == b3::INVALID_DEFINITION, "box3d accepts a zeroed joint definition; the binding must not");
+}
+
+fn void a_filter_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::FilterJointDef bodiless = b3::default_filter_joint_def();
+
+    fault refusal = refusal_of_a_filter_joint_definition(&bodiless);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
 }

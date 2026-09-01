@@ -12,9 +12,11 @@ module b3;
  The refusal is not free of consequence. box3d rejects geometry holding no triangle with area,
  and a hierarchy too deep for its traversal stack, only after cloning the vertices and indices,
  and it frees only part of what it took: the rest stays on byte_count() for the life of the
- process. The refusals that come from counts alone — a grid with no cells, a torus with no
- segments, a definition naming fewer than three vertices or no triangles — are taken before
- box3d allocates anything.
+ process. Only what box3d can refuse on the counts alone — fewer than three vertices or no
+ triangles, so a grid with no cells, and a torus whose two resolutions multiply below three —
+ is taken before it allocates anything. Nothing else about the arguments says which path a
+ refusal takes: a torus of two by two or one by three resolution leaks, and so does a box with
+ two zero extents.
 
  @param material_count : "how many distinct material indices to spread over the triangles"
  @param identify_edges : "compute the shared-edge adjacency the solver uses to hide inner edges"
@@ -60,7 +62,7 @@ fn MeshData*? create_wave_mesh(
 
  @param radius : "the distance from the centre to the middle of the tube"
  @param thickness : "the radius of the tube itself"
- @return "the mesh, or DEGENERATE_GEOMETRY when either resolution is below 3"
+ @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
 *>
 fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, float radius, float thickness) {
     return checked_mesh(create_torus_mesh_raw(
@@ -75,7 +77,7 @@ fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, f
  Builds a closed box of twelve triangles wound outwards. Ownership and the fault work as they
  do for create_grid_mesh.
 
- @param extent : "the box half-widths; a zero component collapses a face and is refused"
+ @param extent : "the box half-widths; one zero component still builds, because the faces across the other two axes keep their area"
  @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
 *>
 fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {

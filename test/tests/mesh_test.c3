@@ -389,10 +389,11 @@ struct RolledBall {
 }
 
 // The grid runs sixteen unit cells along x and z from the origin corner, so a ball dropped at
-// (4, 1, 8) is over it for the whole run and leaves it with metres to spare. The control keeps
-// the field and drops only the shape, so the two runs differ in exactly one thing. Every
-// resource is destroyed here and nothing is asserted: C3 skips defer on a panicking assertion,
-// and a stranded height field sits on byte_count() for the rest of the process.
+// (4, 1, 8) is over it for the whole run and leaves it with metres to spare. The control builds
+// the field but no ground body at all, which is still the one-variable change the reading needs:
+// a static body carrying no shape has no proxy and makes no contact either. Every resource is
+// destroyed here and nothing is asserted: C3 skips defer on a panicking assertion, and a
+// stranded height field sits on byte_count() for the rest of the process.
 fn RolledBall the_ball_after_two_seconds(bool attach_the_height_field) {
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 16,
@@ -436,9 +437,10 @@ fn RolledBall the_ball_after_two_seconds(bool attach_the_height_field) {
     };
 }
 
-// The spin is what makes this a rolling test rather than a positional one: a ball skating across
-// a frictionless plane would hold the same height and much the same travel and never turn at all,
-// so the k component is the half of the reading the geometry has to earn.
+// Only the height band would take a frictionless skater. Measured on this fixture with the base
+// material's friction zeroed, it keeps the whole ballistic travel — 11.999992, the control's
+// number to the bit — and never turns, so the travel band and the spin band each reject it on
+// their own. Neither is redundant to the other.
 fn void a_ball_rolls_across_a_height_field() @test {
     RolledBall rolled = the_ball_after_two_seconds(attach_the_height_field: true);
     RolledBall fell = the_ball_after_two_seconds(attach_the_height_field: false);

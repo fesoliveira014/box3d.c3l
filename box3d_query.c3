@@ -99,9 +99,10 @@ fn BodyCastResult? BodyId.cast_shape(
  The point on this body nearest a world target, with the distance to it.
 
  box3d computes this with shape radii excluded, so for a sphere or a capsule the point lies on
- the centre line and the distance is larger than the gap to the surface by the radius. Shapes
- box3d cannot reduce to a convex proxy are skipped, and a body with none of them reports its own
- origin at a distance of zero.
+ the centre line and the distance is larger than the gap to the surface by the radius. Only
+ spheres, capsules and hulls are considered; a body carrying none of them reports its own origin
+ at the largest finite float distance, not at zero. A body whose world is locked reports the zero
+ vector at a distance of zero.
 *>
 fn ClosestPoint BodyId.closest_point(self, Vec3 target) {
     Vec3 point;

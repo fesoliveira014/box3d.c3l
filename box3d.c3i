@@ -1110,8 +1110,8 @@ enum JointType : int {
  another type's default — see WorldId.create_filter_joint. Both local frames are measured from
  their body's origin rather than its centre of mass, so recomputing a body's mass leaves the
  joint where it was. default_filter_joint_def() sets force_threshold and torque_threshold to
- float::max, and a joint stays out of WorldId.joint_events() only while both keep that value:
- either one below it arms the check.
+ float::max, and a joint whose thresholds both keep that value is never checked at all: either one
+ below it arms the check, and being armed is not being reported — see set_force_threshold.
 *>
 struct JointDef {
     void* user_data;
@@ -1158,7 +1158,10 @@ extern fn JointId create_filter_joint_raw(
 ) @cname("b3CreateFilterJoint") @private;
 
 <*
- Removes this joint from its world, dropping whatever it constrained between the two bodies.
+ Removes this joint from its world, dropping whatever it constrained between the two bodies. A
+ collision the joint was suppressing does not return the way set_collide_connected(true) returns
+ one: nothing re-offers the pair to the broad phase, so two settled bodies regain no contact until
+ one of them moves.
 
  @param wake_attached : "false leaves two sleeping attached bodies asleep; true wakes both"
 *>

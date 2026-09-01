@@ -2740,3 +2740,146 @@ extern fn void SphericalJointId.set_twist_limits(self, float lower_radians, floa
  lower_twist_limit() and upper_twist_limit() report.
 *>
 extern fn float SphericalJointId.twist_angle(self) @cname("b3SphericalJoint_GetTwistAngle");
+
+<*
+ Enables or disables this joint's angular spring, which turns local frame B towards the rotation
+ target_rotation() names relative to local frame A. A change to the flag discards the spring's
+ accumulated impulse, so a spring switched back on rebuilds its pull over the following steps
+ rather than resuming the one it had, and one switched off releases what it was holding rather
+ than leaving it standing. box3d asserts nothing here.
+*>
+extern fn void SphericalJointId.enable_spring(self, bool enable_spring) @cname("b3SphericalJoint_EnableSpring");
+
+<*
+ Whether this joint's angular spring is enabled. False on a joint built from a default definition.
+*>
+extern fn bool SphericalJointId.is_spring_enabled(self) @cname("b3SphericalJoint_IsSpringEnabled");
+
+<*
+ Sets the spring's stiffness in hertz. 0 on a joint built from a default definition, which leaves
+ an enabled spring pulling on nothing: box3d's softness for zero hertz has a zero mass scale, so
+ the spring computes no impulse at all. box3d asserts the value is finite and non-negative, an
+ assertion this release build compiles out and the wrappers do not restore, and it clamps nothing.
+ The constructor copies a definition's hertz the same way, so the two paths agree.
+*>
+extern fn void SphericalJointId.set_spring_hertz(self, float hertz) @cname("b3SphericalJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz. 0 on a joint built from a default definition.
+*>
+extern fn float SphericalJointId.spring_hertz(self) @cname("b3SphericalJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional. 0 on a joint built from a default definition.
+ box3d reads it only while spring_hertz() is non-zero, under the same compiled-out assertion
+ set_spring_hertz describes, and the constructor copies a definition's ratio the same way.
+*>
+extern fn void SphericalJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3SphericalJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional. 0 on a joint built from a default definition.
+*>
+extern fn float SphericalJointId.spring_damping_ratio(self) @cname("b3SphericalJoint_GetSpringDampingRatio");
+
+<*
+ Sets the rotation of local frame B relative to local frame A the spring turns towards while
+ is_spring_enabled() is on. The spring is the only thing box3d reads it for: cone_angle() and
+ twist_angle() are measured against the frames' current alignment and carry no target term, so a
+ ball a spring has settled on its target still reports the angles that alignment gives.
+
+ box3d stores the quaternion exactly as handed. It asserts only that the quaternion is valid — an
+ assertion this release build compiles out and the wrappers do not restore — and it neither
+ normalises nor corrects, so a target that is not a unit quaternion is stored and solved against as
+ given. The constructor copies a definition's target_rotation under the same compiled-out
+ assertion and normalises no more than this does, so unlike this type's cone angle the two paths
+ agree on what they keep.
+*>
+extern fn void SphericalJointId.set_target_rotation(self, Quat target_rotation) @cname("b3SphericalJoint_SetTargetRotation");
+
+<*
+ The rotation of local frame B relative to local frame A the spring turns towards. It is what was
+ stored, unit length or not — see set_target_rotation. The identity quaternion (0, 0, 0, 1) on a
+ joint built from a default definition, which is the one field that default does not zero.
+*>
+extern fn Quat SphericalJointId.target_rotation(self) @cname("b3SphericalJoint_GetTargetRotation");
+
+<*
+ Enables or disables this joint's motor. This flag is the gate box3d's motor solve itself tests. A
+ change to it discards the motor's accumulated impulse, so motor_torque() reads zero from the call
+ onward rather than the torque the motor was applying before, and box3d's warm start — which
+ re-applies that impulse every sub-step whether the motor is enabled or not — is left with nothing
+ to re-apply, so a motor switched off releases body B rather than going on pushing it. A
+ max_motor_torque() of 0 releases it too, by way of the clamp inside that solve rather than by
+ skipping it. box3d asserts nothing here.
+*>
+extern fn void SphericalJointId.enable_motor(self, bool enable_motor) @cname("b3SphericalJoint_EnableMotor");
+
+<*
+ Whether this joint's motor is enabled. False on a joint built from a default definition.
+*>
+extern fn bool SphericalJointId.is_motor_enabled(self) @cname("b3SphericalJoint_IsMotorEnabled");
+
+<*
+ Sets the angular velocity in radians per second the motor drives body B towards relative to body
+ A, about the world axes. box3d subtracts this vector from the difference of the two bodies'
+ angular velocities, rotating it into no frame and projecting it onto no axis, so a velocity of
+ (0, 0, 1) turns body B about world z however the two local frames are turned — where this same
+ joint's cone_angle() and twist_angle() are read from those frames. It is a target the motor
+ pursues only as far as max_motor_torque() lets it, not a velocity body B is made to hold.
+
+ box3d asserts only that the vector is finite, an assertion this release build compiles out and
+ the wrappers do not restore. The value is stored as handed and the motor's accumulated impulse is
+ left standing rather than discarded, so a motor retargeted mid-run works towards the new velocity
+ from the torque it was already applying. The constructor copies a definition's motor_velocity the
+ same way.
+*>
+extern fn void SphericalJointId.set_motor_velocity(self, Vec3 motor_velocity) @cname("b3SphericalJoint_SetMotorVelocity");
+
+<*
+ The angular velocity the motor drives body B towards relative to body A, in radians per second
+ about the world axes. What was set, not what body B is turning at. Zero on a joint built from a
+ default definition.
+*>
+extern fn Vec3 SphericalJointId.motor_velocity(self) @cname("b3SphericalJoint_GetMotorVelocity");
+
+<*
+ The torque the motor applied over the last step, in newton-metres about the world axes. It is a
+ whole vector, not the single number the revolute joint's motor_torque() reports, because this
+ motor drives all three rotational degrees of freedom at once rather than one hinge axis: box3d
+ divides the motor's accumulated angular impulse vector by the sub-step, and the components are
+ that vector's, about world x, y and z. It is the length of the vector that max_motor_torque()
+ bounds, not any single component.
+
+ This is the motor's own share, and it is the honest reading of the two available. The shared
+ constraint_torque() sums this vector with the spring's and with the two limits' along axes it
+ recomputes from the bodies' current rotations, so on a joint whose spring and limits are all
+ silent the two accessors report the same vector, and on one whose spring is working the shared
+ accessor is their sum with neither counted twice and no axis permuted. The cone limit is the
+ exception: its impulse enters that sum with the sign opposite to the one box3d applies it with,
+ so a cone holding a motor still means the two torques add there instead of cancelling, and the
+ shared accessor reports twice what the motor is applying rather than the nothing the two come to.
+*>
+extern fn Vec3 SphericalJointId.motor_torque(self) @cname("b3SphericalJoint_GetMotorTorque");
+
+<*
+ Sets the largest torque in newton-metres the motor may apply. It bounds the length of the motor's
+ angular impulse rather than any one component of it, so it is a ceiling on the whole three-axis
+ torque motor_torque() reports. 0 on a joint built from a default definition, which leaves an
+ enabled motor unable to turn anything, and dropping it to 0 on a motor that has been working
+ releases what that motor was holding rather than leaving it standing.
+
+ box3d asserts the value is finite and non-negative, an assertion this release build compiles out
+ and the wrappers do not restore, and it stores the value as handed without flooring it — the
+ constructor copies a definition's max_motor_torque the same way, so a negative ceiling is
+ reachable through either path. A negative one is not read as zero: box3d rescales the motor's
+ impulse by the ratio of the ceiling to that impulse's own length, so the negative sign reverses
+ the impulse and the motor drives body B away from motor_velocity() at the ceiling's magnitude,
+ accelerating past that velocity instead of settling on it.
+*>
+extern fn void SphericalJointId.set_max_motor_torque(self, float torque) @cname("b3SphericalJoint_SetMaxMotorTorque");
+
+<*
+ The largest torque in newton-metres the motor may apply. What was set. 0 on a joint built from a
+ default definition.
+*>
+extern fn float SphericalJointId.max_motor_torque(self) @cname("b3SphericalJoint_GetMaxMotorTorque");

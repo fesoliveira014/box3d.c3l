@@ -243,15 +243,15 @@ fn BoxGuards the_boxes_a_proxy_is_refused_for() {
 
 // box3d asserts the box and this build compiles the assertion out, so an invalid one reaches the
 // tree. None of the three is inert: an inverted box answers no query, an infinite one answers all
-// of them, and a box carrying a NaN corrupts the boxes above it and hides proxies that have
-// nothing to do with it. A zero box is a legitimate point and stays accepted.
+// of them, and a NaN one answers every query while box3d's min and max let an ancestor swallow a
+// real bound. A zero box is a legitimate point and stays accepted.
 fn void a_proxy_box_that_box3d_would_assert_against_is_refused() @test {
     BoxGuards guards = the_boxes_a_proxy_is_refused_for();
     fault none;
 
     assert(guards.inverted == b3::INVALID_DEFINITION, "lower above upper names no volume");
     assert(guards.infinite == b3::INVALID_DEFINITION, "and an unbounded one would answer every query");
-    assert(guards.not_a_number == b3::INVALID_DEFINITION, "and a NaN would spread to unrelated proxies");
+    assert(guards.not_a_number == b3::INVALID_DEFINITION, "and a NaN would eat a bound above it");
     assert(guards.zero == none, "while a zero box is a point, which the tree holds happily");
 }
 
@@ -658,16 +658,16 @@ fn ProxyBoxGuards the_boxes_a_move_and_an_enlarge_are_refused_for() {
 }
 
 // box3d asserts the box on both of these and this build compiles the assertion out, so an invalid
-// one reaches a proxy already in the tree: an inverted box takes it out of every query answer, an
-// infinite one puts it in all of them, and a NaN one leaves the boxes above it unusable. A zero
-// box is a point, which is legitimate, and both calls take it.
+// one reaches a proxy already in the tree: an inverted box takes it out of every query answer and
+// an infinite one puts it in all of them. A NaN reaches the ancestors through a move but not
+// through an enlarge, which widens on a strict comparison — a rebuild spreads it either way.
 fn void a_box_that_box3d_would_assert_against_is_refused_by_both_mutators() @test {
     ProxyBoxGuards guards = the_boxes_a_move_and_an_enlarge_are_refused_for();
     fault none;
 
     assert(guards.moved[0] == b3::INVALID_DEFINITION, "lower above upper names no volume");
     assert(guards.moved[1] == b3::INVALID_DEFINITION, "an unbounded box would answer every query");
-    assert(guards.moved[2] == b3::INVALID_DEFINITION, "a NaN would spread to the boxes above it");
+    assert(guards.moved[2] == b3::INVALID_DEFINITION, "a NaN would eat a bound above it");
     assert(guards.moved[3] == none, "and a zero box is a point the tree holds happily");
 
     assert(guards.enlarged[0] == b3::INVALID_DEFINITION);

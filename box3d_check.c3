@@ -95,3 +95,15 @@ macro CompoundData*? checked_compound(CompoundData* compound) {
     if (compound == null) return CHILD_LIMIT_REACHED~;
     return compound;
 }
+
+<*
+ The range and leaf checks box3d compiles out of every call that indexes the node array on an id
+ the caller supplies. The leaf bit is exact for a live proxy but says nothing about which one: an
+ id whose slot has since been handed to a new proxy passes.
+
+ @return "INDEX_OUT_OF_RANGE when the id is outside 0 to node_capacity - 1, or NOT_A_PROXY when no live proxy holds that node"
+*>
+fn void? check_proxy(DynamicTree* tree, int proxy_id) @private {
+    if (proxy_id < 0 || proxy_id >= tree.node_capacity) return INDEX_OUT_OF_RANGE~;
+    if ((tree.nodes[proxy_id].flags & TREE_NODE_LEAF) == 0) return NOT_A_PROXY~;
+}

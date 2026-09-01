@@ -1,12 +1,12 @@
 module b3;
 
 <*
- Inserts a proxy holding the box and the user data, and returns the id that names it.
+ Inserts a proxy holding the box and the user data. A destroyed proxy's id goes to the next one.
 
- box3d's own check on the box is an assertion this build compiles out, and an invalid one is not
- inert: an inverted box is never reported by any query, an infinite one is reported by all of
- them, and a NaN one spreads into every box above it. A zero box is valid. Ids carry no
- generation counter, so a destroyed proxy's id goes to the next proxy created.
+ box3d's check on the box is compiled out here and an invalid box is not inert: inverted, no query
+ reports it; infinite, every query does; NaN, every query does and the boxes above it corrupt —
+ box3d's float min and max return whichever operand is not the NaN, so an ancestor swallows a real
+ bound and proxies fall out of a root box that still reads clean. A zero box is valid.
 
  @return "the id, or INVALID_DEFINITION when the box is inverted or not finite"
 *>
@@ -29,7 +29,7 @@ fn void? DynamicTree.destroy_proxy(&self, int proxy_id) {
 
 <*
  Removes the proxy and reinserts it under a new box. box3d asserts both the id and the box here
- and this build compiles both out; see create_proxy() for what an invalid box does to a tree.
+ and this build compiles both out; create_proxy() names which boxes are refused and why.
 
  @return "INDEX_OUT_OF_RANGE when the id names no node, NOT_A_PROXY when no live proxy holds it, or INVALID_DEFINITION when the box is inverted or not finite"
 *>
@@ -40,9 +40,11 @@ fn void? DynamicTree.move_proxy(&self, int proxy_id, Aabb aabb) {
 }
 
 <*
- Widens the proxy's box and every ancestor box that does not already contain it. box3d only ever
- grows an ancestor, so a box the proxy's own already contains shrinks the proxy alone and leaves
- the tree coarser than it needs to be. Guarded as move_proxy() is.
+ Widens the proxy's box and every ancestor box that does not already contain it, and takes the
+ same guards move_proxy() does. It widens on a strict comparison, so a box the proxy already
+ contains changes no ancestor — and neither does a NaN one, unlike through the other two calls,
+ though a later rebuild still spreads it. Any call marks every ancestor enlarged even when it
+ moved no box, so the next partial rebuild() sorts them all.
 
  @return "INDEX_OUT_OF_RANGE when the id names no node, NOT_A_PROXY when no live proxy holds it, or INVALID_DEFINITION when the box is inverted or not finite"
 *>
@@ -53,9 +55,9 @@ fn void? DynamicTree.enlarge_proxy(&self, int proxy_id, Aabb aabb) {
 }
 
 <*
- Sets the proxy's side of a query mask and recomputes it up the ancestors. box3d asserts the id
- is a live leaf and compiles that out, and an internal node's bits are the union of its children,
- so a wrong id quietly changes what a filtered query reports.
+ Sets the proxy's side of a query mask and recomputes it up the ancestors. box3d never range
+ checks this id at all and asserts only the leaf, compiled out here; an internal node's bits are
+ the union of its children, so setting the root's to 0 takes every proxy out of every query.
 
  @return "INDEX_OUT_OF_RANGE when the id names no node, or NOT_A_PROXY when no live proxy holds it"
 *>
@@ -96,16 +98,4 @@ fn ulong? DynamicTree.user_data(&self, int proxy_id) {
 fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
     return self.nodes[proxy_id].aabb;
-}
-
-<*
- The range and leaf checks box3d compiles out of every call that indexes the node array on an id
- the caller supplies. The leaf bit is exact for a live proxy but says nothing about which one: an
- id whose slot has since been handed to a new proxy passes.
-
- @return "INDEX_OUT_OF_RANGE when the id is outside 0 to node_capacity - 1, or NOT_A_PROXY when no live proxy holds that node"
-*>
-fn void? check_proxy(DynamicTree* tree, int proxy_id) @private {
-    if (proxy_id < 0 || proxy_id >= tree.node_capacity) return INDEX_OUT_OF_RANGE~;
-    if ((tree.nodes[proxy_id].flags & TREE_NODE_LEAF) == 0) return NOT_A_PROXY~;
 }

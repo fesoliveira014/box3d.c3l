@@ -694,9 +694,12 @@ extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Crea
 
 <*
  Releases the node pool and the rebuild arrays, then zeroes the tree, so a second call on the
- same struct has nothing left to free and does nothing. That protects no copy of the struct: a
- copy still holds the pointer this call freed and frees it again. See DynamicTree, which also
- covers the tree a compound owns.
+ same struct frees nothing. That protects no copy: a copy still holds the freed pointer. See
+ DynamicTree, which also covers the tree a compound owns.
+
+ The zero it leaves is not the empty-tree state — box3d marks an empty root with -1, so height(),
+ area_ratio() and root_bounds() read a freed pool afterwards and crash, while byte_count(),
+ rebuild() and every guarded proxy call stay safe on it.
 *>
 extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
 
@@ -725,8 +728,9 @@ extern fn int DynamicTree.height(&self) @cname("b3DynamicTree_GetHeight");
 
 <*
  The summed perimeter of the internal nodes over the root's. Leaves and the root are skipped, so
- a tree whose only internal node is the root reports 0 — that is two proxies or fewer, not an
- empty tree.
+ a tree whose only internal node is the root reports 0 — two proxies or fewer, not an empty tree.
+ A root with no volume, which proxies holding the zero box give at any count, divides by zero and
+ reports NaN rather than 0.
 *>
 extern fn float DynamicTree.area_ratio(&self) @cname("b3DynamicTree_GetAreaRatio");
 
@@ -745,9 +749,9 @@ extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount")
 
 <*
  Rebalances the tree and returns the number of boxes it sorted. A partial build keeps every
- subtree box3d has not marked enlarged and so sorts far fewer boxes than a full one. Both
- allocate the rebuild arrays on first use, which the module's byte_count() carries until
- destroy().
+ subtree box3d has not marked enlarged and so sorts far fewer boxes than a full one — but any
+ enlarge_proxy() marks the whole ancestor chain, so one of those undoes the saving. Either build
+ allocates the rebuild arrays when it has something to sort, and byte_count() carries them.
 *>
 extern fn int DynamicTree.rebuild(&self, bool full_build) @cname("b3DynamicTree_Rebuild");
 

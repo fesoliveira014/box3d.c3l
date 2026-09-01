@@ -1359,3 +1359,114 @@ fn void a_hinge_reports_no_angular_separation_until_its_limit_is_armed() @test {
     assert(separations.once_the_limit_is_exceeded > 1.85 && separations.once_the_limit_is_exceeded < 1.95,
         "the zero was the limit's state, not a separation this joint type never measures");
 }
+
+// Five seconds at 1/60 s against a static body with no gravity and no motor, so the spring is
+// the only thing that can turn the hinge and it has time to settle rather than still be swinging.
+fn float the_angle_of_a_sprung_hinge_after_five_seconds(bool enable_spring, float target) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_spring = enable_spring;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_angle = target;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return hinge.angle();
+}
+
+struct SpringSettings {
+    bool enabled;
+    float hertz;
+    float damping_ratio;
+    float target;
+    bool enabled_after;
+    float hertz_after;
+    float damping_ratio_after;
+    float target_after;
+}
+
+fn SpringSettings the_spring_settings_of_a_hinge_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_angle = 0.5;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    SpringSettings settings = {
+        .enabled = hinge.is_spring_enabled(),
+        .hertz = hinge.spring_hertz(),
+        .damping_ratio = hinge.spring_damping_ratio(),
+        .target = hinge.target_angle(),
+    };
+
+    hinge.enable_spring(false);
+    hinge.set_spring_hertz(8.0);
+    hinge.set_spring_damping_ratio(0.25);
+    hinge.set_target_angle(-1.5);
+
+    settings.enabled_after = hinge.is_spring_enabled();
+    settings.hertz_after = hinge.spring_hertz();
+    settings.damping_ratio_after = hinge.spring_damping_ratio();
+    settings.target_after = hinge.target_angle();
+    return settings;
+}
+
+// The closing condition for the spring family. The band holds the measured 0.699938 and excludes
+// a hinge the spring never moved.
+fn void a_spring_settles_the_hinge_on_its_target_angle() @test {
+    float angle = the_angle_of_a_sprung_hinge_after_five_seconds(true, 0.7);
+
+    assert(angle > 0.69 && angle < 0.71, "a critically damped spring arrives on its target and stays there");
+}
+
+// The same spring aimed the other way, so the test pins the target rather than one settled angle.
+fn void a_spring_settles_the_hinge_wherever_its_target_points() @test {
+    float angle = the_angle_of_a_sprung_hinge_after_five_seconds(true, -0.4);
+
+    assert(angle > -0.41 && angle < -0.39, "the hinge follows the target rather than a fixed angle");
+}
+
+// The control for the two above: the same stiffness, damping and target with only the spring flag
+// cleared. Without it a settle test could pass on a hinge that was never sprung at all.
+fn void a_hinge_whose_spring_is_disabled_does_not_turn() @test {
+    float angle = the_angle_of_a_sprung_hinge_after_five_seconds(false, 0.7);
+
+    assert(angle > -0.01 && angle < 0.01, "the stiffness and target a disabled spring carries pull on nothing");
+}
+
+// 2, 1, 0.5, 8, 0.25 and -1.5 are all exactly representable as floats, so they compare exactly.
+fn void the_spring_settings_of_a_hinge_round_trip() @test {
+    SpringSettings settings = the_spring_settings_of_a_hinge_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the spring its definition asked for");
+    assert(settings.hertz == 2.0);
+    assert(settings.damping_ratio == 1.0);
+    assert(settings.target == 0.5);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.hertz_after == 8.0);
+    assert(settings.damping_ratio_after == 0.25);
+    assert(settings.target_after == -1.5);
+}

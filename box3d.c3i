@@ -1491,3 +1491,60 @@ extern fn float RevoluteJointId.upper_limit(self) @cname("b3RevoluteJoint_GetUpp
  only while enable_limit() is on.
 *>
 extern fn void RevoluteJointId.set_limits(self, float lower_radians, float upper_radians) @cname("b3RevoluteJoint_SetLimits");
+
+<*
+ Enables or disables this joint's angular spring. A change to the flag discards the spring's
+ accumulated impulse, so a spring switched back on rebuilds its pull over the following steps
+ rather than resuming the one it had.
+*>
+extern fn void RevoluteJointId.enable_spring(self, bool enable_spring) @cname("b3RevoluteJoint_EnableSpring");
+
+<*
+ Whether this joint's angular spring is enabled. False on a joint built from a default definition.
+*>
+extern fn bool RevoluteJointId.is_spring_enabled(self) @cname("b3RevoluteJoint_IsSpringEnabled");
+
+<*
+ Sets the spring's stiffness in hertz. 0 on a joint built from a default definition, which leaves
+ an enabled spring pulling on nothing. box3d asserts the value is finite and non-negative; this
+ package links a release build where that assertion is compiled out, and the wrappers do not
+ restore it.
+*>
+extern fn void RevoluteJointId.set_spring_hertz(self, float hertz) @cname("b3RevoluteJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz.
+*>
+extern fn float RevoluteJointId.spring_hertz(self) @cname("b3RevoluteJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional: 1 settles the hinge on its target without
+ overshooting it. box3d asserts the value is finite and non-negative under the same compiled-out
+ assertion set_spring_hertz describes.
+*>
+extern fn void RevoluteJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3RevoluteJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional.
+*>
+extern fn float RevoluteJointId.spring_damping_ratio(self) @cname("b3RevoluteJoint_GetSpringDampingRatio");
+
+<*
+ Sets the spring's rest angle in radians about the frames' z axis: the angle the spring pulls the
+ hinge toward while enable_spring() is on. The spring is the only thing box3d reads it for, and
+ angle() in particular is not measured against it — angle() is the twist between the two local
+ frames and carries no target term, so a hinge a spring has settled on a target of 0.7 reads 0.7.
+
+ The value is stored as handed. box3d clamps a definition's target_angle into [-pi, pi] on the way
+ through the constructor but this setter only asserts the same range, and this package links a
+ release build where that assertion is compiled out — a target set here can sit outside the range
+ the same target in a definition would have been clamped into.
+*>
+extern fn void RevoluteJointId.set_target_angle(self, float target_radians) @cname("b3RevoluteJoint_SetTargetAngle");
+
+<*
+ The spring's rest angle in radians. 0 on a joint built from a default definition. What box3d
+ stored, which is the definition's value clamped into [-pi, pi] or the setter's value unclamped:
+ see set_target_angle.
+*>
+extern fn float RevoluteJointId.target_angle(self) @cname("b3RevoluteJoint_GetTargetAngle");

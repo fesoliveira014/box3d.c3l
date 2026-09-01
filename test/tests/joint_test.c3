@@ -5351,9 +5351,10 @@ fn void the_wheel_joint_types_match_the_c_layout() @test {
     assert(b3::WheelJointDef::alignment == 8);
 }
 
-// The only default in the package that hands back an enable flag already set. 0 and 1 are exactly
-// representable as floats and are copied straight out of the definition, so they compare exactly;
-// 0.7 is not representable at all, so the two damping ratios take a two-sided band.
+// The only joint definition in the package whose default hands back an enable flag already set.
+// 0 and 1 are exactly representable as floats and are copied straight out of the definition, so
+// they compare exactly; 0.7 is not representable at all, so the two damping ratios take a
+// two-sided band.
 fn void the_default_wheel_joint_definition_arrives_with_its_suspension_spring_on() @test {
     b3::WheelJointDef def = b3::default_wheel_joint_def();
 
@@ -5559,6 +5560,7 @@ fn void a_wheel_joint_definition_naming_no_bodies_is_refused() @test {
 
 enum WheelSpin {
     DRIVEN,
+    DRIVEN_WITH_STEERING_ON,
     MOTOR_OFF,
     STARVED_OF_TORQUE,
 }
@@ -5575,7 +5577,10 @@ struct SpunWheel {
 // the only thing that can turn anything and the whole reading is the wheel's. Sleep is off: the row
 // with the motor switched off never moves and would be asleep long before the second is up. Sixty
 // steps at 1/60 s — the driven row is on the two radians a second it was asked for by then, and
-// the starved row, held to a tenth of a newton-metre, is still climbing towards it.
+// the starved row, held to a tenth of a newton-metre, is still climbing towards it. The row with
+// steering on moves one setting off the driven row and is the control for what spin_torque()
+// reports: box3d applies the spin impulse twice, once along each frame's z axis, only on the
+// branch its warm start takes with steering off.
 fn SpunWheel a_wheel_spun_by_its_motor_for_a_second(WheelSpin row) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
@@ -5596,6 +5601,7 @@ fn SpunWheel a_wheel_spun_by_its_motor_for_a_second(WheelSpin row) {
     joint_def.body_id_a = chassis;
     joint_def.body_id_b = spinning;
     joint_def.enable_spin_motor = row != WheelSpin.MOTOR_OFF;
+    joint_def.enable_steering = row == WheelSpin.DRIVEN_WITH_STEERING_ON;
     joint_def.spin_speed = 2.0;
     joint_def.max_spin_torque = ceiling;
     b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
@@ -5615,13 +5621,20 @@ fn SpunWheel a_wheel_spun_by_its_motor_for_a_second(WheelSpin row) {
 
 fn void a_spin_motor_turns_the_wheel_at_the_speed_it_was_given() @test {
     SpunWheel driven = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.DRIVEN);
+    SpunWheel steered = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.DRIVEN_WITH_STEERING_ON);
     SpunWheel idle = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.MOTOR_OFF);
 
     assert(driven.awake, "so the reading is a motor working rather than a body that stopped being stepped");
     assert(driven.measured_speed > 1.999 && driven.measured_speed < 2.001,
         "a second is long enough for the motor to reach the two radians a second it was asked for");
     assert(driven.torque > -786.0 && driven.torque < -784.8,
-        "and the torque holding it there is signed about the spin axis rather than failed");
+        "and what spin_torque() reports there is the correction for the doubled impulse, not the motor's torque");
+
+    assert(steered.awake);
+    assert(steered.measured_speed > 1.999 && steered.measured_speed < 2.001,
+        "the same motor with steering on holds the wheel at the same rate");
+    assert(steered.torque == 0.0,
+        "and reports nothing, which is what an unloaded wheel already turning at its target costs to hold");
 
     assert(idle.awake);
     assert(idle.measured_speed > -0.001 && idle.measured_speed < 0.001,
@@ -5677,8 +5690,10 @@ struct LoadedWheel {
 // Gravity is the load and the suspension axis is world x, so the first two rows push along the axis
 // and the third across it. Five seconds at 1/60 s, because the 1 Hz suspension spring is still
 // settling at two and the axial reading drifts by a tenth of a newton until it stops. The middle
-// row differs from the first in one thing only: a lower travel of five metres, set but never armed,
-// which the wheel cannot reach and which nothing in the solve reads.
+// row sets the first's suspension limits to a travel the wheel cannot reach and nothing arms — a
+// lower of five metres and an upper of ninety-nine. Both values move, and it is the lower alone
+// the reading picks up: the leak is five times the inverse sub-step and not a hundred and four
+// times it.
 fn LoadedWheel a_wheel_held_against_gravity_for_five_seconds(WheelLoad row) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = row == WheelLoad.ACROSS_THE_SUSPENSION_AXIS
@@ -5819,6 +5834,83 @@ fn void a_wheels_suspension_limits_are_neither_ordered_nor_bounded() @test {
     assert(limits.reversed_upper == -3.0);
     assert(limits.wide_lower == -99.0, "and a pair far outside anything the wheel can reach stays where it was put");
     assert(limits.wide_upper == 99.0);
+}
+
+enum WheelSuspensionTouch {
+    NOTHING,
+    THE_SAME_PAIR_SET_AGAIN,
+    THE_FAR_END_MOVED,
+}
+
+struct HeldWheel {
+    float settled;
+    float after_one_more_step;
+}
+
+// The wheel is left half a metre out along the suspension axis with gravity pulling it in along
+// that same axis, and a lower suspension limit stops it a fifth of a metre out. The spring is
+// stiffer than the 1 Hz one a default definition arrives with, because at 1 Hz the limit carries
+// so little of the load that a discarded impulse moves the wheel by less than a millionth of a
+// metre. Two seconds brings the hold to a standstill, which the untouched row establishes by not
+// moving at all in its last step, so whatever is done to the joint at that point is visible in the
+// step that follows. Without the limit the same spring draws the wheel in to -0.010132, so what
+// holds it out at a fifth of a metre is the limit and not the spring.
+fn HeldWheel a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch touch) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ -10.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_at(world, 0.5);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = hanging;
+    joint_def.suspension_hertz = 5.0;
+    joint_def.enable_suspension_limit = true;
+    joint_def.lower_suspension_limit = 0.2;
+    joint_def.upper_suspension_limit = 0.9;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+    float settled = hanging.position().x;
+
+    switch (touch) {
+        case THE_SAME_PAIR_SET_AGAIN: wheel.set_suspension_limits(0.2, 0.9);
+        case THE_FAR_END_MOVED: wheel.set_suspension_limits(0.2, 1.5);
+        default: break;
+    }
+    world.step(1.0f / 60.0f, 4);
+
+    return {.settled = settled, .after_one_more_step = hanging.position().x};
+}
+
+// The other half of this type's headline asymmetry: set_suspension_limits discards both of the
+// limit's impulses whenever either value actually changes, where its sibling set_steering_limits
+// discards nothing on any call. Setting the pair back to what it already holds changes neither
+// value and costs the hold nothing at all, so the same call carries both contracts and only the
+// pair that moves separates them. Moving the end the wheel is not resting against changes one
+// value, and the limit rebuilds its hold from nothing over the step that follows, which pushes the
+// wheel back out towards the line it holds.
+fn void setting_a_wheels_suspension_limits_discards_both_impulses_when_a_value_moves() @test {
+    HeldWheel untouched = a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch.NOTHING);
+    HeldWheel reset = a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch.THE_SAME_PAIR_SET_AGAIN);
+    HeldWheel widened = a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch.THE_FAR_END_MOVED);
+
+    assert(untouched.settled > 0.1985 && untouched.settled < 0.1986,
+        "the limit is holding the wheel a fifth of a metre out, where the spring alone would have drawn it in");
+    assert(untouched.after_one_more_step == untouched.settled, "and the hold is at a standstill");
+
+    assert(reset.after_one_more_step == reset.settled,
+        "setting the same pair back moves neither value, so neither impulse is discarded");
+
+    float rebuilt = widened.after_one_more_step - widened.settled;
+    assert(rebuilt > 0.00001 && rebuilt < 0.0001,
+        "where moving the far end discards both and the hold is rebuilt over the step that follows");
 }
 
 struct WheelSettings {

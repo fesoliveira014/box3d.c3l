@@ -2906,13 +2906,13 @@ typedef WheelJointId = inline JointId;
  turns about that same x axis of frame A. Three channels, each with its own enable flag and its
  own optional limit — a suspension spring, a spin motor, and a steering spring.
 
- Must come from default_wheel_joint_def(), and that default is the only one in this package that
- hands back an enable flag already set. enable_suspension_spring is true, with suspension_hertz 1
- and suspension_damping_ratio 0.7, and steering_hertz 1 and steering_damping_ratio 0.7 sit
- alongside them. So a wheel arrives already sprung along its suspension axis where every other
- joint type arrives inert. The other twelve fields are zero or false, which leaves the spin motor,
- the steering and both limits off until the definition turns them on — the steering spring is
- tuned but not solved at all until enable_steering is set.
+ Must come from default_wheel_joint_def(), and that default is the only joint definition in this
+ package that hands back an enable flag already set. enable_suspension_spring is true, with
+ suspension_hertz 1 and suspension_damping_ratio 0.7, and steering_hertz 1 and
+ steering_damping_ratio 0.7 sit alongside them. So a wheel arrives already sprung along its
+ suspension axis where every other joint type arrives inert. The other twelve fields are zero or
+ false, which leaves the spin motor, the steering and both limits off until the definition turns
+ them on — the steering spring is tuned but not solved at all until enable_steering is set.
 
  spin_speed is what this definition calls the speed the spin motor drives at, while the accessors
  for the same quantity are set_spin_motor_speed() and spin_motor_speed(). box3d names the field
@@ -2968,7 +2968,7 @@ extern fn void WheelJointId.enable_suspension(self, bool enable_spring) @cname("
 
 <*
  Whether this joint's suspension spring is enabled. True on a joint built from a default
- definition, which is the one enable flag in this package that starts that way.
+ definition, which is the only enable flag any joint definition in this package starts set.
 *>
 extern fn bool WheelJointId.is_suspension_enabled(self) @cname("b3WheelJoint_IsSuspensionEnabled");
 
@@ -3098,31 +3098,41 @@ extern fn float WheelJointId.max_spin_torque(self) @cname("b3WheelJoint_GetMaxSp
 extern fn float WheelJointId.spin_speed(self) @cname("b3WheelJoint_GetSpinSpeed");
 
 <*
- The torque the spin motor applied over the last sub-step, in newton-metres, bounded by
- max_spin_torque(). It is signed about local frame B's z axis: a motor driving the wheel one way
- reports the opposite sign to one driving it the other, so a negative reading is a direction
- rather than a failure.
+ The spin channel's accumulated impulse divided by the last sub-step, in newton-metres,
+ saturating at max_spin_torque() and signed about local frame B's z axis.
 
- This is the honest reading of the spin channel, and the shared accessors on this type are not.
+ It is the torque the motor is applying only while steering is enabled. With steering off — the
+ default — box3d applies the spin impulse twice: its warm start seeds the joint's angular impulse
+ with that impulse along local frame A's z axis and the steering-off branch then adds the same
+ impulse again along the spin axis, which is local frame B's, where the steering-on branch assigns
+ over the seed instead. What the solve settles on is the correction for that over-application, and
+ the reading is not a torque at all. Measured on an unloaded wheel turning at exactly two radians
+ a second: it moves with a ceiling the wheel never comes near, -785.4 at a max_spin_torque() of
+ 100000 against -214.6 at 500, and it doubles when the sub-step count doubles, which no torque
+ does; the same motion with steering enabled reports 0.
+
  constraint_torque() carries this same impulse and nothing else — box3d leaves the steering
  channel and the constraint holding the spin axis in place out of it entirely — laid along local
  frame A's z axis rather than the spin axis, which is local frame B's; the two coincide only while
- the frames agree about that axis. constraint_force() is further out: its three components are a
- cyclic permutation of the channels they belong to, in the way the prismatic joint's are, and its
- axial term adds the stored lower_suspension_limit() — a travel, not an impulse — to the upper
- limit's impulse and the spring's, so a joint whose lower travel is set to anything but zero
- reports a force that moves with a number measuring no force at all.
+ the frames agree about that axis, and where they do the two readings are equal and carry the same
+ over-application. constraint_force() is further out: its three components are a cyclic
+ permutation of the channels they belong to, in the way the prismatic joint's are, and its axial
+ term adds the stored lower_suspension_limit() — a travel, not an impulse — to the upper limit's
+ impulse and the spring's, so a joint whose lower travel is set to anything but zero reports a
+ force that moves with a number measuring no force at all.
 *>
 extern fn float WheelJointId.spin_torque(self) @cname("b3WheelJoint_GetSpinTorque");
 
 <*
  Enables or disables this joint's steering, which frees the wheel to turn about local frame A's x
  axis — the suspension axis — and hands that turn to the steering spring. While it is off box3d
- holds the spin axis onto that axis with a second alignment row instead, so the wheel cannot steer
- at all. A change to the flag discards the alignment rows' accumulated impulse and nothing else:
- the steering spring's impulse and the steering limit's two survive it, and because none of the
- three is solved at all while this is off, steering_torque() goes on reporting the last impulse
- the spring took rather than zero. box3d asserts nothing here.
+ drives the two bodies' relative rotation about frame A's x and y axes to zero with a second
+ alignment row instead, which pins the steering angle itself at zero and leaves only the spin
+ free, so the wheel cannot steer at all: an angle already turned is driven back to zero over the
+ following steps. A change to the flag discards the alignment rows' accumulated impulse and
+ nothing else: the steering spring's impulse and the steering limit's two survive it, and because
+ none of the three is solved at all while this is off, steering_torque() goes on reporting the
+ last impulse the spring took rather than zero. box3d asserts nothing here.
 *>
 extern fn void WheelJointId.enable_steering(self, bool enable_steering) @cname("b3WheelJoint_EnableSteering");
 

@@ -1561,3 +1561,66 @@ extern fn void RevoluteJointId.set_target_angle(self, float target_radians) @cna
  see set_target_angle.
 *>
 extern fn float RevoluteJointId.target_angle(self) @cname("b3RevoluteJoint_GetTargetAngle");
+
+<*
+ A joint known to be a distance joint. box3d resolves every per-type accessor through a joint-type
+ assertion this release build compiles out, so a distance accessor reaching a joint of another
+ type reinterprets that joint's solver union instead: a getter hands back nonsense and a setter
+ writes over the other type's state. The distinct handle moves that check to the one place the
+ type is genuinely in question. A DistanceJointId converts to a JointId on its own, so every
+ shared joint accessor reaches it uncast; the way back is JointId.as_distance(), which checks.
+*>
+typedef DistanceJointId = inline JointId;
+
+<*
+ A distance joint definition. The joint connects a point on body A to a point on body B by a
+ segment held at length, with an optional spring, limit and motor. Must come from
+ default_distance_joint_def(), which — unlike the revolute default — does not zero the fields it
+ adds to the base: length is 1, lower_spring_force is -float::max, upper_spring_force is
+ float::max, and max_length is box3d's huge value, 1.0e5 scaled by the length unit. The remaining
+ fields are zero or false.
+
+ A default distance joint is rigid, and it stays rigid under more settings than the header
+ describes. box3d solves the spring, the limit and the motor together only while
+ enable_spring && (min_length < max_length || enable_limit == false); otherwise it solves a single
+ rigid constraint and skips the limit and the motor entirely. So a sprung joint whose limit is
+ enabled with min_length equal to max_length is rigid, and clearing enable_limit on that same
+ joint makes it sprung again.
+*>
+struct DistanceJointDef {
+    inline JointDef base;
+    float length;
+    bool enable_spring;
+    float lower_spring_force;
+    float upper_spring_force;
+    float hertz;
+    float damping_ratio;
+    bool enable_limit;
+    float min_length;
+    float max_length;
+    bool enable_motor;
+    float max_motor_force;
+    float motor_speed;
+}
+
+<*
+ The range a distance joint's spring force is held between. This is a C3 type with no C
+ counterpart: box3d reports the pair through two out-parameters.
+*>
+struct SpringForceRange {
+    float lower;
+    float upper;
+}
+
+extern fn DistanceJointDef default_distance_joint_def() @cname("b3DefaultDistanceJointDef");
+
+<*
+ Raw distance joint constructor. Bypasses WorldId.create_distance_joint's definition guard and
+ hands back a joint of no particular type, so it is private to the module —
+ box3d_joint_distance.c3's WorldId.create_distance_joint is the only caller and is the only public
+ way to a live distance joint.
+*>
+extern fn JointId create_distance_joint_raw(
+  WorldId world_id,
+  DistanceJointDef* def,
+) @cname("b3CreateDistanceJoint") @private;

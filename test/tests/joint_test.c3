@@ -1532,3 +1532,205 @@ fn void the_spring_settings_of_a_hinge_round_trip() @test {
     assert(settings.damping_ratio_after == 0.25);
     assert(settings.target_after == -1.5);
 }
+
+fn void the_distance_joint_types_match_the_c_layout() @test {
+    assert(b3::DistanceJointDef::size == 160);
+    assert(b3::DistanceJointDef::alignment == 8);
+}
+
+// Unlike the revolute default, this one does not zero the fields it adds to the base: four of the
+// twelve arrive set. 1, 0 and float::max are exactly representable as floats and are copied
+// straight out of the definition, so they compare exactly rather than in a band. max_length is
+// box3d's huge value, which is 1.0e5 scaled by the length unit rather than a constant, so it is
+// compared against that scaling and not against a literal.
+fn void the_default_distance_joint_definition_carries_the_four_values_it_does_not_zero() @test {
+    b3::DistanceJointDef def = b3::default_distance_joint_def();
+
+    assert(def.length == 1.0, "a default distance joint holds its bodies one length unit apart");
+    assert(def.lower_spring_force == -float::max);
+    assert(def.upper_spring_force == float::max);
+    assert(def.max_length == 1.0e5f * b3::length_units_per_meter());
+}
+
+fn void the_default_distance_joint_definition_zeroes_the_other_eight() @test {
+    b3::DistanceJointDef def = b3::default_distance_joint_def();
+
+    assert(!def.enable_spring, "a default distance joint is rigid");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(!def.enable_limit);
+    assert(def.min_length == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_force == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.motor_speed == 0.0);
+}
+
+fn void a_default_distance_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::DistanceJointDef def = b3::default_distance_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+fn b3::DistanceJointId link_with_a_distance_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_distance_joint(&joint_def)!!;
+}
+
+struct DistanceHandleReport {
+    b3::JointType type;
+    b3::BodyId expected_a;
+    b3::BodyId reported_a;
+    bool valid;
+}
+
+// Every accessor here is a shared JointId one called on a DistanceJointId with no cast, which is
+// what the inline typedef buys.
+fn DistanceHandleReport the_shared_accessors_on_a_new_rope() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, a, b);
+
+    return {
+        .type = rope.type(),
+        .expected_a = a,
+        .reported_a = rope.body_a(),
+        .valid = rope.is_valid(),
+    };
+}
+
+fn fault refusal_of_a_distance_joint_definition(b3::DistanceJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_distance_joint(def)) return err;
+    return {};
+}
+
+struct RopeConversion {
+    b3::JointId rope;
+    b3::JointId narrowed;
+    bool converted;
+    fault hinge_refusal;
+    fault rope_refusal;
+}
+
+// The two conversions are taken on the same pair of bodies in the same world, so the only thing
+// separating the joint each one refuses is its type.
+fn RopeConversion the_conversions_of_a_rope_and_a_hinge() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId rope = link_with_a_distance_joint(world, a, b);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+
+    RopeConversion conversion = {.rope = rope};
+    if (try narrowed = rope.as_distance()) {
+        conversion.narrowed = narrowed;
+        conversion.converted = true;
+    }
+    if (catch err = hinge.as_distance()) conversion.hinge_refusal = err;
+    if (catch err = rope.as_revolute()) conversion.rope_refusal = err;
+    return conversion;
+}
+
+struct DestroyedRopeConversion {
+    bool valid_before;
+    b3::JointType type_after;
+    fault refusal;
+}
+
+// The joint is destroyed while its world lives on, so the handle names a joint slot box3d has
+// freed rather than a world that is gone. box3d leaves the slot's type where it was, which is why
+// reading the type is not on its own enough to refuse the handle.
+fn DestroyedRopeConversion the_conversion_of_a_destroyed_rope() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId rope = link_with_a_distance_joint(world, a, b);
+
+    DestroyedRopeConversion conversion = {.valid_before = rope.is_valid()};
+    rope.destroy(false);
+    conversion.type_after = rope.type();
+    if (catch err = rope.as_distance()) conversion.refusal = err;
+    return conversion;
+}
+
+fn void a_distance_joint_reports_its_own_type() @test {
+    DistanceHandleReport report = the_shared_accessors_on_a_new_rope();
+
+    assert(report.type == b3::JointType.DISTANCE);
+}
+
+fn void the_shared_joint_accessors_reach_a_distance_handle_uncast() @test {
+    DistanceHandleReport report = the_shared_accessors_on_a_new_rope();
+
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void a_zeroed_distance_joint_definition_is_refused() @test {
+    b3::DistanceJointDef zeroed;
+
+    fault refusal = refusal_of_a_distance_joint_definition(&zeroed, true);
+
+    assert(refusal == b3::INVALID_DEFINITION, "box3d accepts a zeroed joint definition; the binding must not");
+}
+
+fn void a_distance_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::DistanceJointDef bodiless = b3::default_distance_joint_def();
+
+    fault refusal = refusal_of_a_distance_joint_definition(&bodiless, false);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+
+    fault none;
+    b3::DistanceJointDef named = b3::default_distance_joint_def();
+    fault accepted = refusal_of_a_distance_joint_definition(&named, true);
+    assert(accepted == none, "the same definition naming two bodies of the calling world is accepted");
+}
+
+fn void a_distance_joint_and_a_revolute_joint_do_not_convert_to_each_other() @test {
+    RopeConversion conversion = the_conversions_of_a_rope_and_a_hinge();
+
+    assert(conversion.converted, "as_distance takes back the joint it was given");
+    assert(conversion.narrowed.index1 == conversion.rope.index1);
+    assert(conversion.narrowed.world0 == conversion.rope.world0);
+    assert(conversion.narrowed.generation == conversion.rope.generation);
+    assert(conversion.hinge_refusal == b3::WRONG_JOINT_TYPE,
+        "a distance accessor on a hinge reinterprets the hinge's solver union");
+    assert(conversion.rope_refusal == b3::WRONG_JOINT_TYPE,
+        "and a revolute accessor on a distance joint reinterprets that joint's");
+}
+
+fn void a_destroyed_joint_does_not_narrow_to_a_distance_handle() @test {
+    DestroyedRopeConversion conversion = the_conversion_of_a_destroyed_rope();
+
+    assert(conversion.valid_before, "the joint was live before it was destroyed");
+    assert(conversion.type_after == b3::JointType.DISTANCE,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversion.refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+}

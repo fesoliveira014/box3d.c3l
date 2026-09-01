@@ -58,3 +58,4 @@ b3JointType 4 4
 b3JointDef 112 8 userData=0 bodyIdA=8 bodyIdB=16 localFrameA=24 localFrameB=52 forceThreshold=80 torqueThreshold=84 constraintHertz=88 constraintDampingRatio=92 drawScale=96 collideConnected=100 internalValue=104
 b3FilterJointDef 112 8 base=0
 b3RevoluteJointDef 152 8 base=0 targetAngle=112 enableSpring=116 hertz=120 dampingRatio=124 enableLimit=128 lowerAngle=132 upperAngle=136 enableMotor=140 maxMotorTorque=144 motorSpeed=148
+b3DistanceJointDef 160 8 base=0 length=112 enableSpring=116 lowerSpringForce=120 upperSpringForce=124 hertz=128 dampingRatio=132 enableLimit=136 minLength=140 maxLength=144 enableMotor=148 maxMotorForce=152 motorSpeed=156

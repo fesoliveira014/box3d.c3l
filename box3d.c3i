@@ -3114,3 +3114,156 @@ extern fn float WheelJointId.spin_speed(self) @cname("b3WheelJoint_GetSpinSpeed"
  reports a force that moves with a number measuring no force at all.
 *>
 extern fn float WheelJointId.spin_torque(self) @cname("b3WheelJoint_GetSpinTorque");
+
+<*
+ Enables or disables this joint's steering, which frees the wheel to turn about local frame A's x
+ axis — the suspension axis — and hands that turn to the steering spring. While it is off box3d
+ holds the spin axis onto that axis with a second alignment row instead, so the wheel cannot steer
+ at all. A change to the flag discards the alignment rows' accumulated impulse and nothing else:
+ the steering spring's impulse and the steering limit's two survive it, and because none of the
+ three is solved at all while this is off, steering_torque() goes on reporting the last impulse
+ the spring took rather than zero. box3d asserts nothing here.
+*>
+extern fn void WheelJointId.enable_steering(self, bool enable_steering) @cname("b3WheelJoint_EnableSteering");
+
+<*
+ Whether this joint's steering is enabled. False on a joint built from a default definition, which
+ arrives with the steering spring tuned — steering_hertz 1 and steering_damping_ratio 0.7 — but
+ with nothing solving it until this is set.
+*>
+extern fn bool WheelJointId.is_steering_enabled(self) @cname("b3WheelJoint_IsSteeringEnabled");
+
+<*
+ Sets the steering spring's stiffness in hertz. 1 on a joint built from a default definition. Zero
+ leaves the spring inert rather than rigid: box3d builds the spring's softness from this value and
+ a zero hertz yields a zero mass scale, so enabled steering with no hertz applies no torque
+ towards the target at all. box3d asserts nothing at all here — not even that the value is finite,
+ which the prismatic and spherical springs' identically shaped setters do — clamps nothing, and
+ discards no impulse.
+*>
+extern fn void WheelJointId.set_steering_hertz(self, float hertz) @cname("b3WheelJoint_SetSteeringHertz");
+
+<*
+ The steering spring's stiffness in hertz. 1 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.steering_hertz(self) @cname("b3WheelJoint_GetSteeringHertz");
+
+<*
+ Sets the steering spring's damping ratio, non-dimensional: 1 brings the wheel onto the target
+ steering angle without overshooting it. 0.7 on a joint built from a default definition. box3d
+ asserts nothing and clamps nothing here either — see set_steering_hertz.
+*>
+extern fn void WheelJointId.set_steering_damping_ratio(self, float damping_ratio) @cname("b3WheelJoint_SetSteeringDampingRatio");
+
+<*
+ The steering spring's damping ratio, non-dimensional. 0.7 on a joint built from a default
+ definition.
+*>
+extern fn float WheelJointId.steering_damping_ratio(self) @cname("b3WheelJoint_GetSteeringDampingRatio");
+
+<*
+ Sets the largest torque in newton-metres the steering spring may apply. 0 on a joint built from a
+ default definition, which leaves enabled steering unable to turn the wheel at all. box3d bounds
+ the spring's impulse to this on both sides, so it is what steering_torque() saturates at. box3d
+ asserts nothing and floors nothing: the value is stored exactly as handed, where the motor
+ joint's two spring ceilings floor theirs at zero in the setter.
+*>
+extern fn void WheelJointId.set_max_steering_torque(self, float torque) @cname("b3WheelJoint_SetMaxSteeringTorque");
+
+<*
+ The largest torque the steering spring may apply, in newton-metres. What was set, neither path
+ having floored it.
+*>
+extern fn float WheelJointId.max_steering_torque(self) @cname("b3WheelJoint_GetMaxSteeringTorque");
+
+<*
+ Enables or disables this joint's steering limit, which bounds the steering angle to
+ lower_steering_limit() and upper_steering_limit(). A change to the flag discards both of the
+ limit's accumulated impulses, so a limit switched back on rebuilds its hold over the following
+ steps rather than resuming the one it had. box3d reaches this limit only inside the branch it
+ solves the steering spring in, so it does nothing whatever while is_steering_enabled() is false —
+ where the suspension limit is solved whether or not its own spring is enabled. box3d asserts
+ nothing here.
+*>
+extern fn void WheelJointId.enable_steering_limit(self, bool enable_limit) @cname("b3WheelJoint_EnableSteeringLimit");
+
+<*
+ Whether this joint's steering limit is enabled. False on a joint built from a default definition.
+ The two angles are stored either way; they hold the wheel only while this and
+ is_steering_enabled() are both on.
+*>
+extern fn bool WheelJointId.is_steering_limit_enabled(self) @cname("b3WheelJoint_IsSteeringLimitEnabled");
+
+<*
+ The low end of the angle the limit holds the steering above, in radians about local frame A's x
+ axis. It is what box3d stored, and box3d stores whatever it was handed: see set_steering_limits
+ for why that matters on this type. 0 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.lower_steering_limit(self) @cname("b3WheelJoint_GetLowerSteeringLimit");
+
+<*
+ The high end of the angle the limit holds the steering below, in radians about local frame A's x
+ axis. It is what box3d stored, and box3d stores whatever it was handed: see set_steering_limits
+ for why that matters on this type. 0 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.upper_steering_limit(self) @cname("b3WheelJoint_GetUpperSteeringLimit");
+
+<*
+ Sets the two angles in radians the limit holds the steering between, about local frame A's x
+ axis. box3d neither orders the pair nor bounds it: both values are stored exactly as handed, so a
+ reversed pair stays reversed and an angle well beyond a half turn stays where it was put. The
+ revolute joint's set_limits swaps its pair and then clamps it into [-0.99 pi, 0.99 pi], the
+ prismatic joint's swaps without clamping, and the distance joint's set_length_range does both.
+ box3d asserts here that the lower is no greater than the upper, and this package links a release
+ build where that assertion is compiled out; the constructor does not assert even that, its one
+ ordering assertion covering the suspension pair alone, so a definition's steering pair is stored
+ as handed with nothing checking it on any build.
+
+ It discards no impulse on any call, whatever it changes. Its sibling set_suspension_limits
+ discards both of the suspension limit's impulses on a call that changes either value — two
+ setters on one type and one family, parting company here.
+
+ The limit acts only while is_steering_limit_enabled() and is_steering_enabled() are both on.
+*>
+extern fn void WheelJointId.set_steering_limits(self, float lower_radians, float upper_radians) @cname("b3WheelJoint_SetSteeringLimits");
+
+<*
+ Sets the angle in radians the steering spring pulls the wheel towards, about local frame A's x
+ axis. box3d asserts nothing at all here — where the revolute joint's set_target_angle asserts its
+ argument finite and inside [-pi, pi] — clamps nothing and discards no impulse, so a target
+ several turns past anything the wheel can be held at stays where it was put, and the revolute
+ joint's constructor folding the same quantity into [-pi, pi] has no counterpart on this type
+ through either path. The spring pursues the target only as far as max_steering_torque() allows,
+ and only while is_steering_enabled() is on.
+*>
+extern fn void WheelJointId.set_target_steering_angle(self, float target_radians) @cname("b3WheelJoint_SetTargetSteeringAngle");
+
+<*
+ The angle the steering spring is pulling the wheel towards, in radians. What was set, not the
+ angle the wheel is turned to: steering_angle() is that. 0 on a joint built from a default
+ definition.
+*>
+extern fn float WheelJointId.target_steering_angle(self) @cname("b3WheelJoint_GetTargetSteeringAngle");
+
+<*
+ The angle the wheel is turned to, in radians about local frame A's x axis: box3d resolves local
+ frame B's z axis onto frame A's z and y axes from the two bodies' current transforms and takes
+ the arc tangent of the pair. This is the measured angle, where target_steering_angle() is the
+ rest angle the spring pulls it towards. It is measured whether or not steering is enabled, and
+ being an arc tangent it wraps into [-pi, pi], so an angle driven past a half turn comes back on
+ the other side.
+*>
+extern fn float WheelJointId.steering_angle(self) @cname("b3WheelJoint_GetSteeringAngle");
+
+<*
+ The torque the steering spring applied over the last sub-step, in newton-metres, saturating at
+ max_steering_torque(). It is the spring's channel alone: the steering limit's two impulses are
+ not in it, so a wheel stopped by its limit reports what its spring is doing and not the hold. It
+ is signed about the steering axis, so a spring turning the wheel one way reports the opposite
+ sign to one turning it the other.
+
+ This is the only reading of the steering channel. The shared accessors do not see it at all —
+ spin_torque() sets out what constraint_torque() and constraint_force() report on this type
+ instead, and steering is in neither.
+*>
+extern fn float WheelJointId.steering_torque(self) @cname("b3WheelJoint_GetSteeringTorque");

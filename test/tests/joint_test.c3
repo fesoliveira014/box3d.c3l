@@ -5924,3 +5924,340 @@ fn void the_suspension_and_spin_settings_of_a_wheel_round_trip_through_both_path
     assert(pair.from_the_setters.target_speed == -3.5, "where the setter for it is named for the motor instead");
     assert(pair.from_the_setters.max_torque == 20.0);
 }
+
+enum WheelSteer {
+    SPRUNG,
+    SPRUNG_AND_KEPT_AWAKE,
+    STEERING_OFF,
+    STARVED_OF_TORQUE,
+}
+
+struct SteeredWheel {
+    float angle;
+    float target_angle;
+    float torque;
+    float separation;
+    bool steering;
+    bool awake;
+}
+
+// The chassis is static and the wheel is co-located with it under no gravity, so the steering
+// spring is the only thing that can turn anything and the whole reading is the wheel's. Three
+// seconds at 1/60 s against a 2 Hz spring damped at 1, pulled towards half a radian. Each row
+// moves one setting: the second leaves the world's sleep off, the third turns the steering off,
+// and the fourth holds the spring to a twentieth of a newton-metre, far too little to bring the
+// wheel round in three seconds.
+fn SteeredWheel a_wheel_steered_towards_half_a_radian(WheelSteer row) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = row == WheelSteer.SPRUNG || row == WheelSteer.STEERING_OFF;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = steered;
+    joint_def.enable_steering = row != WheelSteer.STEERING_OFF;
+    joint_def.steering_hertz = 2.0;
+    joint_def.steering_damping_ratio = 1.0;
+    joint_def.target_steering_angle = 0.5;
+    joint_def.max_steering_torque = row == WheelSteer.STARVED_OF_TORQUE ? 0.05 : 1000.0;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    for (int i = 0; i < 180; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .angle = wheel.steering_angle(),
+        .target_angle = wheel.target_steering_angle(),
+        .torque = wheel.steering_torque(),
+        .separation = wheel.angular_separation(),
+        .steering = wheel.is_steering_enabled(),
+        .awake = steered.is_awake(),
+    };
+}
+
+// The spring brings the wheel round onto the half radian it was given and the body then sleeps, so
+// the reading is a spring that had all but arrived rather than one stopped short of the angle it
+// was pulling towards. The row kept awake is what says which of the two it is: the same spring
+// left running reaches the target exactly and stays there, a ten-thousandth of a radian further
+// round than the sleeping row was left at.
+fn void a_steering_spring_turns_the_wheel_onto_the_angle_it_was_given() @test {
+    SteeredWheel sprung = a_wheel_steered_towards_half_a_radian(WheelSteer.SPRUNG);
+    SteeredWheel unsleeping = a_wheel_steered_towards_half_a_radian(WheelSteer.SPRUNG_AND_KEPT_AWAKE);
+    SteeredWheel straight = a_wheel_steered_towards_half_a_radian(WheelSteer.STEERING_OFF);
+
+    assert(sprung.steering, "the definition turned the steering on");
+    assert(sprung.angle > 0.4998 && sprung.angle < 0.4999,
+        "and the spring has turned the wheel onto the angle it was pulled towards");
+    assert(!sprung.awake, "the body slept once it had stopped turning, so that is where the spring left it");
+
+    assert(unsleeping.awake);
+    assert(unsleeping.angle > 0.49999 && unsleeping.angle < 0.50001,
+        "the same spring never allowed to sleep arrives on the target exactly");
+    assert(unsleeping.angle > sprung.angle,
+        "so the sleep took the last sliver of the travel and not the bulk of it");
+
+    assert(!straight.steering);
+    assert(straight.angle > -0.0001 && straight.angle < 0.0001,
+        "where the same wheel with the steering switched off never turns at all");
+    assert(straight.torque > -0.0001 && straight.torque < 0.0001);
+}
+
+// The one reading on this joint that measures nothing. box3d's switch over the joint types carries
+// no wheel case beyond an assertion this build compiles out and a bare return of zero, so the zero
+// here is that missing case and not a reading of a wheel which is plainly half a radian round.
+fn void the_shared_angular_separation_of_a_steered_wheel_is_the_unwritten_case() @test {
+    SteeredWheel sprung = a_wheel_steered_towards_half_a_radian(WheelSteer.SPRUNG);
+
+    assert(sprung.angle > 0.4998 && sprung.angle < 0.4999, "the joint is turned half a radian round");
+    assert(sprung.separation == 0.0, "and the shared separation is the zero the absent case returns");
+}
+
+// A binding that swapped these two names would pass any settled reading, where the two agree. This
+// row does not settle: a twentieth of a newton-metre cannot bring the wheel round in three seconds,
+// so the spring is pinned on its ceiling and the wheel is a quarter of the way to the angle it is
+// being pulled towards.
+fn void the_angle_a_wheel_is_turned_to_and_the_angle_it_is_pulled_towards_are_two_readings() @test {
+    SteeredWheel starved = a_wheel_steered_towards_half_a_radian(WheelSteer.STARVED_OF_TORQUE);
+
+    assert(starved.awake, "so the reading is a spring still working rather than a body that stopped being stepped");
+    assert(starved.target_angle == 0.5, "the target is what the definition asked for, unmoved by the run");
+    assert(starved.angle > 0.137 && starved.angle < 0.139,
+        "and the measured angle is the wheel's own, nowhere near it");
+    assert(starved.angle < 0.4 && starved.target_angle > 0.4,
+        "so reading either of the two through the other's name fails here");
+    assert(starved.torque > 0.04999 && starved.torque < 0.05001,
+        "which is the ceiling the spring is saturated on, reported as the torque it is applying");
+}
+
+struct WheelSteeringLimits {
+    float reversed_lower;
+    float reversed_upper;
+    float wide_lower;
+    float wide_upper;
+    float far_target;
+}
+
+fn WheelSteeringLimits the_steering_limits_and_target_a_wheel_keeps() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
+    b3::WheelJointId wheel = link_with_a_wheel_joint(world, chassis, steered);
+
+    WheelSteeringLimits limits;
+    wheel.set_steering_limits(1.0, -1.0);
+    limits.reversed_lower = wheel.lower_steering_limit();
+    limits.reversed_upper = wheel.upper_steering_limit();
+
+    wheel.set_steering_limits(-99.0, 99.0);
+    limits.wide_lower = wheel.lower_steering_limit();
+    limits.wide_upper = wheel.upper_steering_limit();
+
+    wheel.set_target_steering_angle(99.0);
+    limits.far_target = wheel.target_steering_angle();
+    return limits;
+}
+
+// Two pairs, because neither separates this contract from all the others on its own. A reversed
+// radian is a pair every other setter in the family orders — revolute, prismatic and distance all
+// return -1 and 1 for these arguments — and the wide pair is one revolute clamps to +-0.99 pi and
+// distance clamps to its slop, while prismatic leaves it exactly where it is. Only the two
+// together say the pair is neither ordered nor bounded. The target is a third contract again: the
+// same number reaching a revolute joint through its definition comes back folded into +-pi.
+fn void a_wheels_steering_limits_and_target_are_neither_ordered_nor_bounded() @test {
+    WheelSteeringLimits limits = the_steering_limits_and_target_a_wheel_keeps();
+
+    assert(limits.reversed_lower == 1.0, "the pair stays reversed where every other type's setter swaps it");
+    assert(limits.reversed_upper == -1.0);
+    assert(limits.wide_lower == -99.0,
+        "and a pair far beyond any angle the wheel can be held at stays where it was put");
+    assert(limits.wide_upper == 99.0);
+    assert(limits.far_target == 99.0, "as does a target the same distance out");
+}
+
+enum WheelLimitTouch {
+    NOTHING,
+    THE_SAME_PAIR_SET_AGAIN,
+    THE_FAR_END_MOVED,
+    THE_FLAG_TOGGLED,
+}
+
+struct PinnedWheel {
+    float settled;
+    float after_one_more_step;
+}
+
+// The spring pulls towards a radian and a half while the limit stops the wheel at a fifth of one,
+// so by two seconds the limit's two impulses carry the whole of the difference and the wheel is at
+// a standstill — which the untouched row establishes by not moving at all in its last step.
+// Whatever is done to the joint at that point is then visible in the step that follows it.
+fn PinnedWheel a_wheel_pinned_on_its_steering_limit(WheelLimitTouch touch) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = steered;
+    joint_def.enable_steering = true;
+    joint_def.steering_hertz = 2.0;
+    joint_def.steering_damping_ratio = 1.0;
+    joint_def.target_steering_angle = 1.5;
+    joint_def.max_steering_torque = 1000.0;
+    joint_def.enable_steering_limit = true;
+    joint_def.lower_steering_limit = -0.2;
+    joint_def.upper_steering_limit = 0.2;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+    float settled = wheel.steering_angle();
+
+    switch (touch) {
+        case THE_SAME_PAIR_SET_AGAIN: wheel.set_steering_limits(-0.2, 0.2);
+        case THE_FAR_END_MOVED: wheel.set_steering_limits(-0.9, 0.2);
+        case THE_FLAG_TOGGLED:
+            wheel.enable_steering_limit(false);
+            wheel.enable_steering_limit(true);
+        default: break;
+    }
+    world.step(1.0f / 60.0f, 4);
+
+    return {.settled = settled, .after_one_more_step = wheel.steering_angle()};
+}
+
+// set_steering_limits discards no impulse on any call, so neither setting the pair back nor moving
+// the end the wheel is not resting against disturbs the hold by anything at all. The last row is
+// what says the instrument can see a discard: enable_steering_limit does zero both impulses on a
+// change, and toggling it off and straight back on — which leaves the flag and both angles exactly
+// as they were — costs the hold a step's worth of warm start and lets the wheel back off the
+// limit. Its sibling set_suspension_limits discards on the same terms this one does not.
+fn void setting_a_wheels_steering_limits_discards_no_impulse_where_its_flag_does() @test {
+    PinnedWheel untouched = a_wheel_pinned_on_its_steering_limit(WheelLimitTouch.NOTHING);
+    PinnedWheel reset = a_wheel_pinned_on_its_steering_limit(WheelLimitTouch.THE_SAME_PAIR_SET_AGAIN);
+    PinnedWheel widened = a_wheel_pinned_on_its_steering_limit(WheelLimitTouch.THE_FAR_END_MOVED);
+    PinnedWheel toggled = a_wheel_pinned_on_its_steering_limit(WheelLimitTouch.THE_FLAG_TOGGLED);
+
+    assert(untouched.settled > 0.2014 && untouched.settled < 0.2015,
+        "the limit is holding the wheel a fifth of a radian round, well short of the target");
+    assert(untouched.after_one_more_step == untouched.settled, "and the hold is at a standstill");
+
+    assert(reset.after_one_more_step == reset.settled, "setting the same pair back moves nothing");
+    assert(widened.after_one_more_step == widened.settled,
+        "and neither does moving the end the wheel is not resting against");
+
+    float given_up = toggled.settled - toggled.after_one_more_step;
+    assert(given_up > 0.000005 && given_up < 0.0001,
+        "where the flag, which does discard both impulses, gives up a step's worth of the hold");
+}
+
+struct WheelSteering {
+    bool steering;
+    float hertz;
+    float damping_ratio;
+    float max_torque;
+    bool limited;
+    float lower;
+    float upper;
+    float target;
+}
+
+struct WheelSteeringPair {
+    WheelSteering from_the_definition;
+    WheelSteering from_the_setters;
+}
+
+// Every value the definition carries differs both from the default and from what the setters put
+// there afterwards, and the two flags the default leaves clear are each flipped twice, so a field
+// read from the wrong place comes back as the wrong number rather than as a coincidence.
+fn WheelSteeringPair the_steering_settings_of_a_wheel_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = steered;
+    joint_def.enable_steering = true;
+    joint_def.steering_hertz = 3.0;
+    joint_def.steering_damping_ratio = 0.5;
+    joint_def.max_steering_torque = 12.0;
+    joint_def.enable_steering_limit = true;
+    joint_def.lower_steering_limit = -0.25;
+    joint_def.upper_steering_limit = 0.75;
+    joint_def.target_steering_angle = 1.25;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    WheelSteeringPair pair;
+    pair.from_the_definition = {
+        .steering = wheel.is_steering_enabled(),
+        .hertz = wheel.steering_hertz(),
+        .damping_ratio = wheel.steering_damping_ratio(),
+        .max_torque = wheel.max_steering_torque(),
+        .limited = wheel.is_steering_limit_enabled(),
+        .lower = wheel.lower_steering_limit(),
+        .upper = wheel.upper_steering_limit(),
+        .target = wheel.target_steering_angle(),
+    };
+
+    wheel.enable_steering(false);
+    wheel.set_steering_hertz(4.0);
+    wheel.set_steering_damping_ratio(0.25);
+    wheel.set_max_steering_torque(20.0);
+    wheel.enable_steering_limit(false);
+    wheel.set_steering_limits(-1.5, 2.5);
+    wheel.set_target_steering_angle(-0.75);
+
+    pair.from_the_setters = {
+        .steering = wheel.is_steering_enabled(),
+        .hertz = wheel.steering_hertz(),
+        .damping_ratio = wheel.steering_damping_ratio(),
+        .max_torque = wheel.max_steering_torque(),
+        .limited = wheel.is_steering_limit_enabled(),
+        .lower = wheel.lower_steering_limit(),
+        .upper = wheel.upper_steering_limit(),
+        .target = wheel.target_steering_angle(),
+    };
+    return pair;
+}
+
+// Every value here is exactly representable as a float and is copied rather than computed, so the
+// comparisons are exact rather than banded.
+fn void the_steering_settings_of_a_wheel_round_trip_through_both_paths() @test {
+    WheelSteeringPair pair = the_steering_settings_of_a_wheel_before_and_after_the_setters();
+
+    assert(pair.from_the_definition.steering, "the definition turned on the flag the default leaves clear");
+    assert(pair.from_the_definition.hertz == 3.0);
+    assert(pair.from_the_definition.damping_ratio == 0.5);
+    assert(pair.from_the_definition.max_torque == 12.0);
+    assert(pair.from_the_definition.limited);
+    assert(pair.from_the_definition.lower == -0.25);
+    assert(pair.from_the_definition.upper == 0.75);
+    assert(pair.from_the_definition.target == 1.25, "and a target no path on this type folds");
+
+    assert(!pair.from_the_setters.steering, "and the setters put every one of the eight back the other way");
+    assert(pair.from_the_setters.hertz == 4.0);
+    assert(pair.from_the_setters.damping_ratio == 0.25);
+    assert(pair.from_the_setters.max_torque == 20.0);
+    assert(!pair.from_the_setters.limited);
+    assert(pair.from_the_setters.lower == -1.5);
+    assert(pair.from_the_setters.upper == 2.5);
+    assert(pair.from_the_setters.target == -0.75);
+}

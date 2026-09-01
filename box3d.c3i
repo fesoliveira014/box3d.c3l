@@ -3269,8 +3269,12 @@ extern fn float WheelJointId.steering_angle(self) @cname("b3WheelJoint_GetSteeri
  The torque the steering spring applied over the last sub-step, in newton-metres, saturating at
  max_steering_torque(). It is the spring's channel alone: the steering limit's two impulses are
  not in it, so a wheel stopped by its limit reports what its spring is doing and not the hold. It
- is signed about the steering axis, so a spring turning the wheel one way reports the opposite
- sign to one turning it the other.
+ is signed about the steering axis, and mirroring the target does mirror the sign — but the sign
+ does not tell you which way the wheel is travelling. Measured with the same target of +0.5: a
+ spring still working reports -0.149966 while the angle climbs through +0.139088, and one starved
+ at a ceiling of 0.05 reports +0.050000 while the angle climbs through +0.015343. The relation
+ between the sign and the direction of travel inverts once the spring saturates, so read the
+ magnitude against max_steering_torque() and take the direction from steering_angle().
 
  This is the only reading of the steering channel. The shared accessors do not see it at all —
  spin_torque() sets out what constraint_torque() and constraint_force() report on this type

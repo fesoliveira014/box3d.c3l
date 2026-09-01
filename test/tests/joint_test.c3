@@ -5556,3 +5556,371 @@ fn void a_wheel_joint_definition_naming_no_bodies_is_refused() @test {
     assert(refusal_of_a_wheel_joint_definition(&named_wheel, true) == none,
         "the same definition naming two bodies of the calling world is accepted");
 }
+
+enum WheelSpin {
+    DRIVEN,
+    MOTOR_OFF,
+    STARVED_OF_TORQUE,
+}
+
+struct SpunWheel {
+    float measured_speed;
+    float target_speed;
+    float torque;
+    b3::Vec3 constraint_torque;
+    bool awake;
+}
+
+// The chassis is static and the wheel is co-located with it under no gravity, so the spin motor is
+// the only thing that can turn anything and the whole reading is the wheel's. Sleep is off: the row
+// with the motor switched off never moves and would be asleep long before the second is up. Sixty
+// steps at 1/60 s — the driven row is on the two radians a second it was asked for by then, and
+// the starved row, held to a tenth of a newton-metre, is still climbing towards it.
+fn SpunWheel a_wheel_spun_by_its_motor_for_a_second(WheelSpin row) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
+
+    float ceiling;
+    switch (row) {
+        case STARVED_OF_TORQUE: ceiling = 0.1;
+        default: ceiling = 1000.0;
+    }
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = spinning;
+    joint_def.enable_spin_motor = row != WheelSpin.MOTOR_OFF;
+    joint_def.spin_speed = 2.0;
+    joint_def.max_spin_torque = ceiling;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .measured_speed = wheel.spin_speed(),
+        .target_speed = wheel.spin_motor_speed(),
+        .torque = wheel.spin_torque(),
+        .constraint_torque = wheel.constraint_torque(),
+        .awake = spinning.is_awake(),
+    };
+}
+
+fn void a_spin_motor_turns_the_wheel_at_the_speed_it_was_given() @test {
+    SpunWheel driven = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.DRIVEN);
+    SpunWheel idle = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.MOTOR_OFF);
+
+    assert(driven.awake, "so the reading is a motor working rather than a body that stopped being stepped");
+    assert(driven.measured_speed > 1.999 && driven.measured_speed < 2.001,
+        "a second is long enough for the motor to reach the two radians a second it was asked for");
+    assert(driven.torque > -786.0 && driven.torque < -784.8,
+        "and the torque holding it there is signed about the spin axis rather than failed");
+
+    assert(idle.awake);
+    assert(idle.measured_speed > -0.001 && idle.measured_speed < 0.001,
+        "where the same fixture with the motor switched off turns at nothing");
+    assert(idle.torque > -0.001 && idle.torque < 0.001);
+}
+
+// A binding that swapped these two names would pass any settled reading, where the two agree. This
+// row does not settle: a tenth of a newton-metre cannot bring the wheel to two radians a second in
+// a second, so the motor is still pinned on its ceiling and the wheel is turning at a sixteenth of
+// the speed it is being driven towards.
+fn void the_speed_a_spin_motor_is_given_and_the_speed_the_wheel_turns_at_are_two_readings() @test {
+    SpunWheel starved = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.STARVED_OF_TORQUE);
+
+    assert(starved.awake);
+    assert(starved.target_speed == 2.0, "the target is what the definition asked for, unmoved by the run");
+    assert(starved.measured_speed > 0.121 && starved.measured_speed < 0.123,
+        "and the measured rate is the wheel's own, nowhere near it");
+    assert(starved.measured_speed < 1.0 && starved.target_speed > 1.9,
+        "so reading either of the two through the other's name fails here");
+    assert(starved.torque > 0.0999 && starved.torque < 0.1001,
+        "which is the ceiling holding the wheel back, reported as the torque the motor is applying");
+}
+
+// Across the nine types the shared accessors have been right, doubled, permuted and mis-axed. On
+// this one the torque is the spin channel alone: box3d leaves the steering channel and the
+// constraint holding the spin axis in place out of it, and lays what is left along local frame A's
+// z axis rather than the spin axis, which is frame B's. The two are the same vector here because
+// both frames are at identity and body A never turns.
+fn void the_shared_torque_on_a_wheel_joint_carries_the_spin_channel_and_nothing_else() @test {
+    SpunWheel driven = a_wheel_spun_by_its_motor_for_a_second(WheelSpin.DRIVEN);
+
+    assert(driven.constraint_torque.z == driven.torque,
+        "the whole of the shared torque is the torque spin_torque() reports");
+    assert(driven.constraint_torque.z > -786.0 && driven.constraint_torque.z < -784.8);
+    assert(driven.constraint_torque.x > -0.01 && driven.constraint_torque.x < 0.01,
+        "and nothing lands on the other two axes");
+    assert(driven.constraint_torque.y > -0.01 && driven.constraint_torque.y < 0.01);
+}
+
+enum WheelLoad {
+    ALONG_THE_SUSPENSION_AXIS,
+    ALONG_IT_WITH_A_LOWER_TRAVEL_SET,
+    ACROSS_THE_SUSPENSION_AXIS,
+}
+
+struct LoadedWheel {
+    b3::Vec3 force;
+    float weight;
+    bool awake;
+}
+
+// Gravity is the load and the suspension axis is world x, so the first two rows push along the axis
+// and the third across it. Five seconds at 1/60 s, because the 1 Hz suspension spring is still
+// settling at two and the axial reading drifts by a tenth of a newton until it stops. The middle
+// row differs from the first in one thing only: a lower travel of five metres, set but never armed,
+// which the wheel cannot reach and which nothing in the solve reads.
+fn LoadedWheel a_wheel_held_against_gravity_for_five_seconds(WheelLoad row) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = row == WheelLoad.ACROSS_THE_SUSPENSION_AXIS
+        ? (b3::Vec3){ 0.0, -10.0, 0.0 }
+        : (b3::Vec3){ -10.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = hanging;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    if (row == WheelLoad.ALONG_IT_WITH_A_LOWER_TRAVEL_SET) wheel.set_suspension_limits(5.0, 99.0);
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.force = wheel.constraint_force(), .weight = 10.0f * hanging.mass(), .awake = hanging.is_awake()};
+}
+
+// The two loads are the same weight held by two different channels, and both come back one axis
+// over: the load along the suspension axis, which is frame A's x, reads on z, and the load across
+// it, which the point-to-line constraint carries on frame A's y, reads on x. The third assertion is
+// the one that says the axial number is not a force at all — a five-metre travel the wheel never
+// reaches and no solve reads moves it by five times the inverse sub-step, exactly 1200 newtons.
+fn void the_shared_force_on_a_wheel_joint_is_permuted_and_carries_a_travel_that_is_no_force() @test {
+    LoadedWheel axial = a_wheel_held_against_gravity_for_five_seconds(WheelLoad.ALONG_THE_SUSPENSION_AXIS);
+    LoadedWheel travelled = a_wheel_held_against_gravity_for_five_seconds(WheelLoad.ALONG_IT_WITH_A_LOWER_TRAVEL_SET);
+    LoadedWheel across = a_wheel_held_against_gravity_for_five_seconds(WheelLoad.ACROSS_THE_SUSPENSION_AXIS);
+
+    float axial_error = axial.force.z - axial.weight;
+    float across_error = across.force.x - across.weight;
+    float travel_leak = travelled.force.z - axial.force.z;
+
+    assert(axial.awake && travelled.awake && across.awake);
+    assert(axial_error > -0.2 && axial_error < 0.2,
+        "the spring is holding the wheel's whole weight along frame A's x axis, and it reads on z");
+    assert(axial.force.x > -0.01 && axial.force.x < 0.01);
+    assert(axial.force.y > -0.01 && axial.force.y < 0.01);
+
+    assert(across_error > -0.2 && across_error < 0.2,
+        "and the same weight held across that axis reads one slot over again");
+    assert(across.force.y > -0.01 && across.force.y < 0.01);
+    assert(across.force.z > -0.01 && across.force.z < 0.01);
+
+    assert(travel_leak > 1199.5 && travel_leak < 1200.5,
+        "a travel the wheel never reaches is summed into the axial term as though it were an impulse");
+}
+
+struct SuspendedWheel {
+    float x;
+    bool awake;
+    bool sprung;
+}
+
+// The wheel starts half a metre out along the suspension axis with gravity off, so the spring is
+// the only thing that can move it and the control has nothing to move it at all. Three seconds is
+// long enough for the 1 Hz spring the default definition arrives with to settle: the sprung reading
+// is the same at three seconds and at five.
+fn SuspendedWheel a_wheel_left_out_along_its_suspension_axis(bool enable_spring) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId displaced = a_dynamic_sphere_at(world, 0.5);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = displaced;
+    joint_def.enable_suspension_spring = enable_spring;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    for (int i = 0; i < 180; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.x = displaced.position().x, .awake = displaced.is_awake(), .sprung = wheel.is_suspension_enabled()};
+}
+
+fn void the_suspension_spring_a_wheel_arrives_with_pulls_it_back_onto_the_chassis() @test {
+    SuspendedWheel sprung = a_wheel_left_out_along_its_suspension_axis(true);
+    SuspendedWheel loose = a_wheel_left_out_along_its_suspension_axis(false);
+
+    assert(sprung.sprung, "the default definition hands this flag back already set");
+    assert(sprung.awake, "so the settled position is a spring holding the wheel, not a body left where it stopped");
+    assert(sprung.x > -0.001 && sprung.x < 0.001, "and the spring has drawn the wheel back onto the chassis anchor");
+
+    assert(!loose.sprung);
+    assert(loose.awake);
+    assert(loose.x > 0.4999 && loose.x < 0.5001,
+        "where the same wheel with the spring switched off sits where it was put");
+}
+
+struct WheelSuspensionLimits {
+    float reversed_lower;
+    float reversed_upper;
+    float wide_lower;
+    float wide_upper;
+}
+
+fn WheelSuspensionLimits the_suspension_limits_a_wheel_keeps() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
+    b3::WheelJointId wheel = link_with_a_wheel_joint(world, chassis, spinning);
+
+    WheelSuspensionLimits limits;
+    wheel.set_suspension_limits(3.0, -3.0);
+    limits.reversed_lower = wheel.lower_suspension_limit();
+    limits.reversed_upper = wheel.upper_suspension_limit();
+
+    wheel.set_suspension_limits(-99.0, 99.0);
+    limits.wide_lower = wheel.lower_suspension_limit();
+    limits.wide_upper = wheel.upper_suspension_limit();
+    return limits;
+}
+
+// Two pairs, because neither separates this contract from all the others on its own. The reversed
+// pair is one every other setter in the family orders — revolute, prismatic and distance all return
+// -3 and 3 for these arguments — and the wide pair is one revolute clamps to +-0.99 pi and distance
+// clamps to its slop, while prismatic leaves it exactly where it is. Only the two together say the
+// pair is neither ordered nor bounded.
+fn void a_wheels_suspension_limits_are_neither_ordered_nor_bounded() @test {
+    WheelSuspensionLimits limits = the_suspension_limits_a_wheel_keeps();
+
+    assert(limits.reversed_lower == 3.0, "the pair stays reversed where every other type's setter swaps it");
+    assert(limits.reversed_upper == -3.0);
+    assert(limits.wide_lower == -99.0, "and a pair far outside anything the wheel can reach stays where it was put");
+    assert(limits.wide_upper == 99.0);
+}
+
+struct WheelSettings {
+    bool sprung;
+    float hertz;
+    float damping_ratio;
+    bool limited;
+    float lower;
+    float upper;
+    bool driven;
+    float target_speed;
+    float max_torque;
+}
+
+struct WheelSettingsPair {
+    WheelSettings from_the_definition;
+    WheelSettings from_the_setters;
+}
+
+// Every value the definition carries differs both from the default and from what the setters put
+// there afterwards, and the two flags the default leaves set and clear are each flipped twice, so a
+// field read from the wrong place comes back as the wrong number rather than as a coincidence.
+fn WheelSettingsPair the_suspension_and_spin_settings_of_a_wheel_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId chassis = a_static_sphere_at_the_origin(world);
+    b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
+    joint_def.body_id_a = chassis;
+    joint_def.body_id_b = spinning;
+    joint_def.enable_suspension_spring = false;
+    joint_def.suspension_hertz = 3.0;
+    joint_def.suspension_damping_ratio = 0.5;
+    joint_def.enable_suspension_limit = true;
+    joint_def.lower_suspension_limit = -0.25;
+    joint_def.upper_suspension_limit = 0.75;
+    joint_def.enable_spin_motor = true;
+    joint_def.spin_speed = 1.5;
+    joint_def.max_spin_torque = 12.0;
+    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+
+    WheelSettingsPair pair;
+    pair.from_the_definition = {
+        .sprung = wheel.is_suspension_enabled(),
+        .hertz = wheel.suspension_hertz(),
+        .damping_ratio = wheel.suspension_damping_ratio(),
+        .limited = wheel.is_suspension_limit_enabled(),
+        .lower = wheel.lower_suspension_limit(),
+        .upper = wheel.upper_suspension_limit(),
+        .driven = wheel.is_spin_motor_enabled(),
+        .target_speed = wheel.spin_motor_speed(),
+        .max_torque = wheel.max_spin_torque(),
+    };
+
+    wheel.enable_suspension(true);
+    wheel.set_suspension_hertz(4.0);
+    wheel.set_suspension_damping_ratio(0.25);
+    wheel.enable_suspension_limit(false);
+    wheel.set_suspension_limits(-1.5, 2.5);
+    wheel.enable_spin_motor(false);
+    wheel.set_spin_motor_speed(-3.5);
+    wheel.set_max_spin_torque(20.0);
+
+    pair.from_the_setters = {
+        .sprung = wheel.is_suspension_enabled(),
+        .hertz = wheel.suspension_hertz(),
+        .damping_ratio = wheel.suspension_damping_ratio(),
+        .limited = wheel.is_suspension_limit_enabled(),
+        .lower = wheel.lower_suspension_limit(),
+        .upper = wheel.upper_suspension_limit(),
+        .driven = wheel.is_spin_motor_enabled(),
+        .target_speed = wheel.spin_motor_speed(),
+        .max_torque = wheel.max_spin_torque(),
+    };
+    return pair;
+}
+
+// Every value here is exactly representable as a float and is copied rather than computed, so the
+// comparisons are exact rather than banded.
+fn void the_suspension_and_spin_settings_of_a_wheel_round_trip_through_both_paths() @test {
+    WheelSettingsPair pair = the_suspension_and_spin_settings_of_a_wheel_before_and_after_the_setters();
+
+    assert(!pair.from_the_definition.sprung, "the definition turned off the one flag the default leaves on");
+    assert(pair.from_the_definition.hertz == 3.0);
+    assert(pair.from_the_definition.damping_ratio == 0.5);
+    assert(pair.from_the_definition.limited);
+    assert(pair.from_the_definition.lower == -0.25);
+    assert(pair.from_the_definition.upper == 0.75);
+    assert(pair.from_the_definition.driven);
+    assert(pair.from_the_definition.target_speed == 1.5, "the definition calls this field spin_speed");
+    assert(pair.from_the_definition.max_torque == 12.0);
+
+    assert(pair.from_the_setters.sprung, "and the setters put every one of the eight back the other way");
+    assert(pair.from_the_setters.hertz == 4.0);
+    assert(pair.from_the_setters.damping_ratio == 0.25);
+    assert(!pair.from_the_setters.limited);
+    assert(pair.from_the_setters.lower == -1.5);
+    assert(pair.from_the_setters.upper == 2.5);
+    assert(!pair.from_the_setters.driven);
+    assert(pair.from_the_setters.target_speed == -3.5, "where the setter for it is named for the motor instead");
+    assert(pair.from_the_setters.max_torque == 20.0);
+}

@@ -2956,3 +2956,161 @@ extern fn JointId create_wheel_joint_raw(
   WorldId world_id,
   WheelJointDef* def,
 ) @cname("b3CreateWheelJoint") @private;
+
+<*
+ Enables or disables this joint's suspension spring, which pulls the wheel back along local frame
+ A's x axis towards the chassis anchor. A change to the flag discards the spring's accumulated
+ impulse, so a spring switched back on rebuilds its push over the following steps rather than
+ resuming the one it had, and setting the flag to what it already holds discards nothing. box3d
+ asserts nothing here.
+*>
+extern fn void WheelJointId.enable_suspension(self, bool enable_spring) @cname("b3WheelJoint_EnableSuspension");
+
+<*
+ Whether this joint's suspension spring is enabled. True on a joint built from a default
+ definition, which is the one enable flag in this package that starts that way.
+*>
+extern fn bool WheelJointId.is_suspension_enabled(self) @cname("b3WheelJoint_IsSuspensionEnabled");
+
+<*
+ Sets the suspension spring's stiffness in hertz. 1 on a joint built from a default definition,
+ where every other type's spring arrives at 0. box3d asserts nothing at all here — not even that
+ the value is finite, which the prismatic and spherical springs' identically shaped setters do —
+ clamps nothing, and discards no impulse.
+*>
+extern fn void WheelJointId.set_suspension_hertz(self, float hertz) @cname("b3WheelJoint_SetSuspensionHertz");
+
+<*
+ The suspension spring's stiffness in hertz. 1 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.suspension_hertz(self) @cname("b3WheelJoint_GetSuspensionHertz");
+
+<*
+ Sets the suspension spring's damping ratio, non-dimensional: 1 settles the wheel on the chassis
+ anchor without overshooting it. 0.7 on a joint built from a default definition. box3d asserts
+ nothing and clamps nothing here either — see set_suspension_hertz.
+*>
+extern fn void WheelJointId.set_suspension_damping_ratio(self, float damping_ratio) @cname("b3WheelJoint_SetSuspensionDampingRatio");
+
+<*
+ The suspension spring's damping ratio, non-dimensional. 0.7 on a joint built from a default
+ definition.
+*>
+extern fn float WheelJointId.suspension_damping_ratio(self) @cname("b3WheelJoint_GetSuspensionDampingRatio");
+
+<*
+ Enables or disables this joint's suspension limit, which bounds the travel along local frame A's
+ x axis to lower_suspension_limit() and upper_suspension_limit(). A change to the flag discards
+ both of the limit's accumulated impulses, so a limit switched back on rebuilds its hold over the
+ following steps rather than resuming the one it had. The limit is solved whether or not the
+ suspension spring is enabled. box3d asserts nothing here.
+*>
+extern fn void WheelJointId.enable_suspension_limit(self, bool enable_limit) @cname("b3WheelJoint_EnableSuspensionLimit");
+
+<*
+ Whether this joint's suspension limit is enabled. False on a joint built from a default
+ definition. The two travels are stored either way; they hold the wheel only while this is on.
+*>
+extern fn bool WheelJointId.is_suspension_limit_enabled(self) @cname("b3WheelJoint_IsSuspensionLimitEnabled");
+
+<*
+ The low end of the travel the limit holds the wheel above, in metres along local frame A's x
+ axis. It is what box3d stored, and box3d stores whatever it was handed: see set_suspension_limits
+ for why that matters on this type. 0 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.lower_suspension_limit(self) @cname("b3WheelJoint_GetLowerSuspensionLimit");
+
+<*
+ The high end of the travel the limit holds the wheel below, in metres along local frame A's x
+ axis. It is what box3d stored, and box3d stores whatever it was handed: see set_suspension_limits
+ for why that matters on this type. 0 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.upper_suspension_limit(self) @cname("b3WheelJoint_GetUpperSuspensionLimit");
+
+<*
+ Sets the two travels in metres the limit holds the wheel between, along local frame A's x axis.
+ box3d neither orders the pair nor bounds it: both values are stored exactly as handed, so a
+ reversed pair stays reversed and a travel far outside anything the wheel can reach stays where it
+ was put. That is this family's sixth contract and the first to do neither — the revolute joint's
+ set_limits swaps its pair and then clamps it into [-0.99 pi, 0.99 pi], the prismatic joint's
+ swaps without clamping, and the distance joint's set_length_range does both. box3d asserts the
+ lower is no greater than the upper; this package links a release build where that assertion is
+ compiled out, and the wrappers do not restore it. WheelJointDef's pair reaches the solver the
+ same way under the same compiled-out assertion, so the two paths agree.
+
+ A call that changes either value discards both of the limit's accumulated impulses; a call that
+ changes neither discards nothing. Its sibling set_steering_limits discards nothing on any call.
+
+ The limit acts only while is_suspension_limit_enabled() is on.
+*>
+extern fn void WheelJointId.set_suspension_limits(self, float lower, float upper) @cname("b3WheelJoint_SetSuspensionLimits");
+
+<*
+ Enables or disables this joint's spin motor, which turns the wheel about local frame B's z axis.
+ A change to the flag discards the motor's accumulated impulse, so spin_torque() reads zero until
+ the next step rather than the torque the motor was applying before. box3d asserts nothing here.
+*>
+extern fn void WheelJointId.enable_spin_motor(self, bool enable_motor) @cname("b3WheelJoint_EnableSpinMotor");
+
+<*
+ Whether this joint's spin motor is enabled. False on a joint built from a default definition.
+*>
+extern fn bool WheelJointId.is_spin_motor_enabled(self) @cname("b3WheelJoint_IsSpinMotorEnabled");
+
+<*
+ Sets the speed the spin motor drives the wheel at, in radians per second about local frame B's z
+ axis. It is a target the motor pursues only as far as max_spin_torque() lets it, not a speed the
+ wheel is made to hold, and a negative speed turns it the other way. box3d asserts nothing here
+ and stores the value verbatim. WheelJointDef carries this same value under the name spin_speed,
+ which its own docstring describes, and the rate the wheel is actually turning at is spin_speed() —
+ a third name over two quantities, and the collision is box3d's rather than the binding's.
+*>
+extern fn void WheelJointId.set_spin_motor_speed(self, float speed) @cname("b3WheelJoint_SetSpinMotorSpeed");
+
+<*
+ The speed the spin motor is driving the wheel towards, in radians per second. What was set, not
+ what the wheel is turning at: spin_speed() is that. 0 on a joint built from a default definition.
+*>
+extern fn float WheelJointId.spin_motor_speed(self) @cname("b3WheelJoint_GetSpinMotorSpeed");
+
+<*
+ Sets the largest torque in newton-metres the spin motor may apply. 0 on a joint built from a
+ default definition, which leaves an enabled motor unable to turn anything. box3d asserts nothing
+ and floors nothing: the value is stored exactly as handed, where the motor joint's two spring
+ ceilings floor theirs at zero in the setter.
+*>
+extern fn void WheelJointId.set_max_spin_torque(self, float torque) @cname("b3WheelJoint_SetMaxSpinTorque");
+
+<*
+ The largest torque the spin motor may apply, in newton-metres. What was set, neither path having
+ floored it.
+*>
+extern fn float WheelJointId.max_spin_torque(self) @cname("b3WheelJoint_GetMaxSpinTorque");
+
+<*
+ The rate the wheel is turning at, in radians per second: the two bodies' relative angular
+ velocity resolved onto local frame B's z axis. This is the measured rate, where
+ spin_motor_speed() is the target the motor drives towards. A body with no solver state — a static
+ one, or a sleeping one — contributes zero angular velocity rather than being left out, so against
+ a static chassis this is the wheel's own rate about that axis. It is measured whether or not the
+ spin motor is enabled.
+*>
+extern fn float WheelJointId.spin_speed(self) @cname("b3WheelJoint_GetSpinSpeed");
+
+<*
+ The torque the spin motor applied over the last sub-step, in newton-metres, bounded by
+ max_spin_torque(). It is signed about local frame B's z axis: a motor driving the wheel one way
+ reports the opposite sign to one driving it the other, so a negative reading is a direction
+ rather than a failure.
+
+ This is the honest reading of the spin channel, and the shared accessors on this type are not.
+ constraint_torque() carries this same impulse and nothing else — box3d leaves the steering
+ channel and the constraint holding the spin axis in place out of it entirely — laid along local
+ frame A's z axis rather than the spin axis, which is local frame B's; the two coincide only while
+ the frames agree about that axis. constraint_force() is further out: its three components are a
+ cyclic permutation of the channels they belong to, in the way the prismatic joint's are, and its
+ axial term adds the stored lower_suspension_limit() — a travel, not an impulse — to the upper
+ limit's impulse and the spring's, so a joint whose lower travel is set to anything but zero
+ reports a force that moves with a number measuring no force at all.
+*>
+extern fn float WheelJointId.spin_torque(self) @cname("b3WheelJoint_GetSpinTorque");

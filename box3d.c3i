@@ -619,15 +619,6 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
 
 <*
- The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened
- into one tree that a world populates as a single shape. Ownership, the byte count and the
- trailing arrays all work exactly as they do for MeshData — see there.
-
- Build one with create_compound() in box3d_compound.c3.
-*>
-typedef CompoundData = void;
-
-<*
  The number of children one compound can hold. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which
  the C API does not expose as a function.
 *>
@@ -639,6 +630,67 @@ const int MAX_CHILD_SHAPES = 1048576;
  with more materials than this has to be used outside a compound.
 *>
 const int MAX_COMPOUND_MESH_MATERIALS = 4;
+
+<*
+ A node of a bounding volume hierarchy. box3d calls it private data placed in a public header for
+ performance, and nothing in this binding reads one, so it is carried as an opaque pointer target.
+*>
+typedef TreeNode = void;
+
+<*
+ A bounding volume hierarchy over whatever it indexes. box3d calls this private data too, and it
+ is declared in full only because CompoundData embeds one by value and the layout pins have to
+ reach the fields past it. A compound's tree is immutable: its nodes live inside the compound's
+ own allocation and the four rebuild arrays it would otherwise scratch in are null.
+*>
+struct DynamicTree {
+    ulong version;
+    TreeNode* nodes;
+    int root;
+    int node_count;
+    int node_capacity;
+    int proxy_count;
+    int free_list;
+    int* leaf_indices;
+    Aabb* leaf_boxes;
+    Vec3* leaf_centers;
+    int* bin_indices;
+    int rebuild_capacity;
+}
+
+<*
+ The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened
+ into one tree that a world populates as a single shape. Ownership, the byte count and the
+ trailing arrays all work exactly as they do for MeshData — see there.
+
+ The children themselves live past the end of the struct and are reached through the byte offsets
+ it carries, so a bare CompoundData must never be copied, and a caller reaches a child through the
+ accessors in box3d_compound.c3 rather than through an offset. What the fields are good for is the
+ counts those accessors are bounded by: one per kind, plus material_count over the array they all
+ index into. The flat index child() takes runs over the four kinds together — see child_count().
+ shared_hull_count and shared_mesh_count count distinct geometry rather than children and are
+ box3d's own diagnostics.
+
+ Build one with create_compound() in box3d_compound.c3.
+*>
+struct CompoundData {
+    ulong version;
+    int byte_count;
+    int node_offset;
+    DynamicTree tree;
+    int material_offset;
+    int material_count;
+    int capsule_offset;
+    int capsule_count;
+    int hull_offset;
+    int hull_count;
+    int shared_hull_count;
+    int mesh_offset;
+    int mesh_count;
+    int shared_mesh_count;
+    int sphere_offset;
+    int sphere_count;
+}
 
 <*
  A sphere child of a compound. The sphere carries its own centre in compound local space, so
@@ -702,6 +754,82 @@ struct CompoundDef {
 }
 
 <*
+ A capsule child as the compound holds it. The capsule is in compound local space and carries its
+ own two centres, so there is no transform to go with it, and material_index selects one entry of
+ CompoundData.materials().
+*>
+struct CompoundCapsule {
+    Capsule capsule;
+    int material_index;
+}
+
+<*
+ A hull child as the compound holds it. The hull points inside the compound's own allocation and
+ is shared by every child that named the same hull, so it lives and dies with the compound and
+ must not be destroyed on its own. transform places it in compound local space and material_index
+ selects one entry of CompoundData.materials().
+*>
+struct CompoundHull {
+    HullData* hull;
+    Transform transform;
+    int material_index;
+}
+
+<*
+ A mesh child as the compound holds it. mesh_data points inside the compound's own allocation
+ rather than at the mesh create_compound() was given — the compound clones it — so it lives and
+ dies with the compound and must not be destroyed on its own.
+
+ material_indices is a second level of indirection: a triangle's own material index, clamped to
+ MAX_COMPOUND_MESH_MATERIALS, selects a slot here, and that slot selects an entry of
+ CompoundData.materials(). All MAX_COMPOUND_MESH_MATERIALS slots are always filled, and a slot the
+ child never uses reads 0, which is a real material index rather than a marker, so this struct
+ cannot say how many of its slots are meaningful.
+*>
+struct CompoundMesh {
+    MeshData* mesh_data;
+    Transform transform;
+    Vec3 scale;
+    int[MAX_COMPOUND_MESH_MATERIALS] material_indices;
+}
+
+<*
+ A sphere child as the compound holds it. The sphere is in compound local space and carries its
+ own centre, so there is no transform to go with it, and material_index selects one entry of
+ CompoundData.materials().
+*>
+struct CompoundSphere {
+    Sphere sphere;
+    int material_index;
+}
+
+<*
+ One child of a compound in the flat form CompoundData.child() reports, whatever kind it is.
+
+ type is the union's tag and the only thing that says which arm holds data. Reading another arm
+ reinterprets the same bytes and yields plausible geometry rather than an error, so a caller that
+ already knows the kind it wants should reach for CompoundData.capsule(), hull(), mesh() or
+ sphere() instead, which are typed and bounded by their own count.
+
+ transform is identity for a capsule and a sphere however the child is placed, because those two
+ carry their placement in their own geometry; only a hull and a mesh have a transform of their
+ own. material_indices works as it does on CompoundMesh — a mesh child fills all
+ MAX_COMPOUND_MESH_MATERIALS slots and the other three kinds use slot 0 and leave the rest 0,
+ which is a real material index rather than a marker.
+*>
+struct ChildShape {
+    union {
+        Capsule capsule;
+        HullData* hull;
+        Mesh mesh;
+        Sphere sphere;
+    }
+    Transform transform;
+    int[MAX_COMPOUND_MESH_MATERIALS] material_indices;
+    ShapeType type;
+}
+
+<*
  Raw compound constructor. Exactly one definition makes it return a null pointer — one naming
  MAX_CHILD_SHAPES children or more — and it reads the four child arrays, and the hull and mesh
  each child names, without testing any of them for null. The wrapper in box3d_compound.c3 carries
@@ -713,6 +841,25 @@ extern fn CompoundData* create_compound_raw(CompoundDef* def) @cname("b3CreateCo
  Releases the compound. The caller owns it and must call this exactly once — see MeshData.
 *>
 extern fn void CompoundData.destroy(&self) @cname("b3DestroyCompound");
+
+<*
+ Raw child accessors. Every one of them asserts its index and this release build compiles the
+ assertion out, so each reads its array unconditionally and an index outside the count reaches
+ memory that is not a child. The wrappers in box3d_compound.c3 restore the bound and are the only
+ public way in.
+*>
+extern fn ChildShape compound_child_raw(CompoundData* compound, int child_index) @cname("b3GetCompoundChild") @private;
+extern fn CompoundCapsule compound_capsule_raw(CompoundData* compound, int index) @cname("b3GetCompoundCapsule") @private;
+extern fn CompoundHull compound_hull_raw(CompoundData* compound, int index) @cname("b3GetCompoundHull") @private;
+extern fn CompoundMesh compound_mesh_raw(CompoundData* compound, int index) @cname("b3GetCompoundMesh") @private;
+extern fn CompoundSphere compound_sphere_raw(CompoundData* compound, int index) @cname("b3GetCompoundSphere") @private;
+
+<*
+ Raw material accessor. It carries no count, and the pointer it returns is non-null even for a
+ compound with no materials at all — it then addresses the first byte past the allocation — so the
+ wrapper in box3d_compound.c3 pairs it with the count and is the only public way in.
+*>
+extern fn SurfaceMaterial* compound_materials_raw(CompoundData* compound) @cname("b3GetCompoundMaterials") @private;
 
 <*
  Raw shape constructors. Each bypasses the definition-cookie guard its wrapper in

@@ -48,6 +48,94 @@ fn CompoundData*? create_compound(CompoundDef* def) {
 }
 
 <*
+ The number of children the compound holds across all four kinds. This is the bound on the flat
+ index child() takes; the four per-kind accessors are bounded by their own count instead.
+*>
+fn int CompoundData.child_count(&self) {
+    return self.capsule_count + self.hull_count + self.mesh_count + self.sphere_count;
+}
+
+<*
+ The child at a flat index over every kind the compound holds.
+
+ The order is the order box3d baked the children in — capsules, then hulls, then meshes, then
+ spheres — and not the order the caller filled the definition in, so a compound whose spheres were
+ assigned first still reports its capsules first.
+
+ box3d bounds this index with an assertion the release build compiles out, and both directions run
+ past the array behind it: an index at or above the count reaches one element past the spheres,
+ and a negative one is made more negative by every kind it walks past and reaches memory before
+ them. Neither reports anything; both return a child-shaped read of whatever is there.
+
+ @return "the child, or INDEX_OUT_OF_RANGE when the index is outside 0 to child_count() - 1"
+*>
+fn ChildShape? CompoundData.child(&self, int index) {
+    if (index < 0 || index >= self.child_count()) return INDEX_OUT_OF_RANGE~;
+    return compound_child_raw(self, index);
+}
+
+<*
+ The capsule child at index, counting capsules alone. box3d's own bound on the index is an
+ assertion the release build compiles out — see child().
+
+ @return "the capsule child, or INDEX_OUT_OF_RANGE when the index is outside 0 to capsule_count - 1"
+*>
+fn CompoundCapsule? CompoundData.capsule(&self, int index) {
+    if (index < 0 || index >= self.capsule_count) return INDEX_OUT_OF_RANGE~;
+    return compound_capsule_raw(self, index);
+}
+
+<*
+ The hull child at index, counting hulls alone. box3d's own bound on the index is an assertion the
+ release build compiles out — see child().
+
+ @return "the hull child, or INDEX_OUT_OF_RANGE when the index is outside 0 to hull_count - 1"
+*>
+fn CompoundHull? CompoundData.hull(&self, int index) {
+    if (index < 0 || index >= self.hull_count) return INDEX_OUT_OF_RANGE~;
+    return compound_hull_raw(self, index);
+}
+
+<*
+ The mesh child at index, counting meshes alone. box3d's own bound on the index is an assertion
+ the release build compiles out — see child().
+
+ @return "the mesh child, or INDEX_OUT_OF_RANGE when the index is outside 0 to mesh_count - 1"
+*>
+fn CompoundMesh? CompoundData.mesh(&self, int index) {
+    if (index < 0 || index >= self.mesh_count) return INDEX_OUT_OF_RANGE~;
+    return compound_mesh_raw(self, index);
+}
+
+<*
+ The sphere child at index, counting spheres alone. box3d's own bound on the index is an assertion
+ the release build compiles out — see child().
+
+ @return "the sphere child, or INDEX_OUT_OF_RANGE when the index is outside 0 to sphere_count - 1"
+*>
+fn CompoundSphere? CompoundData.sphere(&self, int index) {
+    if (index < 0 || index >= self.sphere_count) return INDEX_OUT_OF_RANGE~;
+    return compound_sphere_raw(self, index);
+}
+
+<*
+ The compound's materials, one entry per distinct child material, in the order the children were
+ baked. A child names one of these through its material index, and so does the material index a
+ cast reports against a shape built from this compound.
+
+ Distinct is byte-for-byte: box3d compares and hashes whole materials, so two children agreeing on
+ friction and restitution but differing in user_material_id or custom_color get an entry each.
+
+ The slice borrows the compound's own storage and lasts exactly as long as the compound. A
+ compound with no children has no materials and the slice is empty; box3d hands back a non-null
+ pointer even then, addressing the first byte past its allocation, so the count is the only thing
+ that reports the emptiness.
+*>
+fn SurfaceMaterial[] CompoundData.materials(&self) {
+    return compound_materials_raw(self)[:self.material_count];
+}
+
+<*
  Attaches a baked compound to this body. The definition must come from default_shape_def() — see
  create_sphere_shape — and the null guard is the one create_mesh_shape carries for the same
  reason: box3d reads a version field through the pointer before it tests anything.
@@ -60,10 +148,10 @@ fn CompoundData*? create_compound(CompoundDef* def) {
  The shape borrows the compound rather than copying it, exactly as a mesh shape borrows its mesh
  — see create_mesh_shape for what that costs and for what destroying the geometry first does.
 
- What the shape does copy is the compound's materials, not the definition's: mesh_material_count()
- answers with one per distinct child material and mesh_surface_material() indexes them in the
- order the children were baked, which is the order CompoundDef lists its kinds. Two children
- sharing a material share one entry, and the material index a cast reports indexes the same array.
+ What the shape does copy is the compound's materials, not the definition's, so what
+ mesh_material_count() and mesh_surface_material() answer with is CompoundData.materials() over
+ again — see there for the order and for what makes two children's materials distinct. The
+ material index a cast reports indexes the same array.
 
  @param [&in] def : "a definition obtained from default_shape_def()"
  @param compound : "the compound, which must outlive the shape; null is refused rather than dereferenced"

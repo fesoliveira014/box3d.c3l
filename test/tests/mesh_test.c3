@@ -1699,3 +1699,378 @@ fn void a_ball_comes_to_rest_on_the_compound_child_beneath_it() @test {
     assert(fell.low_y > -42.2 && fell.low_y < -41.9, "and both fall the three seconds through");
     assert(fell.high_y > -41.2 && fell.high_y < -40.9);
 }
+
+const b3::Transform HULL_CHILD_TRANSFORM = {
+  .p = { 7.0, 2.0, -1.0 },
+  .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 },
+};
+
+const b3::Transform MESH_CHILD_TRANSFORM = {
+  .p = { -5.0, 3.0, 0.0 },
+  .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 },
+};
+
+// One child of every kind, each placed somewhere different and each naming a material. The
+// definition is filled in spheres first and capsules last, so a reading that followed the order
+// the caller wrote rather than the order box3d bakes would report the spheres first. Three
+// distinct materials serve the five children: the hull takes the first sphere's and the mesh's
+// second slot takes the second sphere's, so the indices also show the sharing.
+fn b3::CompoundData*? a_compound_of_one_child_of_every_kind() {
+    b3::SurfaceMaterial rough = b3::default_surface_material();
+    rough.friction = 0.3;
+    b3::SurfaceMaterial slick = b3::default_surface_material();
+    slick.friction = 0.9;
+    b3::SurfaceMaterial mid = b3::default_surface_material();
+    mid.friction = 0.55;
+
+    b3::BoxHull cube = b3::make_cube_hull(0.5);
+
+    b3::MeshData* mesh = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 2,
+      identify_edges: true,
+    )!;
+    defer mesh.destroy();
+
+    b3::SurfaceMaterial[2] mesh_materials = { mid, slick };
+
+    b3::CompoundSphereDef[2] spheres = {
+      {
+        .sphere = { .center = { -3.0, 1.0, 2.0 }, .radius = 0.5 },
+        .material = rough,
+      },
+      {
+        .sphere = { .center = { 4.0, 0.0, 0.0 }, .radius = 0.25 },
+        .material = slick,
+      },
+    };
+    b3::CompoundMeshDef[1] meshes = {
+      {
+        .mesh_data = mesh,
+        .transform = MESH_CHILD_TRANSFORM,
+        .scale = { 2.0, 1.0, 3.0 },
+        .materials = &mesh_materials[0],
+        .material_count = 2,
+      },
+    };
+    b3::CompoundHullDef[1] hulls = {
+      {
+        .hull = &cube.base,
+        .transform = HULL_CHILD_TRANSFORM,
+        .material = rough,
+      },
+    };
+    b3::CompoundCapsuleDef[1] capsules = {
+      {
+        .capsule = { .center1 = { 1.0, -0.5, 0.0 }, .center2 = { 1.0, 0.5, 0.0 }, .radius = 0.25 },
+        .material = mid,
+      },
+    };
+
+    b3::CompoundDef def;
+    def.spheres = &spheres[0];
+    def.sphere_count = 2;
+    def.meshes = &meshes[0];
+    def.mesh_count = 1;
+    def.hulls = &hulls[0];
+    def.hull_count = 1;
+    def.capsules = &capsules[0];
+    def.capsule_count = 1;
+
+    return b3::create_compound(&def);
+}
+
+struct FlatChild {
+    b3::ShapeType type;
+    float transform_x;
+    int[b3::MAX_COMPOUND_MESH_MATERIALS] material_indices;
+}
+
+struct FlatChildren {
+    int capsule_count;
+    int hull_count;
+    int mesh_count;
+    int sphere_count;
+    int child_count;
+    FlatChild[5] children;
+    float capsule_radius;
+    float sphere_center_x;
+}
+
+fn FlatChildren the_children_a_compound_reports_in_order() {
+    b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
+    defer compound.destroy();
+
+    FlatChildren read = {
+      .capsule_count = compound.capsule_count,
+      .hull_count = compound.hull_count,
+      .mesh_count = compound.mesh_count,
+      .sphere_count = compound.sphere_count,
+      .child_count = compound.child_count(),
+    };
+
+    for (int i = 0; i < read.child_count && i < read.children.len; i++) {
+        if (try child = compound.child(i)) {
+            read.children[i] = {
+              .type = child.type,
+              .transform_x = child.transform.p.x,
+              .material_indices = child.material_indices,
+            };
+        }
+    }
+
+    if (try capsule = compound.child(0)) read.capsule_radius = capsule.capsule.radius;
+    if (try sphere = compound.child(3)) read.sphere_center_x = sphere.sphere.center.x;
+    return read;
+}
+
+// The flat index runs capsules, hulls, meshes, spheres, whatever order the definition was filled
+// in. A capsule and a sphere get the identity transform however they are placed, because their
+// placement lives in their own geometry; only the hull and the mesh carry one of their own.
+fn void the_flat_child_index_runs_in_the_order_box3d_baked() @test {
+    FlatChildren read = the_children_a_compound_reports_in_order();
+
+    assert(read.capsule_count == 1 && read.hull_count == 1);
+    assert(read.mesh_count == 1 && read.sphere_count == 2);
+    assert(read.child_count == 5, "the flat index runs over every kind together");
+
+    assert(read.children[0].type == b3::ShapeType.CAPSULE, "the capsule the definition was given last comes first");
+    assert(read.children[1].type == b3::ShapeType.HULL);
+    assert(read.children[2].type == b3::ShapeType.MESH);
+    assert(read.children[3].type == b3::ShapeType.SPHERE, "and the spheres it was given first come last");
+    assert(read.children[4].type == b3::ShapeType.SPHERE);
+
+    assert(read.children[0].transform_x > -0.01 && read.children[0].transform_x < 0.01,
+        "a capsule child is placed by its own two centres, so its transform is the identity one");
+    assert(read.children[3].transform_x > -0.01 && read.children[3].transform_x < 0.01,
+        "and so is a sphere child's, three metres from the origin though this one sits");
+    assert(read.children[1].transform_x > 6.99 && read.children[1].transform_x < 7.01,
+        "where a hull child carries the transform the definition gave it");
+    assert(read.children[2].transform_x > -5.01 && read.children[2].transform_x < -4.99,
+        "and so does a mesh child");
+
+    assert(read.capsule_radius > 0.24 && read.capsule_radius < 0.26,
+        "the arm the tag names carries the child's own geometry");
+    assert(read.sphere_center_x > -3.01 && read.sphere_center_x < -2.99,
+        "the sphere's centre being the placement its identity transform does not carry");
+}
+
+// A mesh child fills every slot it has and the ones it never uses read 0, which is a real
+// material index rather than a marker, so the child cannot say how many of them mean anything.
+// The other three kinds name one material and leave the rest of the array at that same 0.
+fn void a_mesh_child_carries_a_material_index_per_slot() @test {
+    FlatChildren read = the_children_a_compound_reports_in_order();
+
+    assert(read.children[2].type == b3::ShapeType.MESH);
+    assert(read.children[2].material_indices[0] == 0, "the mesh names its first material");
+    assert(read.children[2].material_indices[1] == 2, "and its second, which the second sphere shares");
+    assert(read.children[2].material_indices[2] == 0, "while the two slots it does not use read as index 0");
+    assert(read.children[2].material_indices[3] == 0);
+
+    assert(read.children[1].material_indices[0] == 1, "a hull child names one material in slot 0");
+    assert(read.children[1].material_indices[1] == 0, "and leaves the rest at the same unusable 0");
+}
+
+struct PerKindChildren {
+    float capsule_radius;
+    float capsule_center1_x;
+    float capsule_center1_y;
+    int capsule_material_index;
+    float hull_transform_x;
+    float hull_transform_y;
+    float hull_transform_z;
+    int hull_material_index;
+    float mesh_transform_x;
+    float mesh_scale_x;
+    float mesh_scale_z;
+    int[b3::MAX_COMPOUND_MESH_MATERIALS] mesh_material_indices;
+    float[2] sphere_center_x;
+    float[2] sphere_radius;
+    int[2] sphere_material_index;
+}
+
+fn PerKindChildren the_children_the_per_kind_accessors_report() {
+    b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
+    defer compound.destroy();
+
+    PerKindChildren read;
+
+    if (try capsule = compound.capsule(0)) {
+        read.capsule_radius = capsule.capsule.radius;
+        read.capsule_center1_x = capsule.capsule.center1.x;
+        read.capsule_center1_y = capsule.capsule.center1.y;
+        read.capsule_material_index = capsule.material_index;
+    }
+    if (try hull = compound.hull(0)) {
+        read.hull_transform_x = hull.transform.p.x;
+        read.hull_transform_y = hull.transform.p.y;
+        read.hull_transform_z = hull.transform.p.z;
+        read.hull_material_index = hull.material_index;
+    }
+    if (try mesh = compound.mesh(0)) {
+        read.mesh_transform_x = mesh.transform.p.x;
+        read.mesh_scale_x = mesh.scale.x;
+        read.mesh_scale_z = mesh.scale.z;
+        read.mesh_material_indices = mesh.material_indices;
+    }
+    for (int i = 0; i < compound.sphere_count && i < read.sphere_radius.len; i++) {
+        if (try sphere = compound.sphere(i)) {
+            read.sphere_center_x[i] = sphere.sphere.center.x;
+            read.sphere_radius[i] = sphere.sphere.radius;
+            read.sphere_material_index[i] = sphere.material_index;
+        }
+    }
+    return read;
+}
+
+// Each of the four per-kind accessors is indexed by its own count, so index 0 means a different
+// child in each of them. What comes back is what the definition carried, geometry and material
+// index alike.
+fn void every_per_kind_accessor_reports_the_child_the_definition_gave_it() @test {
+    PerKindChildren read = the_children_the_per_kind_accessors_report();
+
+    assert(read.capsule_radius > 0.24 && read.capsule_radius < 0.26);
+    assert(read.capsule_center1_x > 0.99 && read.capsule_center1_x < 1.01);
+    assert(read.capsule_center1_y > -0.51 && read.capsule_center1_y < -0.49,
+        "the capsule's first centre, which a transposed vector would not report");
+    assert(read.capsule_material_index == 0);
+
+    assert(read.hull_transform_x > 6.99 && read.hull_transform_x < 7.01);
+    assert(read.hull_transform_y > 1.99 && read.hull_transform_y < 2.01);
+    assert(read.hull_transform_z > -1.01 && read.hull_transform_z < -0.99,
+        "all three components of the hull's placement");
+    assert(read.hull_material_index == 1);
+
+    assert(read.mesh_transform_x > -5.01 && read.mesh_transform_x < -4.99);
+    assert(read.mesh_scale_x > 1.99 && read.mesh_scale_x < 2.01);
+    assert(read.mesh_scale_z > 2.99 && read.mesh_scale_z < 3.01,
+        "a non-uniform scale, so a mesh child reporting one axis for another would show");
+    assert(read.mesh_material_indices[0] == 0 && read.mesh_material_indices[1] == 2);
+
+    assert(read.sphere_center_x[0] > -3.01 && read.sphere_center_x[0] < -2.99);
+    assert(read.sphere_radius[0] > 0.49 && read.sphere_radius[0] < 0.51);
+    assert(read.sphere_material_index[0] == 1, "the first sphere sharing the hull's material");
+    assert(read.sphere_center_x[1] > 3.99 && read.sphere_center_x[1] < 4.01);
+    assert(read.sphere_radius[1] > 0.24 && read.sphere_radius[1] < 0.26,
+        "the two spheres differing in size as well as in place, so a swap would be caught");
+    assert(read.sphere_material_index[1] == 2);
+}
+
+struct CompoundMaterialsRead {
+    int count;
+    int length;
+    float[4] friction;
+}
+
+fn CompoundMaterialsRead the_materials_a_compound_reports() {
+    b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
+    defer compound.destroy();
+
+    b3::SurfaceMaterial[] materials = compound.materials();
+
+    CompoundMaterialsRead read = {
+      .count = compound.material_count,
+      .length = materials.len,
+    };
+    for (int i = 0; i < materials.len && i < read.friction.len; i++) {
+        read.friction[i] = materials[i].friction;
+    }
+    return read;
+}
+
+// Five children, three materials: box3d keeps one entry per distinct material and the children
+// name it by index. Distinct is byte for byte, so two children agreeing on friction but not on
+// user_material_id would still take an entry each.
+fn void a_compound_reports_one_material_per_distinct_child_surface() @test {
+    CompoundMaterialsRead read = the_materials_a_compound_reports();
+
+    assert(read.count == 3, "the hull shares the first sphere's material and the mesh the second's");
+    assert(read.length == read.count, "the slice being as long as the count says");
+    assert(read.friction[0] > 0.54 && read.friction[0] < 0.56, "the capsule's, first, as its child is");
+    assert(read.friction[1] > 0.29 && read.friction[1] < 0.31, "then the hull and first sphere's");
+    assert(read.friction[2] > 0.89 && read.friction[2] < 0.91, "then the mesh and second sphere's");
+}
+
+fn fault[10] the_refusals_of_the_child_accessors() {
+    b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
+    defer compound.destroy();
+
+    fault[10] refusals;
+    if (catch err = compound.child(-1)) refusals[0] = err;
+    if (catch err = compound.child(compound.child_count())) refusals[1] = err;
+    if (catch err = compound.capsule(-1)) refusals[2] = err;
+    if (catch err = compound.capsule(compound.capsule_count)) refusals[3] = err;
+    if (catch err = compound.hull(-1)) refusals[4] = err;
+    if (catch err = compound.hull(compound.hull_count)) refusals[5] = err;
+    if (catch err = compound.mesh(-1)) refusals[6] = err;
+    if (catch err = compound.mesh(compound.mesh_count)) refusals[7] = err;
+    if (catch err = compound.sphere(-1)) refusals[8] = err;
+    if (catch err = compound.sphere(compound.sphere_count)) refusals[9] = err;
+    return refusals;
+}
+
+// box3d bounds every one of these with an assertion the release build compiles out, so both ends
+// reach memory that is not a child and answer with plausible geometry. The negative end is the
+// worse of the two for the flat accessor, which subtracts each kind's count as it walks and so
+// reads further before the array the further out the index is.
+fn void an_index_outside_a_compound_is_refused_at_both_ends() @test {
+    fault[10] refusals = the_refusals_of_the_child_accessors();
+
+    assert(refusals[0] == b3::INDEX_OUT_OF_RANGE, "a negative flat index names no child");
+    assert(refusals[1] == b3::INDEX_OUT_OF_RANGE, "and neither does the one past the last");
+    assert(refusals[2] == b3::INDEX_OUT_OF_RANGE, "a negative capsule index names no capsule");
+    assert(refusals[3] == b3::INDEX_OUT_OF_RANGE, "and neither does the one past the last");
+    assert(refusals[4] == b3::INDEX_OUT_OF_RANGE);
+    assert(refusals[5] == b3::INDEX_OUT_OF_RANGE);
+    assert(refusals[6] == b3::INDEX_OUT_OF_RANGE);
+    assert(refusals[7] == b3::INDEX_OUT_OF_RANGE);
+    assert(refusals[8] == b3::INDEX_OUT_OF_RANGE);
+    assert(refusals[9] == b3::INDEX_OUT_OF_RANGE);
+}
+
+struct EmptyCompoundRead {
+    int child_count;
+    int material_count;
+    int materials_length;
+    fault first_child;
+}
+
+fn EmptyCompoundRead the_readings_of_an_empty_compound() {
+    b3::CompoundDef empty;
+    b3::CompoundData* compound = b3::create_compound(&empty)!!;
+    defer compound.destroy();
+
+    EmptyCompoundRead read = {
+      .child_count = compound.child_count(),
+      .material_count = compound.material_count,
+      .materials_length = compound.materials().len,
+    };
+    if (catch err = compound.child(0)) read.first_child = err;
+    return read;
+}
+
+// box3d hands back a non-null material pointer for a compound with no children at all, one that
+// addresses the first byte past the allocation, so the count is the only thing that reports the
+// emptiness and the slice is what carries it to a caller.
+fn void an_empty_compound_reports_no_children_and_no_materials() @test {
+    EmptyCompoundRead read = the_readings_of_an_empty_compound();
+
+    assert(read.child_count == 0);
+    assert(read.material_count == 0, "a compound with no children has no materials either");
+    assert(read.materials_length == 0, "which the slice reports as a length, never as a pointer");
+    assert(read.first_child == b3::INDEX_OUT_OF_RANGE, "and it has no child 0 to read");
+}
+
+fn void the_compound_child_types_match_the_c_layout() @test {
+    assert(b3::CompoundData::size == 144);
+    assert(b3::CompoundData::alignment == 8);
+    assert(b3::DynamicTree::size == 80);
+    assert(b3::ChildShape::size == 80);
+    assert(b3::ChildShape::alignment == 8);
+    assert(b3::CompoundCapsule::size == 32);
+    assert(b3::CompoundHull::size == 40);
+    assert(b3::CompoundMesh::size == 64);
+    assert(b3::CompoundSphere::size == 20);
+}

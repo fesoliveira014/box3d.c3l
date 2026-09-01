@@ -1929,6 +1929,63 @@ extern fn JointId create_prismatic_joint_raw(
 ) @cname("b3CreatePrismaticJoint") @private;
 
 <*
+ The slider's translation in metres: the offset between the two local frame origins in world
+ space, resolved onto local frame A's x axis. Zero where those two origins coincide, whatever
+ the bodies' own positions are. box3d's comment on this joint's constraint derivation names the
+ z axis instead; the code rotates the x axis, and the joint follows the code.
+*>
+extern fn float PrismaticJointId.translation(self) @cname("b3PrismaticJoint_GetTranslation");
+
+<*
+ The rate of change of translation(), in metres per second: the two bodies' relative velocity at
+ the joint anchors resolved onto the same axis, plus the term for that axis turning with body A.
+ A body with no solver state — a static one, or a sleeping one — contributes zero velocity
+ rather than being left out, so against a static anchor this is body B's own speed along the axis.
+*>
+extern fn float PrismaticJointId.speed(self) @cname("b3PrismaticJoint_GetSpeed");
+
+<*
+ Enables or disables this joint's limit. A change to the flag discards the limit's accumulated
+ impulses, so a limit switched back on rebuilds its hold over the following steps rather than
+ resuming the one it had. set_limits discards nothing.
+*>
+extern fn void PrismaticJointId.enable_limit(self, bool enable_limit) @cname("b3PrismaticJoint_EnableLimit");
+
+<*
+ Whether this joint's limit is enabled. False on a joint built from a default definition. The two
+ translations are stored either way; they hold the slider only while this is on.
+*>
+extern fn bool PrismaticJointId.is_limit_enabled(self) @cname("b3PrismaticJoint_IsLimitEnabled");
+
+<*
+ The low end of the translation the limit holds the slider above, in metres along local frame A's
+ x axis. It is what box3d stored, and which of the two paths stored it matters: see set_limits.
+ 0 on a joint built from a default definition.
+*>
+extern fn float PrismaticJointId.lower_limit(self) @cname("b3PrismaticJoint_GetLowerLimit");
+
+<*
+ The high end of the translation the limit holds the slider below, in metres along local frame A's
+ x axis. It is what box3d stored, and which of the two paths stored it matters: see set_limits.
+ 0 on a joint built from a default definition.
+*>
+extern fn float PrismaticJointId.upper_limit(self) @cname("b3PrismaticJoint_GetUpperLimit");
+
+<*
+ Sets the two translations in metres the limit holds the slider between. box3d takes the smaller
+ of the pair as the lower and the larger as the upper, so a reversed pair is quietly corrected
+ rather than refused — and it stops there: neither end is bounded, where the revolute joint's
+ identically named set_limits clamps its swapped pair into [-0.99 pi, 0.99 pi] and the distance
+ joint's set_length_range clamps both ends of its own. This is also where the setter and the
+ constructor part company: PrismaticJointDef's two translations are stored as the definition
+ wrote them, reversed pair and all, so the pair that stays reversed through construction comes
+ back ordered through here. The limit acts only while enable_limit() is on. box3d asserts both
+ values are finite; this package links a release build where that assertion is compiled out, and
+ the wrappers do not restore it.
+*>
+extern fn void PrismaticJointId.set_limits(self, float lower, float upper) @cname("b3PrismaticJoint_SetLimits");
+
+<*
  A joint known to be a weld joint. box3d resolves every per-type accessor through a joint-type
  assertion this release build compiles out, so a weld accessor reaching a joint of another type
  reinterprets that joint's solver union instead: a getter hands back nonsense and a setter writes

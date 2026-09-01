@@ -2937,3 +2937,188 @@ fn void a_definition_of_each_new_joint_type_naming_no_bodies_is_refused() @test 
     assert(refusal_of_a_weld_joint_definition(&named_weld, true) == none);
     assert(refusal_of_a_parallel_joint_definition(&named_parallel, true) == none);
 }
+
+fn b3::BodyId a_small_dynamic_sphere_at_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct SliderDrive {
+    float translation;
+    float speed;
+}
+
+// One second at 1/60 s against a static anchor, under a gravity the joint has to hold off rather
+// than one that drives anything: the slider's axis is the one direction the body can move. The
+// motor reaches the half-metre limit halfway through the run and is still sitting on it at the
+// end — doubling the run leaves the limited reading at the same 0.500108 — so the limited band
+// holds the limit rather than a run that stopped early.
+fn SliderDrive a_motor_driven_slider_after_a_second(bool enable_limit) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 1.0;
+    joint_def.max_motor_force = 1000.0;
+    joint_def.enable_limit = enable_limit;
+    joint_def.lower_translation = -0.5;
+    joint_def.upper_translation = 0.5;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.translation = slider.translation(), .speed = slider.speed()};
+}
+
+struct SliderLimits {
+    float lower;
+    float upper;
+}
+
+fn SliderLimits the_limits_of_a_slider_set_to(float lower, float upper) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+    b3::PrismaticJointId slider = link_with_a_prismatic_joint(world, anchor, sliding);
+
+    slider.set_limits(lower, upper);
+    return {.lower = slider.lower_limit(), .upper = slider.upper_limit()};
+}
+
+fn SliderLimits the_limits_of_a_slider_whose_definition_reversed_them() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_limit = true;
+    joint_def.lower_translation = 1.0;
+    joint_def.upper_translation = -1.0;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    return {.lower = slider.lower_limit(), .upper = slider.upper_limit()};
+}
+
+struct SliderLimitFlags {
+    bool on_a_default_slider;
+    bool from_the_definition;
+    bool after_enabling;
+    bool after_disabling;
+}
+
+fn SliderLimitFlags the_limit_flags_of_a_bare_slider_and_a_limited_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+    b3::PrismaticJointId bare = link_with_a_prismatic_joint(world, anchor, sliding);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_limit = true;
+    joint_def.lower_translation = -0.5;
+    joint_def.upper_translation = 0.5;
+    b3::PrismaticJointId limited = world.create_prismatic_joint(&joint_def)!!;
+
+    SliderLimitFlags flags = {
+        .on_a_default_slider = bare.is_limit_enabled(),
+        .from_the_definition = limited.is_limit_enabled(),
+    };
+
+    bare.enable_limit(true);
+    limited.enable_limit(false);
+    flags.after_enabling = bare.is_limit_enabled();
+    flags.after_disabling = limited.is_limit_enabled();
+    return flags;
+}
+
+// 0.969331 rather than the nominal 1.0 because the solver ramps the motor up over the first
+// steps. The band holds that and excludes both a slider that never moved and the 0.500108 the
+// same definition reaches once its limit is armed.
+fn void a_motor_slides_the_body_along_the_joints_axis() @test {
+    SliderDrive driven = a_motor_driven_slider_after_a_second(false);
+
+    assert(driven.translation > 0.94 && driven.translation < 0.99,
+        "a motor at 1 m/s carries the slider nearly a metre in a second");
+}
+
+// The control for the one above: the same definition with only the limit flag set. The two bands
+// are disjoint, so neither reading can be mistaken for the other.
+fn void a_limit_stops_the_motor_that_drives_the_slider_into_it() @test {
+    SliderDrive held = a_motor_driven_slider_after_a_second(true);
+
+    assert(held.translation > 0.49 && held.translation < 0.51,
+        "the motor is held at the half-metre limit rather than sliding past it");
+}
+
+// The limited row is what makes this reading discriminating: the motor speed the joint was given
+// still reads 1 there, and speed() is the slider standing still.
+fn void the_slider_moves_at_the_speed_its_motor_asks_for_until_the_limit_takes_it() @test {
+    SliderDrive driven = a_motor_driven_slider_after_a_second(false);
+    SliderDrive held = a_motor_driven_slider_after_a_second(true);
+
+    assert(driven.speed > 0.95 && driven.speed < 1.05, "the motor has the slider at the metre a second it asked for");
+    assert(held.speed > -0.01 && held.speed < 0.01, "and the same motor moves it nowhere once the limit has it");
+}
+
+// 3 and -3 are exactly representable and this joint bounds neither, so the swap shows up exactly.
+fn void a_reversed_pair_of_translation_limits_is_swapped_into_order_rather_than_refused() @test {
+    SliderLimits limits = the_limits_of_a_slider_set_to(3.0, -3.0);
+
+    assert(limits.lower == -3.0, "box3d takes the smaller of the two as the lower");
+    assert(limits.upper == 3.0);
+}
+
+// The pair above sits inside the 3.110177 radians the revolute joint clamps its own limits to, so
+// the swap alone does not tell the two setters apart. Ten does.
+fn void translation_limits_far_out_are_left_where_they_were_put() @test {
+    SliderLimits limits = the_limits_of_a_slider_set_to(10.0, -10.0);
+
+    assert(limits.lower == -10.0, "swapped the way the revolute joint's are, and not clamped the way those are");
+    assert(limits.upper == 10.0);
+}
+
+// The other half of that asymmetry: the constructor applies neither correction. box3d asserts the
+// definition's pair is already ordered and this release build compiles that assertion out.
+fn void a_definition_that_reverses_its_two_translations_builds_a_slider_that_keeps_them_reversed() @test {
+    SliderLimits limits = the_limits_of_a_slider_whose_definition_reversed_them();
+
+    assert(limits.lower == 1.0, "the definition's lower translation, above its upper one, arrives intact");
+    assert(limits.upper == -1.0, "where the same pair through set_limits comes back ordered");
+}
+
+fn void the_limit_flag_of_a_slider_starts_off_and_round_trips() @test {
+    SliderLimitFlags flags = the_limit_flags_of_a_bare_slider_and_a_limited_one();
+
+    assert(!flags.on_a_default_slider, "a default prismatic joint is a bare slider");
+    assert(flags.from_the_definition, "the joint reports the limit its definition asked for");
+    assert(flags.after_enabling);
+    assert(!flags.after_disabling);
+}

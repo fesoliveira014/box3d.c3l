@@ -3122,3 +3122,323 @@ fn void the_limit_flag_of_a_slider_starts_off_and_round_trips() @test {
     assert(flags.after_enabling);
     assert(!flags.after_disabling);
 }
+
+// Gravity off and no limit, so the spring is the only thing acting along the axis and the
+// translation the slider comes to rest at is the target it was given. Five seconds at 1/60 s is
+// well past the point it settles: doubling the run leaves both targets at the same reading.
+fn float the_translation_a_sprung_slider_settles_at(bool enable_spring, float target) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_spring = enable_spring;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_translation = target;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return slider.translation();
+}
+
+struct SliderSpringSettings {
+    bool enabled;
+    float hertz;
+    float damping_ratio;
+    float target;
+    bool enabled_after;
+    float hertz_after;
+    float damping_ratio_after;
+    float target_after;
+}
+
+fn SliderSpringSettings the_spring_settings_of_a_slider_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 4.0;
+    joint_def.damping_ratio = 0.5;
+    joint_def.target_translation = 4.5;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    SliderSpringSettings settings = {
+        .enabled = slider.is_spring_enabled(),
+        .hertz = slider.spring_hertz(),
+        .damping_ratio = slider.spring_damping_ratio(),
+        .target = slider.target_translation(),
+    };
+
+    slider.enable_spring(false);
+    slider.set_spring_hertz(7.5);
+    slider.set_spring_damping_ratio(0.125);
+    slider.set_target_translation(-4.5);
+
+    settings.enabled_after = slider.is_spring_enabled();
+    settings.hertz_after = slider.spring_hertz();
+    settings.damping_ratio_after = slider.spring_damping_ratio();
+    settings.target_after = slider.target_translation();
+    return settings;
+}
+
+struct SliderMotorDrive {
+    float motor_force;
+    b3::Vec3 constraint_force;
+    float translation;
+    float speed;
+}
+
+// Gravity off, no spring and no limit, so the motor is the only thing acting on the slider and
+// the force it reports is its own. The 5 m/s it asks for is far more than two seconds of either
+// ceiling buys against the body's mass, so both driven rows are still saturated at the end rather
+// than coasting at the speed they were asked for.
+fn SliderMotorDrive a_slider_motor_driven_to(bool enable_motor, float max_motor_force) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_motor = enable_motor;
+    joint_def.motor_speed = 5.0;
+    joint_def.max_motor_force = max_motor_force;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .motor_force = slider.motor_force(),
+        .constraint_force = slider.constraint_force(),
+        .translation = slider.translation(),
+        .speed = slider.speed(),
+    };
+}
+
+struct SliderMotorSettings {
+    bool enabled;
+    float speed;
+    float max_force;
+    bool enabled_after;
+    float speed_after;
+    float max_force_after;
+}
+
+fn SliderMotorSettings the_motor_settings_of_a_slider_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 0.5;
+    joint_def.max_motor_force = 100.0;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    SliderMotorSettings settings = {
+        .enabled = slider.is_motor_enabled(),
+        .speed = slider.motor_speed(),
+        .max_force = slider.max_motor_force(),
+    };
+
+    slider.enable_motor(false);
+    slider.set_motor_speed(-0.25);
+    slider.set_max_motor_force(12.5);
+
+    settings.enabled_after = slider.is_motor_enabled();
+    settings.speed_after = slider.motor_speed();
+    settings.max_force_after = slider.max_motor_force();
+    return settings;
+}
+
+struct SliderAxialForces {
+    float settled;
+    float after_the_motor_flag;
+    float after_the_limit_flag;
+    float after_the_spring_flag;
+}
+
+// One settled spring read four times, each reading after a flag has been toggled to the other
+// value and back, and no step anywhere between them — so the flag is the only thing that can move
+// the number. The motor and limit flags come first: they discard their own accumulated impulses,
+// which are zero on this joint, so they leave the spring's alone and give the spring flag's zero
+// its meaning.
+fn SliderAxialForces the_axial_force_of_a_sprung_slider_around_toggling_its_flags() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sliding;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_translation = 0.7;
+    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    SliderAxialForces forces = {.settled = slider.constraint_force().z};
+
+    slider.enable_motor(true);
+    slider.enable_motor(false);
+    forces.after_the_motor_flag = slider.constraint_force().z;
+
+    slider.enable_limit(true);
+    slider.enable_limit(false);
+    forces.after_the_limit_flag = slider.constraint_force().z;
+
+    slider.enable_spring(false);
+    slider.enable_spring(true);
+    forces.after_the_spring_flag = slider.constraint_force().z;
+    return forces;
+}
+
+// The spring pulls the slider onto the translation it was given and holds it there. 0.699962
+// rather than exactly 0.7 because a spring of finite stiffness sits a little short of its target.
+fn void a_spring_settles_the_slider_on_its_target_translation() @test {
+    float settled = the_translation_a_sprung_slider_settles_at(true, 0.7);
+
+    assert(settled > 0.69f && settled < 0.71f, "the slider comes to rest on the target the spring pulls it toward");
+}
+
+// The second target, on the other side of the origin, with a band disjoint from the first: what
+// the two together pin is the target rather than a translation the joint would reach anyway.
+fn void a_second_target_settles_the_slider_somewhere_else() @test {
+    float settled = the_translation_a_sprung_slider_settles_at(true, -0.4);
+
+    assert(settled > -0.41f && settled < -0.39f, "a target the other side of the origin is followed the same way");
+}
+
+// The control for both: the same definitions with only the spring flag cleared. The target the
+// joint still carries pulls on nothing, so the slider stays where it was built, and that band is
+// disjoint from both settled ones.
+fn void a_slider_whose_spring_is_disabled_stays_where_it_was_built() @test {
+    float forward = the_translation_a_sprung_slider_settles_at(false, 0.7);
+    float back = the_translation_a_sprung_slider_settles_at(false, -0.4);
+
+    assert(forward > -0.01f && forward < 0.01f, "a disabled spring pulls the slider toward nothing");
+    assert(back > -0.01f && back < 0.01f);
+}
+
+// 4, 0.5, 4.5, 7.5, 0.125 and -4.5 are all exactly representable as floats, so they compare
+// exactly. The two targets are both outside the [-pi, pi] the revolute joint's constructor clamps
+// its own target into, and one arrives through each path here: neither bounds it.
+fn void the_spring_settings_of_a_slider_round_trip() @test {
+    SliderSpringSettings settings = the_spring_settings_of_a_slider_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the spring its definition asked for");
+    assert(settings.hertz == 4.0);
+    assert(settings.damping_ratio == 0.5);
+    assert(settings.target == 4.5);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.hertz_after == 7.5);
+    assert(settings.damping_ratio_after == 0.125);
+    assert(settings.target_after == -4.5);
+}
+
+// Two ceilings on the same fixture, each read back as the force the motor is applying, with bands
+// disjoint from each other and from the disabled control. What the pair pins is the ceiling rather
+// than a force the motor would settle at whatever it was allowed.
+fn void the_motor_force_saturates_at_the_ceiling_it_was_given() @test {
+    SliderMotorDrive light = a_slider_motor_driven_to(true, 10.0);
+    SliderMotorDrive heavy = a_slider_motor_driven_to(true, 25.0);
+
+    assert(light.motor_force > 9.9f && light.motor_force < 10.1f, "the motor is held at the ceiling it was given");
+    assert(heavy.motor_force > 24.9f && heavy.motor_force < 25.1f, "and a higher ceiling is held at that instead");
+    assert(light.translation > 0.29f && light.translation < 0.32f,
+        "the lighter ceiling carries the slider a third of a metre in two seconds");
+    assert(heavy.translation > 0.75f && heavy.translation < 0.78f,
+        "and the heavier one carries it more than twice as far in the same time");
+}
+
+// The control for the pair above: the same definition with only the motor flag cleared, so the
+// speed and the ceiling the joint still carries drive nothing.
+fn void a_slider_whose_motor_is_disabled_applies_no_motor_force() @test {
+    SliderMotorDrive idle = a_slider_motor_driven_to(false, 25.0);
+
+    assert(idle.motor_force > -0.001f && idle.motor_force < 0.001f, "a disabled motor applies nothing");
+    assert(idle.translation > -0.001f && idle.translation < 0.001f, "and the slider stays where it was built");
+    assert(idle.speed > -0.001f && idle.speed < 0.001f);
+}
+
+// 0.5, 100, -0.25 and 12.5 are all exactly representable as floats, so they compare exactly.
+fn void the_motor_settings_of_a_slider_round_trip() @test {
+    SliderMotorSettings settings = the_motor_settings_of_a_slider_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the motor its definition asked for");
+    assert(settings.speed == 0.5);
+    assert(settings.max_force == 100.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.speed_after == -0.25);
+    assert(settings.max_force_after == 12.5);
+}
+
+// The relationship a consumer reaching for the shared accessor needs, and it is neither of the two
+// the earlier joint types show. box3d sums this joint's axial impulses once, the way the distance
+// joint's are summed and not twice the way the revolute joint's are, so the magnitudes agree — but
+// it lays the total along local frame A's z axis while the slider runs along that frame's x axis.
+// The frames are identity here, so the body is moving along world x under a force reported along
+// world z, and the two components below are what say so.
+fn void the_shared_constraint_force_carries_the_motor_force_across_the_sliding_axis() @test {
+    SliderMotorDrive driven = a_slider_motor_driven_to(true, 25.0);
+
+    assert(driven.translation > 0.75f && driven.translation < 0.78f, "the slider is moving along the joint's x axis");
+    assert(driven.constraint_force.x > -0.001f && driven.constraint_force.x < 0.001f,
+        "and none of the force the shared accessor reports lies along it");
+    assert(driven.constraint_force.y > -0.001f && driven.constraint_force.y < 0.001f);
+
+    float ratio = driven.constraint_force.z / driven.motor_force;
+    assert(ratio > 0.999f && ratio < 1.001f, "the whole of it lies along z, at the motor force counted once");
+}
+
+// Same accessor name, different contract, across joint types: this joint's spring flag discards
+// the impulse the spring had accumulated where the distance joint's leaves it standing. The two
+// controls are what make this discriminate — they are the same shape of call on the same joint, so
+// a reading that survives them and then falls to zero can only have been the spring flag.
+fn void toggling_the_spring_discards_the_force_it_had_where_the_other_two_flags_do_not() @test {
+    SliderAxialForces forces = the_axial_force_of_a_sprung_slider_around_toggling_its_flags();
+
+    assert(forces.settled > -0.26f && forces.settled < -0.24f,
+        "the settled spring is holding the slider on its target");
+    assert(forces.after_the_motor_flag == forces.settled,
+        "toggling the motor leaves the spring's accumulated force alone");
+    assert(forces.after_the_limit_flag == forces.settled, "and so does toggling the limit");
+    assert(forces.after_the_spring_flag > -0.001f && forces.after_the_spring_flag < 0.001f,
+        "while toggling the spring throws that force away, before any step could rebuild it");
+}

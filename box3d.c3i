@@ -1790,3 +1790,81 @@ extern fn void spring_force_range_raw(
   float* lower_force,
   float* upper_force,
 ) @cname("b3DistanceJoint_GetSpringForceRange") @private;
+
+<*
+ Enables or disables this joint's motor, which drives the two anchors apart at motor_speed() with
+ at most max_motor_force() behind it. box3d reaches the motor only inside the branch it solves the
+ spring in, so the flag acts under the compound condition DistanceJointDef describes rather than
+ on its own: on a joint whose spring is off an enabled motor drives nothing at all, whatever speed
+ and force it carries, and the joint holds its rest length as though the motor were not there.
+
+ A change to the flag discards the motor's accumulated impulse, so motor_force() reads zero until
+ the next step rather than the force the motor was applying before. Storing the value the flag
+ already holds discards nothing. This one does match the revolute joint's flag of the same name,
+ unlike the spring and limit flags beside it.
+*>
+extern fn void DistanceJointId.enable_motor(self, bool enable_motor) @cname("b3DistanceJoint_EnableMotor");
+
+<*
+ Whether this joint's motor is enabled. False on a joint built from a default definition. The flag
+ is stored whatever the rest of the joint is set to, so a true reading says the motor was asked
+ for and not that it is driving anything: whether the solver reaches the motor at all follows the
+ compound condition DistanceJointDef describes.
+*>
+extern fn bool DistanceJointId.is_motor_enabled(self) @cname("b3DistanceJoint_IsMotorEnabled");
+
+<*
+ Sets the speed the motor drives the two anchors apart at, in metres per second along the segment
+ between them: a positive speed lengthens the joint and a negative one shortens it. It is a target
+ the motor pursues only as far as max_motor_force() lets it, not a separation speed the joint is
+ made to hold, and the solver pursues it only under the compound condition DistanceJointDef
+ describes.
+
+ Unlike the revolute joint's setter of the same name, which asserts the value is finite, this one
+ asserts nothing at all. It stores the speed and leaves the motor's accumulated impulse as it
+ stands.
+*>
+extern fn void DistanceJointId.set_motor_speed(self, float motor_speed) @cname("b3DistanceJoint_SetMotorSpeed");
+
+<*
+ The speed the motor drives the two anchors apart at, in metres per second. What was set, not what
+ the anchors are separating at.
+*>
+extern fn float DistanceJointId.motor_speed(self) @cname("b3DistanceJoint_GetMotorSpeed");
+
+<*
+ Sets the largest force the motor may apply, in newtons. 0 on a joint built from a default
+ definition, which leaves an enabled motor unable to move anything. box3d holds the motor's
+ accumulated impulse between this force scaled by the sub-step either way, so a motor asked for
+ more speed than that force buys settles at exactly this reading.
+
+ Unlike the revolute joint's setter of the same shape, which asserts the value is finite and
+ non-negative, this one asserts nothing at all. It stores the ceiling and leaves the motor's
+ accumulated impulse as it stands, so motor_force() reports the force from the last step until
+ another one is taken under the new ceiling.
+*>
+extern fn void DistanceJointId.set_max_motor_force(self, float force) @cname("b3DistanceJoint_SetMaxMotorForce");
+
+<*
+ The largest force the motor may apply, in newtons.
+*>
+extern fn float DistanceJointId.max_motor_force(self) @cname("b3DistanceJoint_GetMaxMotorForce");
+
+<*
+ The force the motor applied over the last step, in newtons, bounded by max_motor_force() either
+ way: a motor asked for more speed than its ceiling buys reads exactly that ceiling. Zero on a
+ joint the solver has only ever taken the rigid branch for, whatever speed and ceiling the motor
+ carries. That branch leaves the motor's impulse untouched rather than clearing it, so a joint
+ driven while it was sprung goes on reporting the last force its motor applied once it is made
+ rigid.
+
+ This is the motor's own share, where the shared constraint_force() is the whole joint's: box3d
+ sums the spring's impulse, the two limit impulses and the motor's once each and lays the total
+ along the segment between the anchors. So the shared reading carries this force exactly once —
+ not twice, the way the revolute joint's constraint_torque() carries its motor torque — and the
+ two agree only while the spring and the limit contribute nothing. Against a working spring they
+ disagree by however hard the spring pulls back, which is no fixed relation at all: a motor held
+ at 100 newtons against a spring holding the joint on its rest length leaves constraint_force()
+ reporting under 2.
+*>
+extern fn float DistanceJointId.motor_force(self) @cname("b3DistanceJoint_GetMotorForce");

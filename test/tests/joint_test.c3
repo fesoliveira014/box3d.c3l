@@ -2180,3 +2180,201 @@ fn void an_inverted_spring_force_range_comes_back_the_way_it_arrived() @test {
     assert(forces.inverted.lower == 7.0, "the lower force is the 7 it was handed, not the smaller of the pair");
     assert(forces.inverted.upper == -3.0, "and the upper force the -3, neither clamped nor swapped into order");
 }
+
+// A sphere at the rest length the motor tests build their joint with, so a joint that holds its
+// length leaves the body exactly where it started and only the motor can move it.
+fn b3::BodyId a_dynamic_sphere_two_units_below_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, -2.0, 0.0};
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct RopeDrive {
+    float motor_force;
+    b3::Vec3 constraint_force;
+    float current_length;
+}
+
+// The body starts exactly the rope's rest length under a static anchor with gravity off, so the
+// motor is the only thing that can move it and a measured length still at 2.0 means it did not.
+// Two seconds at 1/60 s is far past the point the motor reaches whatever force it settles at.
+fn RopeDrive a_driven_rope(
+  bool enable_spring,
+  float hertz,
+  bool enable_motor,
+  float max_motor_force,
+) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_two_units_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.enable_spring = enable_spring;
+    joint_def.hertz = hertz;
+    joint_def.damping_ratio = 1.0;
+    joint_def.enable_motor = enable_motor;
+    joint_def.motor_speed = 0.5;
+    joint_def.max_motor_force = max_motor_force;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .motor_force = rope.motor_force(),
+        .constraint_force = rope.constraint_force(),
+        .current_length = rope.current_length(),
+    };
+}
+
+struct RopeMotorSettings {
+    bool enabled;
+    float speed;
+    float max_force;
+    bool enabled_after;
+    float speed_after;
+    float max_force_after;
+}
+
+fn RopeMotorSettings the_motor_settings_of_a_rope_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 0.5;
+    joint_def.max_motor_force = 100.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    RopeMotorSettings settings = {
+        .enabled = rope.is_motor_enabled(),
+        .speed = rope.motor_speed(),
+        .max_force = rope.max_motor_force(),
+    };
+
+    rope.enable_motor(false);
+    rope.set_motor_speed(-0.25);
+    rope.set_max_motor_force(12.5);
+
+    settings.enabled_after = rope.is_motor_enabled();
+    settings.speed_after = rope.motor_speed();
+    settings.max_force_after = rope.max_motor_force();
+    return settings;
+}
+
+// The motor asks for 0.5 m/s against a spring holding the rope on its rest length, which is far
+// more than 100 newtons buys, so the reading is the ceiling rather than a load the motor balances.
+// The length band is disjoint from the 2.0 both controls below sit at.
+fn void a_motor_pulling_against_the_spring_saturates_at_its_ceiling() @test {
+    RopeDrive driven = a_driven_rope(
+      enable_spring: true,
+      hertz: 1.0,
+      enable_motor: true,
+      max_motor_force: 100.0,
+    );
+
+    assert(driven.motor_force > 99.9f && driven.motor_force < 100.1f,
+        "the motor is held at the ceiling it was given");
+    assert(driven.current_length > 2.03f && driven.current_length < 2.05f,
+        "and it has driven the rope out past the rest length the spring holds it on");
+}
+
+// The first control: the same definition with only the motor flag cleared, so the speed and the
+// ceiling the joint still carries drive nothing.
+fn void a_rope_whose_motor_is_disabled_applies_no_motor_force() @test {
+    RopeDrive idle = a_driven_rope(
+      enable_spring: true,
+      hertz: 1.0,
+      enable_motor: false,
+      max_motor_force: 100.0,
+    );
+
+    assert(idle.motor_force > -0.001f && idle.motor_force < 0.001f, "a disabled motor applies nothing");
+    assert(idle.current_length > 1.999f && idle.current_length < 2.001f, "and the rope stays where it started");
+}
+
+// The second control, and the one the compound condition earns: the same motor on a joint whose
+// spring is off. box3d solves that joint as a single rigid constraint and never reaches the motor,
+// so both readings match the disabled motor above rather than the driven rope.
+fn void a_motor_on_a_rope_whose_spring_is_off_drives_nothing() @test {
+    RopeDrive rigid = a_driven_rope(
+      enable_spring: false,
+      hertz: 1.0,
+      enable_motor: true,
+      max_motor_force: 100.0,
+    );
+
+    assert(rigid.motor_force > -0.001f && rigid.motor_force < 0.001f,
+        "the rigid branch never reaches the motor, whatever it was set to");
+    assert(rigid.current_length > 1.999f && rigid.current_length < 2.001f, "so the rope holds its rest length");
+}
+
+// 0.5, 100, -0.25 and 12.5 are all exactly representable as floats, so they compare exactly.
+fn void the_motor_settings_of_a_rope_round_trip() @test {
+    RopeMotorSettings settings = the_motor_settings_of_a_rope_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the motor its definition asked for");
+    assert(settings.speed == 0.5);
+    assert(settings.max_force == 100.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.speed_after == -0.25);
+    assert(settings.max_force_after == 12.5);
+}
+
+// The relationship a consumer reaching for the shared accessor needs, and it is not the revolute
+// joint's: box3d sums this joint's axial impulses once and lays the total along the segment
+// between the anchors, so with the spring silent at 0 hertz and no limit the motor is the whole
+// sum. The vector points from the anchor down to the hanging body, which is the direction the
+// motor drives it, so a positive motor force reads as a negative y component.
+fn void the_shared_constraint_force_carries_a_distance_motor_force_once() @test {
+    RopeDrive driven = a_driven_rope(
+      enable_spring: true,
+      hertz: 0.0,
+      enable_motor: true,
+      max_motor_force: 10.0,
+    );
+
+    assert(driven.motor_force > 9.99f && driven.motor_force < 10.01f, "the motor is held at the ceiling it was given");
+    assert(driven.constraint_force.x > -0.001f && driven.constraint_force.x < 0.001f,
+        "the whole force lies along the segment between the anchors");
+    assert(driven.constraint_force.z > -0.001f && driven.constraint_force.z < 0.001f);
+
+    float ratio = -driven.constraint_force.y / driven.motor_force;
+    assert(ratio > 0.999f && ratio < 1.001f, "the shared accessor carries the motor force once, not twice");
+}
+
+// The other half of that relationship: once the spring is working the two readings are not a
+// multiple of each other at all. The spring pulls back against the motor and the shared accessor
+// reports the net, so a motor saturated at 100 newtons leaves it under 2.
+fn void a_spring_pulling_back_leaves_the_shared_force_far_under_the_motor_force() @test {
+    RopeDrive driven = a_driven_rope(
+      enable_spring: true,
+      hertz: 1.0,
+      enable_motor: true,
+      max_motor_force: 100.0,
+    );
+
+    assert(driven.motor_force > 99.9f && driven.motor_force < 100.1f, "the motor is held at its ceiling");
+    assert(driven.constraint_force.y > 1.8f && driven.constraint_force.y < 1.95f,
+        "while the joint's whole force is the small remainder the spring does not cancel");
+}

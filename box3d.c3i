@@ -1210,8 +1210,12 @@ extern fn Transform JointId.local_frame_b(self) @cname("b3Joint_GetLocalFrameB")
  This flag, not the joint's type, is what suppresses the collision: box3d refuses the pair for any
  joint linking the two bodies whose collide_connected is false, whatever its type. Turning it on
  has them colliding again from the next step; turning it off ends the collision at once, dropping
- the contacts they already had. Silently does nothing while the world is locked, mid WorldId.step
- or inside a callback box3d runs during one.
+ the contacts they already had. The effect is observable only while at least one of the two bodies
+ is dynamic — two non-dynamic bodies never collide anyway. Dropping the contacts is reported: each
+ one that was touching and whose shapes asked for contact events pushes an end-touch event, and
+ because it is appended outside a step it surfaces in the batch the next step() fills, not in the
+ one WorldId.contact_end_touch_events() returns beforehand. Silently does nothing while the world
+ is locked, mid WorldId.step or inside a callback box3d runs during one.
 *>
 extern fn void JointId.set_collide_connected(self, bool should_collide) @cname("b3Joint_SetCollideConnected");
 
@@ -1225,7 +1229,8 @@ extern fn void JointId.set_user_data(self, void* user_data) @cname("b3Joint_SetU
 extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
 
 <*
- Wakes both bodies this joint links, not only one. Silently does nothing while the world is
- locked, mid WorldId.step or inside a callback box3d runs during one.
+ Wakes both bodies this joint links, not only one — though two dynamic bodies a joint links share
+ one island, so waking either of them wakes the other anyway. Silently does nothing while the
+ world is locked, mid WorldId.step or inside a callback box3d runs during one.
 *>
 extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");

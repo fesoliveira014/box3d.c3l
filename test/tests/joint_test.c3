@@ -197,7 +197,8 @@ fn void a_filter_joint_stops_two_overlapping_bodies_pushing_apart() @test {
 }
 
 // Both pairs fall asleep whether or not a joint links them, so sleeping proves nothing about
-// islands. Wake propagation is the proof, and only against the no-joint control.
+// islands. Wake propagation is the proof, and only against the no-joint control. The nudge
+// carries the wake across the island by itself; the step that follows it is incidental.
 fn void a_filter_joint_keeps_the_two_bodies_in_one_island() @test {
     bool[2] jointed = awake_after_nudging_one_of_two_distant_spheres(true);
     assert(jointed[0], "the nudged body wakes");
@@ -455,9 +456,11 @@ fn JointWakeOutcome two_sleeping_jointed_spheres_after_waking_through_the_joint(
     };
 }
 
+// A jointed pair shares one sleeping solver set and waking a body wakes the whole set, so nothing
+// here separates "wakes both" from "wakes either one" — what this pins is the reach of the wake.
 fn void waking_a_joint_wakes_both_of_the_bodies_it_links() @test {
     JointWakeOutcome outcome = two_sleeping_jointed_spheres_after_waking_through_the_joint();
 
     assert(outcome.asleep_a && outcome.asleep_b, "both bodies must be asleep for the wake to mean anything");
-    assert(outcome.awake_a && outcome.awake_b, "the joint wakes both bodies, not only one");
+    assert(outcome.awake_a && outcome.awake_b, "the wake reaches both bodies the joint links");
 }

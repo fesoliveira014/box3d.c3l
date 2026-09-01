@@ -746,3 +746,32 @@ fn void a_joint_event_carries_the_user_data_its_joint_was_given() @test {
     assert(armed.count == 1, "the length is what makes the event safe to read");
     assert(armed.user_data == &sentinel, "the event hands back what set_user_data wrote on the joint");
 }
+
+fn void the_revolute_joint_types_match_the_c_layout() @test {
+    assert(b3::RevoluteJointDef::size == 152);
+    assert(b3::RevoluteJointDef::alignment == 8);
+}
+
+// 0 is exactly representable as a float, so these compare exactly rather than in a band.
+fn void the_default_revolute_joint_definition_zeroes_every_field_it_adds_to_the_base() @test {
+    b3::RevoluteJointDef def = b3::default_revolute_joint_def();
+
+    assert(def.target_angle == 0.0);
+    assert(!def.enable_spring, "a default revolute joint is a bare hinge");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(!def.enable_limit);
+    assert(def.lower_angle == 0.0);
+    assert(def.upper_angle == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_torque == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.motor_speed == 0.0);
+}
+
+fn void a_default_revolute_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::RevoluteJointDef def = b3::default_revolute_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}

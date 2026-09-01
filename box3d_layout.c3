@@ -371,3 +371,16 @@ $assert JointDef::members[11].offset == 104 && JointDef::members[11].name == "in
 $assert FilterJointDef::size == 112;
 $assert FilterJointDef::alignment == 8;
 $assert FilterJointDef::members[0].offset == 0 && FilterJointDef::members[0].name == "base";
+$assert RevoluteJointDef::size == 152;
+$assert RevoluteJointDef::alignment == 8;
+$assert RevoluteJointDef::members[0].offset == 0 && RevoluteJointDef::members[0].name == "base";
+$assert RevoluteJointDef::members[1].offset == 112 && RevoluteJointDef::members[1].name == "target_angle";
+$assert RevoluteJointDef::members[2].offset == 116 && RevoluteJointDef::members[2].name == "enable_spring";
+$assert RevoluteJointDef::members[3].offset == 120 && RevoluteJointDef::members[3].name == "hertz";
+$assert RevoluteJointDef::members[4].offset == 124 && RevoluteJointDef::members[4].name == "damping_ratio";
+$assert RevoluteJointDef::members[5].offset == 128 && RevoluteJointDef::members[5].name == "enable_limit";
+$assert RevoluteJointDef::members[6].offset == 132 && RevoluteJointDef::members[6].name == "lower_angle";
+$assert RevoluteJointDef::members[7].offset == 136 && RevoluteJointDef::members[7].name == "upper_angle";
+$assert RevoluteJointDef::members[8].offset == 140 && RevoluteJointDef::members[8].name == "enable_motor";
+$assert RevoluteJointDef::members[9].offset == 144 && RevoluteJointDef::members[9].name == "max_motor_torque";
+$assert RevoluteJointDef::members[10].offset == 148 && RevoluteJointDef::members[10].name == "motor_speed";

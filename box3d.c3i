@@ -1347,3 +1347,36 @@ extern fn int body_joints_raw(
   JointId* joint_array,
   int capacity,
 ) @cname("b3Body_GetJoints") @private;
+
+<*
+ A joint known to be revolute. box3d resolves every per-type accessor through a joint-type
+ assertion this release build compiles out, so a revolute accessor reaching a joint of another
+ type reinterprets that joint's solver union instead: a getter hands back nonsense and a setter
+ writes over the other type's state. The distinct handle moves that check to the one place the
+ type is genuinely in question. A RevoluteJointId converts to a JointId on its own, so every
+ shared joint accessor reaches it uncast; the way back is JointId.as_revolute(), which checks.
+*>
+typedef RevoluteJointId = inline JointId;
+
+<*
+ A revolute joint definition. The joint fixes a point on body B to a point on body A and leaves
+ the two free to turn about the z axis of their local frames, with an optional spring, limit and
+ motor. Must come from default_revolute_joint_def(), which zeroes every field it adds to the
+ base: no spring, no limit, no motor, and hertz, damping_ratio and max_motor_torque all 0 rather
+ than the float::max thresholds the base defaults to. A default revolute joint is a bare hinge.
+*>
+struct RevoluteJointDef {
+    inline JointDef base;
+    float target_angle;
+    bool enable_spring;
+    float hertz;
+    float damping_ratio;
+    bool enable_limit;
+    float lower_angle;
+    float upper_angle;
+    bool enable_motor;
+    float max_motor_torque;
+    float motor_speed;
+}
+
+extern fn RevoluteJointDef default_revolute_joint_def() @cname("b3DefaultRevoluteJointDef");

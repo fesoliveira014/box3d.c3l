@@ -995,3 +995,177 @@ fn void a_destroyed_joint_does_not_narrow_to_a_revolute_handle() @test {
     assert(conversion.refusal == b3::INVALID_HANDLE,
         "a handle to a joint that no longer exists is refused before its type is read");
 }
+
+fn b3::BodyId a_static_sphere_at_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct HingeDrive {
+    float angle;
+    b3::Quat rotation;
+}
+
+// One second at 1/60 s, against a static body, so the whole rotation is the dynamic body's and
+// the motor is the only thing acting on it.
+fn HingeDrive a_hinge_after_a_second(bool enable_motor) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = enable_motor;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.angle = hinge.angle(), .rotation = turning.rotation()};
+}
+
+struct MotorSettings {
+    bool enabled;
+    float speed;
+    float max_torque;
+    bool enabled_after;
+    float speed_after;
+    float max_torque_after;
+}
+
+fn MotorSettings the_motor_settings_of_a_hinge_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = turning;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 2.0;
+    joint_def.max_motor_torque = 1000.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    MotorSettings settings = {
+        .enabled = hinge.is_motor_enabled(),
+        .speed = hinge.motor_speed(),
+        .max_torque = hinge.max_motor_torque(),
+    };
+
+    hinge.enable_motor(false);
+    hinge.set_motor_speed(-0.5);
+    hinge.set_max_motor_torque(12.5);
+
+    settings.enabled_after = hinge.is_motor_enabled();
+    settings.speed_after = hinge.motor_speed();
+    settings.max_torque_after = hinge.max_motor_torque();
+    return settings;
+}
+
+struct HingeTorque {
+    float motor_torque;
+    float constraint_torque_z;
+}
+
+// The arm weighs far more than a 500 newton-metre motor can hold at this length, so the motor
+// stays at its ceiling for the whole run instead of settling at a load it balances. That is what
+// makes the reading exact enough to compare the two torques against each other.
+fn HingeTorque the_torques_of_an_arm_heavier_than_its_motor() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    b3::BodyId arm = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1000.0;
+    b3::Capsule capsule = {.center1 = {0.0, 0.0, 0.0}, .center2 = {2.0, 0.0, 0.0}, .radius = 0.25};
+    arm.create_capsule_shape(&shape_def, &capsule)!!;
+
+    b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = arm;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 0.0;
+    joint_def.max_motor_torque = 500.0;
+    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+
+    for (int i = 0; i < 180; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.motor_torque = hinge.motor_torque(), .constraint_torque_z = hinge.constraint_torque().z};
+}
+
+// 1.8994 rather than the nominal 2.0 because the solver ramps the motor up over the first steps.
+// The band is wide enough to hold that and narrow enough to exclude both a hinge that never
+// turned and one that reached the nominal figure.
+fn void a_motor_turns_the_hinge_at_about_the_speed_it_was_given() @test {
+    HingeDrive driven = a_hinge_after_a_second(true);
+
+    assert(driven.angle > 1.85 && driven.angle < 1.95,
+        "a motor at 2 rad/s turns the hinge nearly two radians in a second");
+}
+
+fn void a_motor_turns_the_hinge_about_the_frames_z_axis_and_no_other() @test {
+    HingeDrive driven = a_hinge_after_a_second(true);
+
+    assert(driven.rotation.i > -0.001 && driven.rotation.i < 0.001,
+        "an axis confusion turns a plausible angle about the wrong axis");
+    assert(driven.rotation.j > -0.001 && driven.rotation.j < 0.001);
+    assert(driven.rotation.k > 0.80 && driven.rotation.k < 0.83);
+}
+
+// The control for the two above: the same definition with only the motor flag cleared.
+fn void a_hinge_whose_motor_is_disabled_does_not_turn() @test {
+    HingeDrive idle = a_hinge_after_a_second(false);
+
+    assert(idle.angle > -0.01 && idle.angle < 0.01, "the speed and torque a disabled motor carries drive nothing");
+}
+
+fn void the_motor_settings_of_a_hinge_round_trip() @test {
+    MotorSettings settings = the_motor_settings_of_a_hinge_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the motor its definition asked for");
+    assert(settings.speed == 2.0);
+    assert(settings.max_torque == 1000.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.speed_after == -0.5);
+    assert(settings.max_torque_after == 12.5);
+}
+
+// An upstream trait a consumer reaching for the shared accessor would otherwise be caught by:
+// box3d adds the hinge's axial impulse to the constraint torque twice about the same axis, so
+// only the per-type reading is the torque the motor applied.
+fn void the_shared_constraint_torque_reports_twice_a_revolute_motor_torque() @test {
+    HingeTorque torque = the_torques_of_an_arm_heavier_than_its_motor();
+
+    assert(torque.motor_torque > 499.9 && torque.motor_torque < 500.1,
+        "the motor is held at the ceiling it was given");
+    assert(torque.constraint_torque_z > 999.8 && torque.constraint_torque_z < 1000.2);
+
+    float ratio = torque.constraint_torque_z / torque.motor_torque;
+    assert(ratio > 1.999 && ratio < 2.001, "the shared accessor double-counts the hinge axis");
+}

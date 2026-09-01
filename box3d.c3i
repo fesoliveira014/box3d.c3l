@@ -1391,3 +1391,61 @@ extern fn JointId create_revolute_joint_raw(
   WorldId world_id,
   RevoluteJointDef* def,
 ) @cname("b3CreateRevoluteJoint") @private;
+
+<*
+ Enables or disables this joint's motor. A change to the flag discards the motor's accumulated
+ impulse, so motor_torque() reads zero until the next step rather than the torque the motor was
+ applying before.
+*>
+extern fn void RevoluteJointId.enable_motor(self, bool enable_motor) @cname("b3RevoluteJoint_EnableMotor");
+
+<*
+ Whether this joint's motor is enabled. False on a joint built from a default definition.
+*>
+extern fn bool RevoluteJointId.is_motor_enabled(self) @cname("b3RevoluteJoint_IsMotorEnabled");
+
+<*
+ Sets the speed the motor drives the hinge at, in radians per second about the z axis of the two
+ local frames. It is a target the motor pursues only as far as max_motor_torque() lets it, not a
+ speed the hinge is made to hold.
+*>
+extern fn void RevoluteJointId.set_motor_speed(self, float motor_speed) @cname("b3RevoluteJoint_SetMotorSpeed");
+
+<*
+ The speed the motor drives the hinge at, in radians per second. What was set, not what the hinge
+ is turning at.
+*>
+extern fn float RevoluteJointId.motor_speed(self) @cname("b3RevoluteJoint_GetMotorSpeed");
+
+<*
+ The torque the motor applied over the last step, in newton-metres, bounded by
+ max_motor_torque(). This is the honest reading of the two available. The shared
+ constraint_torque() double-counts the hinge axis: box3d adds the joint's axial impulse — spring
+ plus motor plus limit — along the frame z axis and then, under a note leaving pivot torque
+ unwritten, adds that identical quantity along the same axis a second time. On a joint with no
+ spring and no limit that makes constraint_torque() report exactly twice this value about the
+ hinge axis.
+*>
+extern fn float RevoluteJointId.motor_torque(self) @cname("b3RevoluteJoint_GetMotorTorque");
+
+<*
+ Sets the largest torque the motor may apply, in newton-metres. 0 on a joint built from a default
+ definition, which leaves an enabled motor unable to turn anything. box3d asserts the value is
+ finite and non-negative; this package links a release build where that assertion is compiled
+ out, and the wrappers do not restore it.
+*>
+extern fn void RevoluteJointId.set_max_motor_torque(self, float torque) @cname("b3RevoluteJoint_SetMaxMotorTorque");
+
+<*
+ The largest torque the motor may apply, in newton-metres.
+*>
+extern fn float RevoluteJointId.max_motor_torque(self) @cname("b3RevoluteJoint_GetMaxMotorTorque");
+
+<*
+ The hinge angle in radians: the twist about the frames' z axis of body B's local frame relative
+ to body A's, kept in [-pi, pi]. It is measured from the alignment of those two frames and from
+ nothing else — not from target_angle, and not from any reference angle, whatever box3d's header
+ comment on this function says. The sign follows the frame z axis, so a positive motor speed
+ drives the angle positive.
+*>
+extern fn float RevoluteJointId.angle(self) @cname("b3RevoluteJoint_GetAngle");

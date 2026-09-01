@@ -3742,3 +3742,1606 @@ fn void the_parallel_spring_settings_round_trip() @test {
     assert(settings.damping_ratio_after == 0.125);
     assert(settings.max_torque_after == 12.5);
 }
+
+fn void the_motor_joint_types_match_the_c_layout() @test {
+    assert(b3::MotorJointDef::size == 168);
+    assert(b3::MotorJointDef::alignment == 8);
+}
+
+fn void the_spherical_joint_types_match_the_c_layout() @test {
+    assert(b3::SphericalJointDef::size == 184);
+    assert(b3::SphericalJointDef::alignment == 8);
+}
+
+// 0 is exactly representable as a float and is copied straight out of the definition, so these
+// compare exactly rather than in a band. Every ceiling here is also the switch for its channel,
+// so a motor joint built from this definition drives and holds nothing.
+fn void the_default_motor_joint_definition_zeroes_every_field_it_adds_to_the_base() @test {
+    b3::MotorJointDef def = b3::default_motor_joint_def();
+
+    assert(def.linear_velocity.x == 0.0);
+    assert(def.linear_velocity.y == 0.0);
+    assert(def.linear_velocity.z == 0.0);
+    assert(def.max_velocity_force == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.angular_velocity.x == 0.0);
+    assert(def.angular_velocity.y == 0.0);
+    assert(def.angular_velocity.z == 0.0);
+    assert(def.max_velocity_torque == 0.0);
+    assert(def.linear_hertz == 0.0);
+    assert(def.linear_damping_ratio == 0.0);
+    assert(def.max_spring_force == 0.0);
+    assert(def.angular_hertz == 0.0);
+    assert(def.angular_damping_ratio == 0.0);
+    assert(def.max_spring_torque == 0.0);
+}
+
+fn void a_default_motor_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::MotorJointDef def = b3::default_motor_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+// The one field either of these two definitions leaves non-zero. 0 and 1 are exactly representable
+// as floats and are copied straight out, so the quaternion is compared component by component
+// rather than in a band: a rotated component order would leave the 1 somewhere else.
+fn void the_default_spherical_joint_definition_zeroes_all_but_its_target_rotation() @test {
+    b3::SphericalJointDef def = b3::default_spherical_joint_def();
+
+    assert(!def.enable_spring, "a default spherical joint is a bare ball and socket");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(def.target_rotation.i == 0.0, "the target rotation is the identity quaternion, not zero");
+    assert(def.target_rotation.j == 0.0);
+    assert(def.target_rotation.k == 0.0);
+    assert(def.target_rotation.l == 1.0, "and the 1 sits in the real component");
+    assert(!def.enable_cone_limit);
+    assert(def.cone_angle == 0.0);
+    assert(!def.enable_twist_limit);
+    assert(def.lower_twist_angle == 0.0);
+    assert(def.upper_twist_angle == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_torque == 0.0);
+    assert(def.motor_velocity.x == 0.0);
+    assert(def.motor_velocity.y == 0.0);
+    assert(def.motor_velocity.z == 0.0);
+}
+
+fn void a_default_spherical_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::SphericalJointDef def = b3::default_spherical_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+fn b3::MotorJointId link_with_a_motor_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_motor_joint(&joint_def)!!;
+}
+
+fn b3::SphericalJointId link_with_a_spherical_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_spherical_joint(&joint_def)!!;
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_motor_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::MotorJointId motor = link_with_a_motor_joint(world, a, b);
+
+    return {
+        .type = motor.type(),
+        .expected_a = a,
+        .reported_a = motor.body_a(),
+        .valid = motor.is_valid(),
+    };
+}
+
+fn TypedHandleReport the_shared_accessors_on_a_new_spherical_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::SphericalJointId ball = link_with_a_spherical_joint(world, a, b);
+
+    return {
+        .type = ball.type(),
+        .expected_a = a,
+        .reported_a = ball.body_a(),
+        .valid = ball.is_valid(),
+    };
+}
+
+fn void the_shared_joint_accessors_reach_a_motor_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_motor_joint();
+
+    assert(report.type == b3::JointType.MOTOR);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void the_shared_joint_accessors_reach_a_spherical_handle_uncast() @test {
+    TypedHandleReport report = the_shared_accessors_on_a_new_spherical_joint();
+
+    assert(report.type == b3::JointType.SPHERICAL);
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+struct DrivenJointConversions {
+    b3::JointId motor;
+    b3::JointId ball;
+    b3::JointId narrowed_motor;
+    b3::JointId narrowed_ball;
+    bool motor_converted;
+    bool ball_converted;
+    fault ball_as_motor;
+    fault slider_as_motor;
+    fault motor_as_spherical;
+    fault slider_as_spherical;
+}
+
+// All three joints link the same pair of bodies in the same world, so the only thing separating
+// the joint each conversion refuses is its type.
+fn DrivenJointConversions the_conversions_of_a_motor_joint_and_a_ball_and_socket() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId motor = link_with_a_motor_joint(world, a, b);
+    b3::JointId ball = link_with_a_spherical_joint(world, a, b);
+    b3::JointId slider = link_with_a_prismatic_joint(world, a, b);
+
+    DrivenJointConversions conversions = {.motor = motor, .ball = ball};
+    if (try narrowed = motor.as_motor()) {
+        conversions.narrowed_motor = narrowed;
+        conversions.motor_converted = true;
+    }
+    if (try narrowed = ball.as_spherical()) {
+        conversions.narrowed_ball = narrowed;
+        conversions.ball_converted = true;
+    }
+    if (catch err = ball.as_motor()) conversions.ball_as_motor = err;
+    if (catch err = slider.as_motor()) conversions.slider_as_motor = err;
+    if (catch err = motor.as_spherical()) conversions.motor_as_spherical = err;
+    if (catch err = slider.as_spherical()) conversions.slider_as_spherical = err;
+    return conversions;
+}
+
+struct DestroyedDrivenConversions {
+    bool valid_before;
+    b3::JointType motor_type_after;
+    fault motor_refusal;
+    fault ball_refusal;
+}
+
+// The two joints are destroyed while their world lives on, so each handle names a joint slot
+// box3d has freed rather than a world that is gone. box3d leaves the slot's type where it was,
+// which is why reading the type is not on its own enough to refuse the handle.
+fn DestroyedDrivenConversions the_conversions_of_a_destroyed_motor_joint_and_ball_and_socket() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId motor = link_with_a_motor_joint(world, a, b);
+    b3::JointId ball = link_with_a_spherical_joint(world, a, b);
+
+    DestroyedDrivenConversions conversions = {.valid_before = motor.is_valid() && ball.is_valid()};
+    motor.destroy(false);
+    ball.destroy(false);
+
+    conversions.motor_type_after = motor.type();
+    if (catch err = motor.as_motor()) conversions.motor_refusal = err;
+    if (catch err = ball.as_spherical()) conversions.ball_refusal = err;
+    return conversions;
+}
+
+fn fault refusal_of_a_motor_joint_definition(b3::MotorJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_motor_joint(def)) return err;
+    return {};
+}
+
+fn fault refusal_of_a_spherical_joint_definition(b3::SphericalJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_spherical_joint(def)) return err;
+    return {};
+}
+
+fn void only_a_motor_joint_narrows_to_a_motor_handle() @test {
+    DrivenJointConversions conversions = the_conversions_of_a_motor_joint_and_a_ball_and_socket();
+
+    assert(conversions.motor_converted, "as_motor takes back the joint it was given");
+    assert(conversions.narrowed_motor.index1 == conversions.motor.index1);
+    assert(conversions.narrowed_motor.world0 == conversions.motor.world0);
+    assert(conversions.narrowed_motor.generation == conversions.motor.generation);
+    assert(conversions.ball_as_motor == b3::WRONG_JOINT_TYPE,
+        "a motor accessor on a ball and socket reinterprets that joint's solver union");
+    assert(conversions.slider_as_motor == b3::WRONG_JOINT_TYPE, "and on a slider, the slider's");
+}
+
+fn void only_a_spherical_joint_narrows_to_a_spherical_handle() @test {
+    DrivenJointConversions conversions = the_conversions_of_a_motor_joint_and_a_ball_and_socket();
+
+    assert(conversions.ball_converted, "as_spherical takes back the joint it was given");
+    assert(conversions.narrowed_ball.index1 == conversions.ball.index1);
+    assert(conversions.narrowed_ball.world0 == conversions.ball.world0);
+    assert(conversions.narrowed_ball.generation == conversions.ball.generation);
+    assert(conversions.motor_as_spherical == b3::WRONG_JOINT_TYPE,
+        "a spherical accessor on a motor joint reinterprets that joint's solver union");
+    assert(conversions.slider_as_spherical == b3::WRONG_JOINT_TYPE, "and on a slider, the slider's");
+}
+
+fn void a_destroyed_joint_narrows_to_neither_of_the_two_new_handles() @test {
+    DestroyedDrivenConversions conversions = the_conversions_of_a_destroyed_motor_joint_and_ball_and_socket();
+
+    assert(conversions.valid_before, "both joints were live before they were destroyed");
+    assert(conversions.motor_type_after == b3::JointType.MOTOR,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversions.motor_refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+    assert(conversions.ball_refusal == b3::INVALID_HANDLE);
+}
+
+fn void a_zeroed_motor_or_spherical_joint_definition_is_refused() @test {
+    b3::MotorJointDef zeroed_motor;
+    b3::SphericalJointDef zeroed_ball;
+
+    assert(refusal_of_a_motor_joint_definition(&zeroed_motor, true) == b3::INVALID_DEFINITION,
+        "box3d accepts a zeroed joint definition; the binding must not");
+    assert(refusal_of_a_spherical_joint_definition(&zeroed_ball, true) == b3::INVALID_DEFINITION);
+}
+
+fn void a_motor_or_spherical_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::MotorJointDef bodiless_motor = b3::default_motor_joint_def();
+    b3::SphericalJointDef bodiless_ball = b3::default_spherical_joint_def();
+
+    assert(refusal_of_a_motor_joint_definition(&bodiless_motor, false) == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+    assert(refusal_of_a_spherical_joint_definition(&bodiless_ball, false) == b3::INVALID_DEFINITION);
+
+    fault none;
+    b3::MotorJointDef named_motor = b3::default_motor_joint_def();
+    b3::SphericalJointDef named_ball = b3::default_spherical_joint_def();
+
+    assert(refusal_of_a_motor_joint_definition(&named_motor, true) == none,
+        "the same definition naming two bodies of the calling world is accepted");
+    assert(refusal_of_a_spherical_joint_definition(&named_ball, true) == none);
+}
+
+struct MotorDrive {
+    b3::Pos position;
+    bool awake;
+}
+
+// The two bodies start co-located at the origin with gravity off, so the drive is the only thing
+// that can move body B and a position still at the origin means it did not. One second at 1/60 s
+// against a static anchor, so the whole displacement is the dynamic body's.
+fn MotorDrive a_motor_driven_body_after_a_second(float velocity_x, float ceiling) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.linear_velocity = (b3::Vec3){ velocity_x, 0.0, 0.0 };
+    joint_def.max_velocity_force = ceiling;
+    world.create_motor_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.position = driven.position(), .awake = driven.is_awake()};
+}
+
+struct MotorSpin {
+    b3::Quat rotation;
+    b3::Vec3 angular_velocity;
+    bool awake;
+}
+
+// The angular twin of the fixture above, and co-located for the same reason: the joint pins no
+// axis, so an unturned body is one the angular drive never reached.
+fn MotorSpin a_motor_turned_body_after_a_second(float velocity_x, float ceiling) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.angular_velocity = (b3::Vec3){ velocity_x, 0.0, 0.0 };
+    joint_def.max_velocity_torque = ceiling;
+    world.create_motor_joint(&joint_def)!!;
+
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .rotation = driven.rotation(),
+        .angular_velocity = driven.angular_velocity(),
+        .awake = driven.is_awake(),
+    };
+}
+
+struct MotorVelocities {
+    b3::Vec3 linear;
+    b3::Vec3 angular;
+    b3::Vec3 linear_after;
+    b3::Vec3 angular_after;
+}
+
+// Every component of all four vectors differs from the other two in its own vector, so a
+// transposed component fails the round trip where three equal components would pass under any
+// permutation. The definition's pair is read before the setters run, so the two paths stay apart.
+fn MotorVelocities the_velocities_of_a_motor_joint_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.linear_velocity = (b3::Vec3){ 0.5, -1.5, 2.25 };
+    joint_def.angular_velocity = (b3::Vec3){ -0.25, 3.5, 0.75 };
+    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+
+    MotorVelocities velocities = {
+        .linear = motor.linear_velocity(),
+        .angular = motor.angular_velocity(),
+    };
+
+    motor.set_linear_velocity((b3::Vec3){ -3.0, 0.25, 1.75 });
+    motor.set_angular_velocity((b3::Vec3){ 2.5, -0.75, 4.5 });
+    velocities.linear_after = motor.linear_velocity();
+    velocities.angular_after = motor.angular_velocity();
+    return velocities;
+}
+
+struct MotorSpringSettings {
+    float linear_hertz;
+    float linear_damping_ratio;
+    float max_spring_force;
+    float angular_hertz;
+    float angular_damping_ratio;
+    float max_spring_torque;
+    float linear_hertz_after;
+    float linear_damping_ratio_after;
+    float max_spring_force_after;
+    float angular_hertz_after;
+    float angular_damping_ratio_after;
+    float max_spring_torque_after;
+}
+
+// Both spring channels on one joint, read out of the definition before the setters run. No two of
+// the twelve values are the same number, so a linear reading crossed with its angular twin fails.
+fn MotorSpringSettings the_spring_settings_of_a_motor_joint_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.linear_hertz = 4.0;
+    joint_def.linear_damping_ratio = 0.5;
+    joint_def.max_spring_force = 12.5;
+    joint_def.angular_hertz = 8.0;
+    joint_def.angular_damping_ratio = 0.25;
+    joint_def.max_spring_torque = 6.25;
+    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+
+    MotorSpringSettings settings = {
+        .linear_hertz = motor.linear_hertz(),
+        .linear_damping_ratio = motor.linear_damping_ratio(),
+        .max_spring_force = motor.max_spring_force(),
+        .angular_hertz = motor.angular_hertz(),
+        .angular_damping_ratio = motor.angular_damping_ratio(),
+        .max_spring_torque = motor.max_spring_torque(),
+    };
+
+    motor.set_linear_hertz(3.0);
+    motor.set_linear_damping_ratio(1.5);
+    motor.set_max_spring_force(20.0);
+    motor.set_angular_hertz(5.0);
+    motor.set_angular_damping_ratio(0.75);
+    motor.set_max_spring_torque(9.5);
+
+    settings.linear_hertz_after = motor.linear_hertz();
+    settings.linear_damping_ratio_after = motor.linear_damping_ratio();
+    settings.max_spring_force_after = motor.max_spring_force();
+    settings.angular_hertz_after = motor.angular_hertz();
+    settings.angular_damping_ratio_after = motor.angular_damping_ratio();
+    settings.max_spring_torque_after = motor.max_spring_torque();
+    return settings;
+}
+
+struct MotorCeilings {
+    float spring_force;
+    float spring_torque;
+    float velocity_force;
+    float velocity_torque;
+    float spring_force_after;
+    float spring_torque_after;
+    float velocity_force_after;
+    float velocity_torque_after;
+}
+
+// One joint read twice, the four ceilings construction stored first so that the setters cannot
+// have touched them, then the same four numbers handed back through the setters. Every value is
+// negative and distinct, which is what separates a floor at 0 from a verbatim store and stops a
+// crossed reading agreeing with itself.
+fn MotorCeilings the_negative_ceilings_of_a_motor_joint_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.max_spring_force = -7.5;
+    joint_def.max_spring_torque = -3.25;
+    joint_def.max_velocity_force = -2.5;
+    joint_def.max_velocity_torque = -1.25;
+    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+
+    MotorCeilings ceilings = {
+        .spring_force = motor.max_spring_force(),
+        .spring_torque = motor.max_spring_torque(),
+        .velocity_force = motor.max_velocity_force(),
+        .velocity_torque = motor.max_velocity_torque(),
+    };
+
+    motor.set_max_spring_force(-7.5);
+    motor.set_max_spring_torque(-3.25);
+    motor.set_max_velocity_force(-2.5);
+    motor.set_max_velocity_torque(-1.25);
+
+    ceilings.spring_force_after = motor.max_spring_force();
+    ceilings.spring_torque_after = motor.max_spring_torque();
+    ceilings.velocity_force_after = motor.max_velocity_force();
+    ceilings.velocity_torque_after = motor.max_velocity_torque();
+    return ceilings;
+}
+
+enum SpringCeiling {
+    HELD_THROUGHOUT,
+    SILENCED_HALFWAY,
+    NEVER_RAISED,
+}
+
+// Four seconds at 1/60 s under the world's default gravity of -10, read at the halfway point and
+// again at the end. Sleep is off for the whole world: a held body settles and would otherwise fall
+// asleep at the halfway point, and a reading taken across a sleeping body measures nothing the
+// joint did. The middle row is the one the other two bracket — its ceiling is dropped to 0 at the
+// halfway point, after the spring has been holding for two seconds.
+fn float[3] a_sprung_motor_joint_over_four_seconds(SpringCeiling ceiling) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::MotorJointDef joint_def = b3::default_motor_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.linear_hertz = 5.0;
+    joint_def.linear_damping_ratio = 1.0;
+    joint_def.max_spring_force = ceiling == SpringCeiling.NEVER_RAISED ? 0.0 : 1000.0;
+    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+    float halfway = hanging.position()[1];
+    float lifting = motor.constraint_force()[1];
+
+    if (ceiling == SpringCeiling.SILENCED_HALFWAY) motor.set_max_spring_force(0.0);
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+    return { halfway, lifting, hanging.position()[1] };
+}
+
+// The band holds the measured 0.969331 and excludes both a body the drive never moved and one
+// that reached the nominal 1.0, which the solver's ramp keeps it short of. The other two
+// components are the drive's axis: box3d subtracts the velocity from the bodies' relative
+// velocity in world axes without projecting it, so a driven x must move x alone.
+fn void a_motor_joint_drives_the_body_at_the_velocity_it_was_given() @test {
+    MotorDrive driven = a_motor_driven_body_after_a_second(1.0, 1000.0);
+
+    assert(driven.awake, "the reading is the drive's rather than a body that stopped being stepped");
+    assert(driven.position[0] > 0.96 && driven.position[0] < 0.98,
+        "a metre a second for a second, short of the metre by the solver's ramp");
+    assert(driven.position[1] > -0.001 && driven.position[1] < 0.001);
+    assert(driven.position[2] > -0.001 && driven.position[2] < 0.001);
+}
+
+// The first control: the same joint with the same ceiling and nothing asked of it.
+fn void a_motor_joint_asked_for_no_velocity_leaves_the_body_where_it_was() @test {
+    MotorDrive idle = a_motor_driven_body_after_a_second(0.0, 1000.0);
+
+    assert(idle.position[0] > -0.001 && idle.position[0] < 0.001, "a ceiling on its own drives nothing");
+    assert(idle.position[1] > -0.001 && idle.position[1] < 0.001);
+    assert(idle.position[2] > -0.001 && idle.position[2] < 0.001);
+}
+
+// The second control: the same velocity as the driven row with the ceiling at 0 moves the body
+// nowhere at all. What the row does not settle is which reading of the ceiling box3d takes, since
+// a bound of exactly 0 permits an impulse of exactly 0 and a gate and a clamp are the same thing
+// there. The row below is what tells the two apart.
+fn void a_linear_drive_with_no_force_ceiling_moves_nothing() @test {
+    MotorDrive silent = a_motor_driven_body_after_a_second(1.0, 0.0);
+
+    assert(silent.position[0] > -0.001 && silent.position[0] < 0.001,
+        "a zero ceiling is the linear drive turned off");
+    assert(silent.position[1] > -0.001 && silent.position[1] < 0.001);
+    assert(silent.position[2] > -0.001 && silent.position[2] < 0.001);
+}
+
+// A ceiling below zero, which only a definition can leave behind and which the ceilings above
+// cannot distinguish: box3d gates the drive on the ceiling being above 0, so a negative one
+// silences it exactly as 0 does. Read as a clamp instead it would have rescaled the drive by a
+// negative ratio and carried the body the other way, which is what this joint's neighbour the
+// spherical motor really does with a negative ceiling of its own.
+fn void a_linear_drive_with_a_negative_force_ceiling_moves_nothing_either() @test {
+    MotorDrive negative = a_motor_driven_body_after_a_second(1.0, -2.5);
+    MotorDrive silent = a_motor_driven_body_after_a_second(1.0, 0.0);
+
+    assert(negative.position[0] > -0.001 && negative.position[0] < 0.001,
+        "a negative ceiling silences the drive rather than reversing it");
+    assert(negative.position[1] > -0.001 && negative.position[1] < 0.001);
+    assert(negative.position[2] > -0.001 && negative.position[2] < 0.001);
+    assert(negative.position[0] == silent.position[0],
+        "which is exactly where a ceiling of zero leaves the body");
+}
+
+// Two radians a second for a second is very nearly the full two radians here, so the quaternion
+// sits at (0.841468, 0, 0, 0.540307). The two zero components are the drive's axis: box3d
+// subtracts the angular velocity from the difference of the two bodies' own in world axes and
+// rotates it into no frame, so a driven x must turn about x alone.
+fn void a_motor_joint_turns_the_body_at_the_angular_velocity_it_was_given() @test {
+    MotorSpin driven = a_motor_turned_body_after_a_second(2.0, 1000.0);
+
+    assert(driven.awake, "the reading is the drive's rather than a body that stopped being stepped");
+    assert(driven.rotation.i > 0.83 && driven.rotation.i < 0.85, "very nearly two radians about x");
+    assert(driven.rotation.j > -0.001 && driven.rotation.j < 0.001,
+        "an axis confusion turns a plausible angle about the wrong axis");
+    assert(driven.rotation.k > -0.001 && driven.rotation.k < 0.001);
+    assert(driven.rotation.l > 0.53 && driven.rotation.l < 0.55);
+    assert(driven.angular_velocity[0] > 1.95 && driven.angular_velocity[0] < 2.05,
+        "and the body is still turning at the rate it was asked for");
+}
+
+// The first control for the row above: the same joint with the same ceiling and nothing asked.
+fn void a_motor_joint_asked_for_no_angular_velocity_leaves_the_body_unturned() @test {
+    MotorSpin idle = a_motor_turned_body_after_a_second(0.0, 1000.0);
+
+    assert(idle.rotation.i > -0.001 && idle.rotation.i < 0.001, "a ceiling on its own turns nothing");
+    assert(idle.rotation.j > -0.001 && idle.rotation.j < 0.001);
+    assert(idle.rotation.k > -0.001 && idle.rotation.k < 0.001);
+    assert(idle.rotation.l > 0.999 && idle.rotation.l < 1.001);
+}
+
+// The second control, the angular twin of the linear one, and it stops in the same place: a zero
+// ceiling turns nothing, and says no more than that about how box3d reads the ceiling.
+fn void an_angular_drive_with_no_torque_ceiling_turns_nothing() @test {
+    MotorSpin silent = a_motor_turned_body_after_a_second(2.0, 0.0);
+
+    assert(silent.rotation.i > -0.001 && silent.rotation.i < 0.001,
+        "a zero ceiling is the angular drive turned off");
+    assert(silent.rotation.l > 0.999 && silent.rotation.l < 1.001);
+    assert(silent.angular_velocity[0] > -0.001 && silent.angular_velocity[0] < 0.001);
+}
+
+// 0.5, -1.5, 2.25, -0.25, 3.5 and 0.75 are all exactly representable as floats and are copied
+// straight out of the definition, so they compare exactly rather than in a band.
+fn void the_two_drive_velocities_of_a_motor_joint_round_trip_through_its_definition() @test {
+    MotorVelocities velocities = the_velocities_of_a_motor_joint_before_and_after_the_setters();
+
+    assert(velocities.linear[0] == 0.5, "each component comes back in the place it was written");
+    assert(velocities.linear[1] == -1.5);
+    assert(velocities.linear[2] == 2.25);
+    assert(velocities.angular[0] == -0.25, "and the angular vector is not the linear one");
+    assert(velocities.angular[1] == 3.5);
+    assert(velocities.angular[2] == 0.75);
+}
+
+// -3, 0.25, 1.75, 2.5, -0.75 and 4.5 are all exactly representable as floats and are written
+// straight back by the setters, so they compare exactly rather than in a band.
+fn void the_two_drive_velocities_of_a_motor_joint_round_trip_through_its_setters() @test {
+    MotorVelocities velocities = the_velocities_of_a_motor_joint_before_and_after_the_setters();
+
+    assert(velocities.linear_after[0] == -3.0, "each component comes back in the place it was written");
+    assert(velocities.linear_after[1] == 0.25);
+    assert(velocities.linear_after[2] == 1.75);
+    assert(velocities.angular_after[0] == 2.5, "and the angular vector is not the linear one");
+    assert(velocities.angular_after[1] == -0.75);
+    assert(velocities.angular_after[2] == 4.5);
+}
+
+// Every one of these twelve is exactly representable as a float and is either copied out of the
+// definition or written straight back by a setter, so they compare exactly rather than in a band.
+fn void the_spring_settings_of_a_motor_joint_round_trip() @test {
+    MotorSpringSettings settings = the_spring_settings_of_a_motor_joint_before_and_after_the_setters();
+
+    assert(settings.linear_hertz == 4.0, "the joint reports the two springs its definition asked for");
+    assert(settings.linear_damping_ratio == 0.5);
+    assert(settings.max_spring_force == 12.5);
+    assert(settings.angular_hertz == 8.0);
+    assert(settings.angular_damping_ratio == 0.25);
+    assert(settings.max_spring_torque == 6.25);
+    assert(settings.linear_hertz_after == 3.0, "and then the values the setters gave it");
+    assert(settings.linear_damping_ratio_after == 1.5);
+    assert(settings.max_spring_force_after == 20.0);
+    assert(settings.angular_hertz_after == 5.0);
+    assert(settings.angular_damping_ratio_after == 0.75);
+    assert(settings.max_spring_torque_after == 9.5);
+}
+
+// Four ceilings that read as one family and are not one contract. -7.5, -3.25, -2.5 and -1.25 are
+// exactly representable as floats and nothing rounds them, so they compare exactly.
+fn void the_two_spring_ceilings_of_a_motor_joint_floor_at_zero_where_the_velocity_ceilings_do_not() @test {
+    MotorCeilings ceilings = the_negative_ceilings_of_a_motor_joint_before_and_after_the_setters();
+
+    assert(ceilings.spring_force_after == 0.0, "the spring ceilings take the larger of the value and zero");
+    assert(ceilings.spring_torque_after == 0.0);
+    assert(ceilings.velocity_force_after == -2.5, "and the velocity ceilings beside them clamp nothing");
+    assert(ceilings.velocity_torque_after == -1.25);
+}
+
+// The other half of that asymmetry: construction copies all ten fields across verbatim, so a
+// definition leaves the joint reporting a negative spring ceiling its own setter cannot produce.
+fn void a_definition_can_leave_a_motor_joint_with_the_negative_ceiling_its_setter_would_have_floored() @test {
+    MotorCeilings ceilings = the_negative_ceilings_of_a_motor_joint_before_and_after_the_setters();
+
+    assert(ceilings.spring_force == -7.5, "the definition's negative spring ceiling arrives intact");
+    assert(ceilings.spring_torque == -3.25);
+    assert(ceilings.velocity_force == -2.5);
+    assert(ceilings.velocity_torque == -1.25);
+}
+
+// This joint type has no force getter of its own, so the shared accessor is the only reading — and
+// it is a sound one: the sphere is 0.25 across at box3d's default density of water, which weighs
+// 654.4985 newtons under the world's gravity of -10, and the spring holding it still reports that
+// to six figures rather than a double count or a permuted axis. The band is tight enough to
+// exclude both twice the weight and a third of it.
+fn void a_motor_joints_linear_spring_holds_the_weight_the_shared_constraint_force_reports() @test {
+    float[3] held = a_sprung_motor_joint_over_four_seconds(SpringCeiling.HELD_THROUGHOUT);
+
+    assert(held[0] > -0.02 && held[0] < 0.0, "the spring holds the body just under where it started");
+    assert(held[1] > 654.0 && held[1] < 655.0, "and the force it reports is the weight it is carrying");
+    assert(held[2] > -0.02 && held[2] < 0.0, "still there two seconds later");
+}
+
+// box3d's warm start re-applies the spring's accumulated impulse every substep whatever the
+// ceiling says, and the ceiling only gates the solve that would have updated it, so the impulse a
+// silenced spring holds goes on being applied. The two controls are what make this discriminate:
+// the row above never drops its ceiling and the row below never raises it, and the silenced body
+// lands on the first rather than the second.
+fn void dropping_a_spring_ceiling_leaves_the_impulse_it_holds_standing() @test {
+    float[3] silenced = a_sprung_motor_joint_over_four_seconds(SpringCeiling.SILENCED_HALFWAY);
+    float[3] never = a_sprung_motor_joint_over_four_seconds(SpringCeiling.NEVER_RAISED);
+
+    assert(silenced[0] > -0.02 && silenced[0] < 0.0, "the spring was working when its ceiling was dropped");
+    assert(silenced[2] > -0.02 && silenced[2] < 0.0,
+        "and the body does not move over the two seconds that follow");
+    assert(never[0] > -21.0 && never[0] < -19.0,
+        "where a spring whose ceiling was never raised holds nothing and the body falls");
+    assert(never[1] > -0.001 && never[1] < 0.001, "reporting no force at all");
+    assert(never[2] > -81.0 && never[2] < -79.0);
+}
+
+struct SwungBall {
+    float cone;
+    float twist;
+    bool awake;
+}
+
+// The two bodies start co-located with both anchors at their centres and gravity off, so body A
+// holds position while body B turns freely and the joint's own limit is the only thing that can
+// stop it. Sixty steps at 1/60 s and not more: 2 rad/s carries both angles past their principal
+// range soon after, and by 180 steps the unlimited swing has wrapped back to 0.283225, close
+// enough to the limited 0.300000 that the two bands would no longer tell the rows apart. The
+// limited row differs from its control in the limit flag alone.
+fn SwungBall a_ball_swung_off_its_axis_for_a_second(bool enable_cone_limit) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = swinging;
+    joint_def.enable_cone_limit = enable_cone_limit;
+    joint_def.cone_angle = 0.3;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    swinging.set_angular_velocity((b3::Vec3){ 2.0, 0.0, 0.0 });
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.cone = ball.cone_angle(), .twist = ball.twist_angle(), .awake = swinging.is_awake()};
+}
+
+// The twist twin of the fixture above, turning about the frames' z axis instead of across it, and
+// held to the same sixty steps for the same reason.
+fn SwungBall a_ball_twisted_about_its_axis_for_a_second(bool enable_twist_limit) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId twisting = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = twisting;
+    joint_def.enable_twist_limit = enable_twist_limit;
+    joint_def.lower_twist_angle = -0.4;
+    joint_def.upper_twist_angle = 0.4;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    twisting.set_angular_velocity((b3::Vec3){ 0.0, 0.0, 2.0 });
+    for (int i = 0; i < 60; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.cone = ball.cone_angle(), .twist = ball.twist_angle(), .awake = twisting.is_awake()};
+}
+
+struct BallConeLimits {
+    float on_a_default_ball;
+    float after_a_negative_angle;
+    float after_an_angle_far_out;
+    float from_a_definition_far_out;
+}
+
+fn BallConeLimits the_cone_limits_a_ball_keeps() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId bare = link_with_a_spherical_joint(world, anchor, swinging);
+
+    BallConeLimits limits = {.on_a_default_ball = bare.cone_limit()};
+
+    bare.set_cone_limit(-0.5);
+    limits.after_a_negative_angle = bare.cone_limit();
+    bare.set_cone_limit(99.0);
+    limits.after_an_angle_far_out = bare.cone_limit();
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = swinging;
+    joint_def.enable_cone_limit = true;
+    joint_def.cone_angle = 2.0;
+    b3::SphericalJointId built = world.create_spherical_joint(&joint_def)!!;
+    limits.from_a_definition_far_out = built.cone_limit();
+    return limits;
+}
+
+struct BallTwistLimits {
+    float lower_on_a_default_ball;
+    float upper_on_a_default_ball;
+    float lower_reversed;
+    float upper_reversed;
+    float lower_far_out;
+    float upper_far_out;
+}
+
+fn BallTwistLimits the_twist_limits_a_ball_keeps() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId twisting = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId ball = link_with_a_spherical_joint(world, anchor, twisting);
+
+    BallTwistLimits limits = {
+        .lower_on_a_default_ball = ball.lower_twist_limit(),
+        .upper_on_a_default_ball = ball.upper_twist_limit(),
+    };
+
+    ball.set_twist_limits(1.0, -1.0);
+    limits.lower_reversed = ball.lower_twist_limit();
+    limits.upper_reversed = ball.upper_twist_limit();
+
+    ball.set_twist_limits(-99.0, 99.0);
+    limits.lower_far_out = ball.lower_twist_limit();
+    limits.upper_far_out = ball.upper_twist_limit();
+    return limits;
+}
+
+struct BallLimitFlags {
+    bool cone_on_a_default_ball;
+    bool twist_on_a_default_ball;
+    bool cone_from_the_definition;
+    bool twist_from_the_definition;
+    bool cone_after_enabling;
+    bool twist_after_enabling;
+    bool cone_after_disabling;
+    bool twist_after_disabling;
+}
+
+fn BallLimitFlags the_limit_flags_of_a_bare_ball_and_a_bounded_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId bare = link_with_a_spherical_joint(world, anchor, swinging);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = swinging;
+    joint_def.enable_cone_limit = true;
+    joint_def.cone_angle = 0.3;
+    joint_def.enable_twist_limit = true;
+    joint_def.lower_twist_angle = -0.4;
+    joint_def.upper_twist_angle = 0.4;
+    b3::SphericalJointId bounded = world.create_spherical_joint(&joint_def)!!;
+
+    BallLimitFlags flags = {
+        .cone_on_a_default_ball = bare.is_cone_limit_enabled(),
+        .twist_on_a_default_ball = bare.is_twist_limit_enabled(),
+        .cone_from_the_definition = bounded.is_cone_limit_enabled(),
+        .twist_from_the_definition = bounded.is_twist_limit_enabled(),
+    };
+
+    bare.enable_cone_limit(true);
+    bare.enable_twist_limit(true);
+    bounded.enable_cone_limit(false);
+    bounded.enable_twist_limit(false);
+    flags.cone_after_enabling = bare.is_cone_limit_enabled();
+    flags.twist_after_enabling = bare.is_twist_limit_enabled();
+    flags.cone_after_disabling = bounded.is_cone_limit_enabled();
+    flags.twist_after_disabling = bounded.is_twist_limit_enabled();
+    return flags;
+}
+
+// Two radians a second for a second is very nearly the full two radians, and with no cone armed
+// nothing bounds it. The twist reading is what makes this discriminating rather than the swing
+// alone: a swing about x that showed up as twist would be the two angles transposed.
+fn void a_ball_with_no_cone_armed_swings_as_far_as_it_is_turned() @test {
+    SwungBall free = a_ball_swung_off_its_axis_for_a_second(false);
+
+    assert(free.awake, "the reading is the swing's rather than a body that stopped being stepped");
+    assert(free.cone > 1.95 && free.cone < 2.05, "very nearly the two radians it was turned through");
+    assert(free.twist > -0.001 && free.twist < 0.001, "and a swing across the axis is no twist about it");
+}
+
+// The control for the row above, differing from it in the cone flag alone, and the two bands are
+// disjoint. The body is asleep by the end, which is the limit having stopped it rather than a run
+// that ended early: the angle is the same 0.300000 three times longer in.
+fn void a_cone_limit_holds_the_swing_at_the_angle_it_was_given() @test {
+    SwungBall held = a_ball_swung_off_its_axis_for_a_second(true);
+
+    assert(held.cone > 0.29 && held.cone < 0.31, "the cone holds the swing at the angle it was built with");
+    assert(held.twist > -0.001 && held.twist < 0.001);
+}
+
+// The twist twin of the free swing, and the same transposition guard the other way round.
+fn void a_ball_with_no_twist_limit_armed_turns_as_far_as_it_is_twisted() @test {
+    SwungBall free = a_ball_twisted_about_its_axis_for_a_second(false);
+
+    assert(free.awake, "the reading is the twist's rather than a body that stopped being stepped");
+    assert(free.twist > 1.95 && free.twist < 2.05, "very nearly the two radians it was turned through");
+    assert(free.cone > -0.001 && free.cone < 0.001, "and a turn about the axis is no swing across it");
+}
+
+// The control for the row above, differing in the twist flag alone. Asleep at the end for the same
+// reason the held swing is.
+fn void a_twist_limit_holds_the_turn_at_the_angle_it_was_given() @test {
+    SwungBall held = a_ball_twisted_about_its_axis_for_a_second(true);
+
+    assert(held.twist > 0.39 && held.twist < 0.41, "the limit holds the turn at the upper angle it was built with");
+    assert(held.cone > -0.001 && held.cone < 0.001);
+}
+
+// -0.5 and 99 are exactly representable as floats and this setter bounds neither end, so they
+// compare exactly. A negative cone is not a range box3d documents anywhere; it is what the setter
+// stores because the assertion that would have caught it is compiled out of this build.
+fn void a_cone_angle_outside_every_range_box3d_names_is_kept_as_it_was_handed() @test {
+    BallConeLimits limits = the_cone_limits_a_ball_keeps();
+
+    assert(limits.on_a_default_ball == 0.0, "a default spherical joint carries no cone");
+    assert(limits.after_a_negative_angle == -0.5, "the setter clamps neither end");
+    assert(limits.after_an_angle_far_out == 99.0);
+}
+
+// The other half of that divergence: the constructor clamps the same field where the setter does
+// not, so the 2.0 radians this definition asks for arrives as pi/2 while set_cone_limit's 99 stays
+// 99. The clamp is asserted against the expression rather than the 1.570796 it prints.
+fn void a_definition_asking_for_a_wider_cone_than_the_constructor_allows_is_narrowed_to_it() @test {
+    BallConeLimits limits = the_cone_limits_a_ball_keeps();
+
+    assert(limits.from_a_definition_far_out == 0.5f * (float)math::PI,
+        "the constructor clamps the cone to a right angle, half the range this field's own prose gives it");
+    assert(limits.after_an_angle_far_out == 99.0, "where the setter for the same field keeps what it was handed");
+}
+
+// 1 and -1 are exactly representable and sit well inside the clamp, so the swap shows up exactly
+// and on its own.
+fn void a_reversed_pair_of_twist_limits_is_swapped_into_order_rather_than_refused() @test {
+    BallTwistLimits limits = the_twist_limits_a_ball_keeps();
+
+    assert(limits.lower_on_a_default_ball == 0.0, "a default spherical joint carries no twist limit");
+    assert(limits.upper_on_a_default_ball == 0.0);
+    assert(limits.lower_reversed == -1.0, "box3d takes the smaller of the two as the lower");
+    assert(limits.upper_reversed == 1.0);
+}
+
+// The pair above cannot tell a setter that only swaps from one that swaps and clamps; a pair
+// outside the bound can. 99 radians comes back as the 3.110177 the clamp names, asserted against
+// the expression rather than that reading.
+fn void twist_limits_far_out_are_clamped_as_well_as_ordered() @test {
+    BallTwistLimits limits = the_twist_limits_a_ball_keeps();
+
+    assert(limits.lower_far_out == -0.99f * (float)math::PI, "both ends land on the bound box3d clamps them to");
+    assert(limits.upper_far_out == 0.99f * (float)math::PI);
+}
+
+fn void the_two_limit_flags_of_a_ball_start_off_and_round_trip() @test {
+    BallLimitFlags flags = the_limit_flags_of_a_bare_ball_and_a_bounded_one();
+
+    assert(!flags.cone_on_a_default_ball, "a default spherical joint is a bare ball and socket");
+    assert(!flags.twist_on_a_default_ball);
+    assert(flags.cone_from_the_definition, "the joint reports the two limits its definition asked for");
+    assert(flags.twist_from_the_definition);
+    assert(flags.cone_after_enabling);
+    assert(flags.twist_after_enabling);
+    assert(!flags.cone_after_disabling);
+    assert(!flags.twist_after_disabling);
+}
+
+// Four components no two of which are equal, so a transposed pair fails the round trip where a
+// symmetric quaternion would pass under any permutation. Neither is a unit quaternion and box3d
+// normalises neither: the first sits a hair under unit length, and the second is far enough
+// outside it that no rounding could account for the difference.
+const b3::Quat A_TARGET_A_DEFINITION_CARRIES = { .i = 0.1, .j = 0.2, .k = 0.3, .l = 0.927 };
+const b3::Quat A_TARGET_THE_SETTER_IS_HANDED = { .i = -0.4, .j = 0.55, .k = 0.15, .l = 1.6 };
+
+// A turn of 0.7 radians about z, as a unit quaternion, so the spring below has a reachable target
+// and the twist angle it settles on is a number the test can name.
+const b3::Quat A_TURN_OF_SEVEN_TENTHS_ABOUT_Z = { .i = 0.0, .j = 0.0, .k = 0.342898, .l = 0.939373 };
+
+struct BallSpring {
+    b3::Quat target;
+    float hertz;
+    float damping_ratio;
+    bool enabled;
+    b3::Quat target_after;
+    float hertz_after;
+    float damping_ratio_after;
+    bool enabled_after;
+    b3::Quat target_on_a_bare_ball;
+    float hertz_on_a_bare_ball;
+    float damping_ratio_on_a_bare_ball;
+    bool enabled_on_a_bare_ball;
+}
+
+// One joint read twice with a bare one beside it: the definition's four settings are read before
+// any setter runs, so the two paths cannot be confused for one another, and every value differs
+// from the one that replaces it.
+fn BallSpring the_spring_settings_of_a_ball_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sprung = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId bare = link_with_a_spherical_joint(world, anchor, sprung);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sprung;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 4.0;
+    joint_def.damping_ratio = 0.5;
+    joint_def.target_rotation = A_TARGET_A_DEFINITION_CARRIES;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    BallSpring spring = {
+        .target = ball.target_rotation(),
+        .hertz = ball.spring_hertz(),
+        .damping_ratio = ball.spring_damping_ratio(),
+        .enabled = ball.is_spring_enabled(),
+        .target_on_a_bare_ball = bare.target_rotation(),
+        .hertz_on_a_bare_ball = bare.spring_hertz(),
+        .damping_ratio_on_a_bare_ball = bare.spring_damping_ratio(),
+        .enabled_on_a_bare_ball = bare.is_spring_enabled(),
+    };
+
+    ball.set_target_rotation(A_TARGET_THE_SETTER_IS_HANDED);
+    ball.set_spring_hertz(3.0);
+    ball.set_spring_damping_ratio(1.5);
+    ball.enable_spring(false);
+
+    spring.target_after = ball.target_rotation();
+    spring.hertz_after = ball.spring_hertz();
+    spring.damping_ratio_after = ball.spring_damping_ratio();
+    spring.enabled_after = ball.is_spring_enabled();
+    return spring;
+}
+
+struct BallMotor {
+    b3::Vec3 velocity;
+    float max_torque;
+    bool enabled;
+    b3::Vec3 velocity_after;
+    float max_torque_after;
+    bool enabled_after;
+    b3::Vec3 velocity_on_a_bare_ball;
+    float max_torque_on_a_bare_ball;
+    bool enabled_on_a_bare_ball;
+}
+
+// The motor twin of the fixture above. Every component of both velocities differs from the other
+// two in its own vector, so a component transposition fails where three equal components would
+// pass under any permutation.
+fn BallMotor the_motor_settings_of_a_ball_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+    b3::SphericalJointId bare = link_with_a_spherical_joint(world, anchor, driven);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.enable_motor = true;
+    joint_def.motor_velocity = (b3::Vec3){ 0.5, -1.5, 2.25 };
+    joint_def.max_motor_torque = 12.5;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    BallMotor motor = {
+        .velocity = ball.motor_velocity(),
+        .max_torque = ball.max_motor_torque(),
+        .enabled = ball.is_motor_enabled(),
+        .velocity_on_a_bare_ball = bare.motor_velocity(),
+        .max_torque_on_a_bare_ball = bare.max_motor_torque(),
+        .enabled_on_a_bare_ball = bare.is_motor_enabled(),
+    };
+
+    ball.set_motor_velocity((b3::Vec3){ -3.0, 0.25, 1.75 });
+    ball.set_max_motor_torque(20.0);
+    ball.enable_motor(false);
+
+    motor.velocity_after = ball.motor_velocity();
+    motor.max_torque_after = ball.max_motor_torque();
+    motor.enabled_after = ball.is_motor_enabled();
+    return motor;
+}
+
+enum BallDrive {
+    DRIVEN,
+    MOTOR_DISABLED,
+    NO_TORQUE_BUDGET,
+    HELD_BY_ITS_CONE,
+    REVERSED_BY_A_NEGATIVE_CEILING,
+}
+
+struct DrivenBall {
+    b3::Quat rotation;
+    b3::Vec3 motor_torque;
+    b3::Vec3 constraint_torque;
+    float cone;
+    bool awake;
+}
+
+// The two bodies start co-located with both anchors at their centres and gravity off, so body A
+// holds position while body B turns freely and the motor is the only thing that can move it. Sleep
+// is off so that every row's reading is the joint's rather than a body that stopped being stepped:
+// the two silent rows never move at all and would otherwise be asleep by thirty steps. Thirty steps
+// at 1/60 s and not more — the driven row reaches the two radians a second it was asked for at
+// about forty-five, and its torque falls to nothing once it is there, so a later reading would
+// measure the motor coasting rather than the motor working.
+fn DrivenBall a_ball_driven_by_its_motor_for_half_a_second(BallDrive row) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    float ceiling;
+    switch (row) {
+        case NO_TORQUE_BUDGET: ceiling = 0.0;
+        case REVERSED_BY_A_NEGATIVE_CEILING: ceiling = -5.0;
+        default: ceiling = 5.0;
+    }
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.enable_motor = row != BallDrive.MOTOR_DISABLED;
+    joint_def.motor_velocity = (b3::Vec3){ 2.0, 0.0, 0.0 };
+    joint_def.max_motor_torque = ceiling;
+    joint_def.enable_cone_limit = row == BallDrive.HELD_BY_ITS_CONE;
+    joint_def.cone_angle = 0.3;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    for (int i = 0; i < 30; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .rotation = driven.rotation(),
+        .motor_torque = ball.motor_torque(),
+        .constraint_torque = ball.constraint_torque(),
+        .cone = ball.cone_angle(),
+        .awake = driven.is_awake(),
+    };
+}
+
+struct SprungBall {
+    b3::Quat rotation;
+    float twist;
+    bool awake;
+}
+
+// Two seconds is long enough for a 2 Hz critically damped spring to land on its target and stay
+// there: the reading is the same at one second and at five. Sleep is off so that the settled
+// rotation is the spring holding the ball rather than a body frozen where it happened to be. The
+// control differs in the spring flag alone and leaves the ball where it started.
+fn SprungBall a_ball_a_spring_turns_towards_its_target(bool enable_spring) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId sprung = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = sprung;
+    joint_def.enable_spring = enable_spring;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.target_rotation = A_TURN_OF_SEVEN_TENTHS_ABOUT_Z;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {.rotation = sprung.rotation(), .twist = ball.twist_angle(), .awake = sprung.is_awake()};
+}
+
+// box3d asserts the target is a valid quaternion and this build compiles that assertion out, so
+// what reaches the solver is whatever was handed over — neither path normalises it. The squared
+// length is what says so: a normalising store would have returned 1 for both, and the setter's
+// target squares to 3.045.
+fn void a_quaternion_target_round_trips_through_both_paths_without_being_normalised() @test {
+    BallSpring spring = the_spring_settings_of_a_ball_before_and_after_the_setters();
+
+    assert(spring.target.i == A_TARGET_A_DEFINITION_CARRIES.i, "the definition's target arrives intact");
+    assert(spring.target.j == A_TARGET_A_DEFINITION_CARRIES.j);
+    assert(spring.target.k == A_TARGET_A_DEFINITION_CARRIES.k);
+    assert(spring.target.l == A_TARGET_A_DEFINITION_CARRIES.l);
+
+    assert(spring.target_after.i == A_TARGET_THE_SETTER_IS_HANDED.i, "and so does the setter's");
+    assert(spring.target_after.j == A_TARGET_THE_SETTER_IS_HANDED.j);
+    assert(spring.target_after.k == A_TARGET_THE_SETTER_IS_HANDED.k);
+    assert(spring.target_after.l == A_TARGET_THE_SETTER_IS_HANDED.l);
+
+    b3::Quat kept = spring.target_after;
+    float squared_length = kept.i * kept.i + kept.j * kept.j + kept.k * kept.k + kept.l * kept.l;
+    assert(squared_length > 3.0 && squared_length < 3.1,
+        "the quaternion box3d kept is nowhere near unit length");
+
+    assert(spring.target_on_a_bare_ball.i == 0.0, "a default spherical joint carries the identity target");
+    assert(spring.target_on_a_bare_ball.j == 0.0);
+    assert(spring.target_on_a_bare_ball.k == 0.0);
+    assert(spring.target_on_a_bare_ball.l == 1.0);
+}
+
+fn void the_spring_settings_of_a_ball_round_trip_through_both_paths() @test {
+    BallSpring spring = the_spring_settings_of_a_ball_before_and_after_the_setters();
+
+    assert(spring.hertz == 4.0, "the joint reports the spring its definition asked for");
+    assert(spring.damping_ratio == 0.5);
+    assert(spring.enabled);
+
+    assert(spring.hertz_after == 3.0, "and the one the setters replaced it with");
+    assert(spring.damping_ratio_after == 1.5);
+    assert(!spring.enabled_after);
+
+    assert(spring.hertz_on_a_bare_ball == 0.0, "where a default spherical joint carries no spring");
+    assert(spring.damping_ratio_on_a_bare_ball == 0.0);
+    assert(!spring.enabled_on_a_bare_ball);
+}
+
+fn void a_vec3_motor_velocity_round_trips_through_both_paths() @test {
+    BallMotor motor = the_motor_settings_of_a_ball_before_and_after_the_setters();
+
+    assert(motor.velocity[0] == 0.5, "the definition's velocity arrives component for component");
+    assert(motor.velocity[1] == -1.5);
+    assert(motor.velocity[2] == 2.25);
+
+    assert(motor.velocity_after[0] == -3.0, "and so does the setter's");
+    assert(motor.velocity_after[1] == 0.25);
+    assert(motor.velocity_after[2] == 1.75);
+
+    assert(motor.velocity_on_a_bare_ball[0] == 0.0, "where a default spherical joint drives nothing");
+    assert(motor.velocity_on_a_bare_ball[1] == 0.0);
+    assert(motor.velocity_on_a_bare_ball[2] == 0.0);
+}
+
+fn void the_motor_settings_of_a_ball_round_trip_through_both_paths() @test {
+    BallMotor motor = the_motor_settings_of_a_ball_before_and_after_the_setters();
+
+    assert(motor.max_torque == 12.5, "the joint reports the ceiling its definition asked for");
+    assert(motor.enabled);
+    assert(motor.max_torque_after == 20.0, "and the one the setter replaced it with");
+    assert(!motor.enabled_after);
+    assert(motor.max_torque_on_a_bare_ball == 0.0, "where a default spherical joint carries no motor");
+    assert(!motor.enabled_on_a_bare_ball);
+}
+
+// The rotation is asserted on all four components rather than the swing angle alone: a drive about
+// world x that showed up on j or k would be an axis transposition, and the swing angle alone could
+// not tell the two apart. The control differs in the motor flag and nothing else, and its band is
+// disjoint from the driven row's on both the rotation and the torque.
+fn void a_spherical_motor_turns_the_ball_about_the_axis_it_was_given() @test {
+    DrivenBall driven = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.DRIVEN);
+    DrivenBall control = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.MOTOR_DISABLED);
+
+    assert(driven.awake, "the reading is the motor's rather than a body that stopped being stepped");
+    assert(driven.rotation.i > 0.18 && driven.rotation.i < 0.20, "the motor has turned the ball about world x");
+    assert(driven.rotation.j > -0.001 && driven.rotation.j < 0.001, "and about that axis alone");
+    assert(driven.rotation.k > -0.001 && driven.rotation.k < 0.001);
+    assert(driven.cone > 0.37 && driven.cone < 0.40, "which the swing away from frame A's axis reports");
+    assert(driven.motor_torque.x > 4.9 && driven.motor_torque.x < 5.1,
+        "still working at the ceiling it was given, half a second in");
+    assert(driven.motor_torque.y > -0.001 && driven.motor_torque.y < 0.001);
+    assert(driven.motor_torque.z > -0.001 && driven.motor_torque.z < 0.001);
+
+    assert(control.awake, "the control was stepped just as long");
+    assert(control.rotation.i > -0.001 && control.rotation.i < 0.001,
+        "and a ball whose motor is disabled is not turned at all");
+    assert(control.rotation.l > 0.999 && control.rotation.l < 1.001);
+    assert(control.cone > -0.001 && control.cone < 0.001);
+    assert(control.motor_torque.x > -0.001 && control.motor_torque.x < 0.001);
+}
+
+// The second control, and the one that says the ceiling is a ceiling: the flag is left on and only
+// the torque budget is taken away, and the ball goes exactly as far as the disabled row's — nowhere.
+fn void a_motor_with_no_torque_budget_turns_the_ball_no_further_than_a_disabled_one() @test {
+    DrivenBall starved = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.NO_TORQUE_BUDGET);
+    DrivenBall disabled = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.MOTOR_DISABLED);
+
+    assert(starved.awake);
+    assert(starved.rotation.i > -0.001 && starved.rotation.i < 0.001,
+        "an enabled motor with a ceiling of zero turns nothing");
+    assert(starved.rotation.l > 0.999 && starved.rotation.l < 1.001);
+    assert(starved.motor_torque.x > -0.001 && starved.motor_torque.x < 0.001);
+    assert(starved.cone > -0.001 && starved.cone < 0.001);
+    assert(starved.rotation.i == disabled.rotation.i, "which is exactly where the disabled motor leaves it");
+    assert(starved.rotation.l == disabled.rotation.l);
+}
+
+// With the spring silent and both limits disarmed the motor is the only channel this joint has, so
+// the two accessors are reading the same impulse and must agree to the component. This is the
+// clean case; the cone case below is not.
+fn void the_shared_constraint_torque_is_the_motors_own_on_a_ball_with_nothing_else_working() @test {
+    DrivenBall driven = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.DRIVEN);
+
+    assert(driven.constraint_torque.x == driven.motor_torque.x,
+        "the shared torque neither doubles this type's motor channel nor permutes its axes");
+    assert(driven.constraint_torque.y == driven.motor_torque.y);
+    assert(driven.constraint_torque.z == driven.motor_torque.z);
+    assert(driven.constraint_torque.x > 4.9 && driven.constraint_torque.x < 5.1,
+        "and both are reading a motor that is working, not a pair of zeroes agreeing");
+}
+
+// box3d applies the cone's impulse along the swing axis with one sign and adds it into the shared
+// torque with the other, so a cone that has stopped a motor dead reports the sum of the two rather
+// than the nothing they come to. The row is the same fixture with the cone armed: the ball is held
+// at the 0.3 radians the cone was built with while the motor goes on pushing at its ceiling, and
+// the shared reading is twice that ceiling.
+fn void a_cone_holding_a_motor_adds_to_the_shared_torque_where_the_two_should_cancel() @test {
+    DrivenBall held = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.HELD_BY_ITS_CONE);
+
+    assert(held.awake, "the reading is the cone holding the motor rather than a body left unstepped");
+    assert(held.cone > 0.29 && held.cone < 0.31, "the cone holds the swing at the angle it was built with");
+    assert(held.motor_torque.x > 4.9 && held.motor_torque.x < 5.1,
+        "while the motor goes on pushing against it at its ceiling");
+    assert(held.constraint_torque.x > 9.9 && held.constraint_torque.x < 10.1,
+        "and the shared torque adds the cone's share to the motor's instead of subtracting it");
+}
+
+// The ceiling is stored as handed through both paths, so a negative one reaches the solver, and
+// box3d rescales the motor's impulse by the ratio of ceiling to impulse length rather than
+// treating a negative as zero. The sign of the rotation is what discriminates: a ceiling read as
+// zero would have left the ball at the identity, and one read as its magnitude would have turned
+// it the way the driven row goes.
+fn void a_negative_motor_ceiling_drives_the_ball_away_from_the_velocity_it_was_given() @test {
+    DrivenBall reversed = a_ball_driven_by_its_motor_for_half_a_second(BallDrive.REVERSED_BY_A_NEGATIVE_CEILING);
+
+    assert(reversed.awake);
+    assert(reversed.rotation.i > -0.20 && reversed.rotation.i < -0.18,
+        "the ball turns the opposite way from the velocity the motor was asked for");
+    assert(reversed.motor_torque.x > -5.1 && reversed.motor_torque.x < -4.9,
+        "reporting the ceiling's magnitude with the ceiling's sign");
+}
+
+enum MotorRelease {
+    HELD_THROUGHOUT,
+    RELEASED_BY_ITS_FLAG,
+    RELEASED_BY_ITS_CEILING,
+}
+
+struct ReleasedBall {
+    b3::Quat rotation_at_the_drop;
+    float speed_at_the_drop;
+    b3::Quat rotation;
+    float speed;
+    b3::Vec3 motor_torque;
+    bool awake;
+}
+
+// The driven fixture above run again over the same thirty steps, with the motor taken away at
+// twenty in the two rows that take it away at all. Both readings come back: the first is the state
+// all three rows share, so the second is the only place they can part. The world is the driven
+// rows' own — no gravity, both bodies co-located, sleep off — so nothing but the joint can move
+// body B, and once the motor is gone nothing but body B's own momentum can keep it moving.
+fn ReleasedBall a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease row) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
+
+    b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = driven;
+    joint_def.enable_motor = true;
+    joint_def.motor_velocity = (b3::Vec3){ 2.0, 0.0, 0.0 };
+    joint_def.max_motor_torque = 5.0;
+    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+
+    for (int i = 0; i < 20; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+    b3::Quat rotation_at_the_drop = driven.rotation();
+    float speed_at_the_drop = driven.angular_velocity()[0];
+
+    if (row == MotorRelease.RELEASED_BY_ITS_FLAG) ball.enable_motor(false);
+    if (row == MotorRelease.RELEASED_BY_ITS_CEILING) ball.set_max_motor_torque(0.0);
+
+    for (int i = 20; i < 30; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .rotation_at_the_drop = rotation_at_the_drop,
+        .speed_at_the_drop = speed_at_the_drop,
+        .rotation = driven.rotation(),
+        .speed = driven.angular_velocity()[0],
+        .motor_torque = ball.motor_torque(),
+        .awake = driven.is_awake(),
+    };
+}
+
+// Switching the motor off discards the impulse it was holding, and box3d's warm start is then left
+// with nothing to re-apply, so the ball is released rather than held — the opposite of the motor
+// joint's spring, whose silenced impulse goes on being applied and whose body does not move.
+// Released is not stopped: the ball keeps exactly the rate it had at the drop and coasts on it,
+// where the row that keeps its motor is still being accelerated towards what it was asked for.
+fn void switching_a_ball_motor_off_leaves_the_ball_coasting_on_the_rate_it_had() @test {
+    ReleasedBall released = a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease.RELEASED_BY_ITS_FLAG);
+    ReleasedBall held = a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease.HELD_THROUGHOUT);
+
+    assert(released.awake, "the reading is the released ball's rather than a body that stopped being stepped");
+    assert(released.speed_at_the_drop > 1.01 && released.speed_at_the_drop < 1.03,
+        "the motor was working when it was switched off");
+    assert(released.speed == released.speed_at_the_drop,
+        "and the ball holds that rate to the bit, so nothing drives it and nothing holds it");
+    assert(released.motor_torque.x > -0.001 && released.motor_torque.x < 0.001,
+        "the motor reports no torque at all once its impulse has been discarded");
+    assert(released.rotation.i > released.rotation_at_the_drop.i,
+        "while the ball goes on turning, which is coasting rather than being stopped");
+
+    assert(held.speed > 1.51 && held.speed < 1.55,
+        "where the row that keeps its motor is still being driven towards the rate it was given");
+    assert(held.motor_torque.x > 4.9 && held.motor_torque.x < 5.1, "at the ceiling it was given");
+    assert(held.rotation.i > 0.18 && held.rotation.i < 0.20);
+    assert(released.rotation.i > 0.16 && released.rotation.i < 0.18,
+        "and the released ball is short of it by the ten steps it was not driven");
+}
+
+// The ceiling reaches the same release by the other route: box3d rescales the motor's impulse by
+// the ratio of ceiling to impulse length inside the solve rather than skipping the solve, so a
+// ceiling of 0 scales that impulse away and leaves the warm start with nothing to re-apply either.
+// The two rows are the same ball to the bit, which is what says the flag and the ceiling let go of
+// it in the same way rather than in two ways that look alike.
+fn void dropping_a_ball_motors_ceiling_to_zero_releases_it_the_same_way() @test {
+    ReleasedBall starved = a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease.RELEASED_BY_ITS_CEILING);
+    ReleasedBall released = a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease.RELEASED_BY_ITS_FLAG);
+
+    assert(starved.awake);
+    assert(starved.speed == starved.speed_at_the_drop, "the ball coasts on the rate it had at the drop");
+    assert(starved.motor_torque.x > -0.001 && starved.motor_torque.x < 0.001,
+        "and the motor reports no torque, where a ceiling read as a bound would have held its impulse");
+    assert(starved.rotation.i == released.rotation.i,
+        "which is exactly where switching the flag off leaves the ball");
+    assert(starved.rotation.l == released.rotation.l);
+}
+
+// The spring's whole job, and the quaternion is asserted on all four components so that a target
+// reached about the wrong axis fails. The twist angle is the same reading in the frames' own
+// terms, and it lands on the 0.7 radians the target quaternion encodes. The control differs in the
+// spring flag alone and stays at the identity, so the two bands share nothing.
+fn void a_spring_turns_the_ball_onto_the_target_rotation_it_was_given() @test {
+    SprungBall settled = a_ball_a_spring_turns_towards_its_target(true);
+    SprungBall control = a_ball_a_spring_turns_towards_its_target(false);
+
+    assert(settled.awake, "the ball is held on its target rather than frozen on the way to it");
+    assert(settled.rotation.k > 0.33 && settled.rotation.k < 0.35,
+        "the spring has turned the ball onto the rotation it was aimed at");
+    assert(settled.rotation.l > 0.93 && settled.rotation.l < 0.95);
+    assert(settled.rotation.i > -0.001 && settled.rotation.i < 0.001, "about that axis and no other");
+    assert(settled.rotation.j > -0.001 && settled.rotation.j < 0.001);
+    assert(settled.twist > 0.69 && settled.twist < 0.71,
+        "which is the seven tenths of a radian the target encodes");
+
+    assert(control.awake, "the control was stepped just as long");
+    assert(control.rotation.k > -0.001 && control.rotation.k < 0.001,
+        "and a ball whose spring is disabled is not turned towards anything");
+    assert(control.rotation.l > 0.999 && control.rotation.l < 1.001);
+    assert(control.twist > -0.001 && control.twist < 0.001);
+}
+
+struct HangingBall {
+    b3::Pos position;
+    float separation;
+    bool awake;
+}
+
+// The pendulum this type's own prose says its two limited angles do not measure, which is what
+// makes it the anchor's test and no accessor's: local frame A sits at the static body's origin and
+// local frame B a metre and a half up body B, so the pin is already satisfied where the ball starts
+// and every step after it is the point constraint carrying the ball's weight under the world's
+// default gravity of -10. Nothing turns, so the cone and twist angles stay at 0 throughout and only
+// the anchor is under test. The control differs in the joint alone, and the two bodies are far
+// enough apart that they never touch, so an unpinned ball falls clear instead of landing on the
+// anchor. Sleep is off so that the held reading is the joint's rather than a body that stopped
+// being stepped, and the separation is read only where there is a joint to read it from.
+fn HangingBall a_ball_hung_from_an_offset_anchor(bool pin_it) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.enable_sleep = false;
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, -1.5, 0.0};
+    b3::BodyId hanging = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    hanging.create_sphere_shape(&shape_def, &sphere)!!;
+
+    b3::SphericalJointId ball;
+    if (pin_it) {
+        b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
+        joint_def.body_id_a = anchor;
+        joint_def.body_id_b = hanging;
+        joint_def.local_frame_b.p = {0.0, 1.5, 0.0};
+        ball = world.create_spherical_joint(&joint_def)!!;
+    }
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .position = hanging.position(),
+        .separation = pin_it ? ball.linear_separation() : 0.0,
+        .awake = hanging.is_awake(),
+    };
+}
+
+// The half of this type's contract no other fixture reaches: every stepped ball above sits at the
+// origin under no gravity, so nothing there puts a linear load on the joint at all and one that
+// bound orientation and nothing else would pass all of them. Here the ball's whole weight hangs off
+// an anchor offset a metre and a half up its own local frame, and the point constraint is the only
+// thing holding it. The control is the same ball with no joint under it, twenty metres lower by the
+// end, so the two bands share nothing.
+fn void a_spherical_joint_holds_the_ball_at_the_anchor_it_was_given() @test {
+    HangingBall pinned = a_ball_hung_from_an_offset_anchor(true);
+    HangingBall loose = a_ball_hung_from_an_offset_anchor(false);
+
+    assert(pinned.awake, "the reading is the anchor holding the ball rather than a body left unstepped");
+    assert(pinned.position[1] > -1.51 && pinned.position[1] < -1.49,
+        "the ball hangs where local frame B's origin meets local frame A's, two seconds of gravity later");
+    assert(pinned.position[0] > -0.001 && pinned.position[0] < 0.001,
+        "and it has not been carried off that point in either of the two free directions");
+    assert(pinned.position[2] > -0.001 && pinned.position[2] < 0.001);
+    assert(pinned.separation > -0.001 && pinned.separation < 0.001,
+        "which the joint reports as the distance between the two anchors, near enough nothing");
+
+    assert(loose.position[1] > -21.6 && loose.position[1] < -21.5,
+        "where the same ball with nothing pinning it has fallen clear");
+}

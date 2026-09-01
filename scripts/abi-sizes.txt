@@ -62,3 +62,5 @@ b3DistanceJointDef 160 8 base=0 length=112 enableSpring=116 lowerSpringForce=120
 b3PrismaticJointDef 152 8 base=0 enableSpring=112 hertz=116 dampingRatio=120 targetTranslation=124 enableLimit=128 lowerTranslation=132 upperTranslation=136 enableMotor=140 maxMotorForce=144 motorSpeed=148
 b3WeldJointDef 128 8 base=0 linearHertz=112 angularHertz=116 linearDampingRatio=120 angularDampingRatio=124
 b3ParallelJointDef 128 8 base=0 hertz=112 dampingRatio=116 maxTorque=120
+b3MotorJointDef 168 8 base=0 linearVelocity=112 maxVelocityForce=124 angularVelocity=128 maxVelocityTorque=140 linearHertz=144 linearDampingRatio=148 maxSpringForce=152 angularHertz=156 angularDampingRatio=160 maxSpringTorque=164
+b3SphericalJointDef 184 8 base=0 enableSpring=112 hertz=116 dampingRatio=120 targetRotation=124 enableConeLimit=140 coneAngle=144 enableTwistLimit=148 lowerTwistAngle=152 upperTwistAngle=156 enableMotor=160 maxMotorTorque=164 motorVelocity=168

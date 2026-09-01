@@ -14,11 +14,11 @@ module b3;
  The definition must come from default_filter_joint_def() and must name two bodies of this world.
  This release build compiles box3d's own checks out, so an unmarked definition would be accepted
  and would carry a force threshold of zero rather than float::max, reporting a joint event on every
- awake step, while a body identifier this world cannot resolve — unset, or belonging to another
- world — would be indexed and written through, since creating the joint writes that body's joint
- list head and count. Those three are the only checks restored: box3d also asserts valid local
- frames and non-negative finite thresholds, neither of those assertions is restored here, and that
- is a deliberate limit rather than an oversight — an unvalidated frame or threshold produces a
+ awake step, while a body identifier this world cannot resolve — unset, stale, or belonging to
+ another world — would be indexed and written through, since creating the joint writes that body's
+ joint list head and count. Those three are the only checks restored: box3d also asserts valid
+ local frames and non-negative finite thresholds, neither of those assertions is restored here, and
+ that is a deliberate limit rather than an oversight — an unvalidated frame or threshold produces a
  wrong simulation, while an unvalidated identifier is dereferenced and written through.
 
  @param [&in] def : "a definition obtained from default_filter_joint_def(), naming two bodies of this world"
@@ -57,16 +57,18 @@ fn JointId[] BodyId.joints(self, JointId[] buffer) {
 }
 
 <*
- The definition guard every joint constructor runs, so that no constructor can be written without
- one. Every joint definition embeds the same base, and every default carries the same cookie. See
- WorldId.create_filter_joint for what the three checks buy and where the guard deliberately stops.
+ The one implementation of the checks every joint constructor must run. Every joint definition
+ embeds the same base, and every default carries the same cookie, and box3d's own b3Body_IsValid
+ answers for the world an identifier came from rather than the world the call was handed, so the
+ two worlds are compared separately. See WorldId.create_filter_joint for what the three checks buy
+ and where the guard deliberately stops.
 
  @param [&in] def : "the base embedded in the caller's definition"
  @return "void, or INVALID_DEFINITION when the definition is unmarked or names a body this world cannot resolve"
 *>
 fn void? check_joint_def(WorldId world_id, JointDef* def) @private {
     if (def.internal_value != default_filter_joint_def().internal_value) return INVALID_DEFINITION~;
-    if (def.body_id_a.is_null() || def.body_id_b.is_null()) return INVALID_DEFINITION~;
+    if (!def.body_id_a.is_valid() || !def.body_id_b.is_valid()) return INVALID_DEFINITION~;
 
     int world0 = world_id.index1 - 1;
     if (def.body_id_a.world0 != world0 || def.body_id_b.world0 != world0) return INVALID_DEFINITION~;

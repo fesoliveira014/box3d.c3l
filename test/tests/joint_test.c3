@@ -243,6 +243,48 @@ fn void a_filter_joint_definition_naming_no_bodies_is_refused() @test {
         "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
 }
 
+struct RecycledWorldOutcome {
+    bool same_slot;
+    bool not_null;
+    fault refusal;
+}
+
+// A body identifier outlives the world it came from, and box3d hands the next world the slot the
+// destroyed one left. The dead world gets two bodies and the live one gets a single body, so the
+// stale identifier names the live world's slot at an index that world never issued, with both of
+// the fields a hand-written guard can compare still matching.
+fn RecycledWorldOutcome the_refusal_of_a_definition_naming_a_recycled_world() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId gone = b3::create_world(&world_def)!!;
+    a_dynamic_sphere_at(gone, -1.0);
+    b3::BodyId stale = a_dynamic_sphere_at(gone, 1.0);
+    gone.destroy();
+
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+    b3::BodyId live = a_dynamic_sphere_at(world, 0.0);
+
+    b3::FilterJointDef joint_def = b3::default_filter_joint_def();
+    joint_def.body_id_a = live;
+    joint_def.body_id_b = stale;
+
+    RecycledWorldOutcome outcome = {
+        .same_slot = stale.world0 == world.index1 - 1,
+        .not_null = !stale.is_null(),
+    };
+    if (catch err = world.create_filter_joint(&joint_def)) outcome.refusal = err;
+    return outcome;
+}
+
+fn void a_joint_definition_naming_a_body_of_a_destroyed_world_is_refused() @test {
+    RecycledWorldOutcome outcome = the_refusal_of_a_definition_naming_a_recycled_world();
+
+    assert(outcome.same_slot, "the recycled world took the destroyed one's slot, so the world comparison passes");
+    assert(outcome.not_null, "and the identifier is set, so the null comparison passes too");
+    assert(outcome.refusal == b3::INVALID_DEFINITION,
+        "a body identifier the live world never issued is indexed and written through all the same");
+}
+
 struct JointIdentity {
     b3::JointType type;
     b3::BodyId a;
@@ -917,4 +959,39 @@ fn void a_revolute_joint_converts_to_its_own_handle_and_a_filter_joint_does_not(
     assert(conversion.narrowed.generation == conversion.hinge.generation);
     assert(conversion.filter_refusal == b3::WRONG_JOINT_TYPE,
         "a revolute accessor on another joint type reinterprets that joint's solver union");
+}
+
+struct DestroyedHingeConversion {
+    bool valid_before;
+    b3::JointType type_after;
+    fault refusal;
+}
+
+// The joint is destroyed while its world lives on, so the handle names a joint slot box3d has
+// freed rather than a world that is gone. box3d leaves the slot's type where it was, which is why
+// reading the type is not on its own enough to refuse the handle.
+fn DestroyedHingeConversion the_conversion_of_a_destroyed_hinge() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+
+    DestroyedHingeConversion conversion = {.valid_before = hinge.is_valid()};
+    hinge.destroy(false);
+    conversion.type_after = hinge.type();
+    if (catch err = hinge.as_revolute()) conversion.refusal = err;
+    return conversion;
+}
+
+fn void a_destroyed_joint_does_not_narrow_to_a_revolute_handle() @test {
+    DestroyedHingeConversion conversion = the_conversion_of_a_destroyed_hinge();
+
+    assert(conversion.valid_before, "the joint was live before it was destroyed");
+    assert(conversion.type_after == b3::JointType.REVOLUTE,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversion.refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
 }

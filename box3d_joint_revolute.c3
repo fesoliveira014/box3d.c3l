@@ -7,7 +7,7 @@ module b3;
  embedded base that create_filter_joint describes, stopping in the same place.
 
  @param [&in] def : "a definition obtained from default_revolute_joint_def(), naming two bodies of this world"
- @return "the joint, INVALID_DEFINITION if the definition did not come from default_revolute_joint_def() or names a body this world cannot resolve, or INVALID_HANDLE if box3d returns a null identifier — which b3CreateRevoluteJoint does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
+ @return "the joint, or the faults create_filter_joint documents"
 *>
 fn RevoluteJointId? WorldId.create_revolute_joint(self, RevoluteJointDef* def) {
     check_joint_def(self, &def.base)!;
@@ -21,11 +21,14 @@ fn RevoluteJointId? WorldId.create_revolute_joint(self, RevoluteJointDef* def) {
  reinterprets that joint's solver union instead — a getter hands back nonsense and a setter writes
  over the other type's state. This conversion is where that is caught; an explicit
  (RevoluteJointId) cast asserts the type rather than checking it, which is what an explicit cast
- means in C3.
+ means in C3. The handle is checked live before its type is read at all, because reading the type
+ of a destroyed joint resolves through an assertion compiled out the same way and reports whatever
+ has since taken the slot.
 
- @return "the revolute handle, or WRONG_JOINT_TYPE when this joint is of another type"
+ @return "the revolute handle, INVALID_HANDLE when the joint no longer exists, or WRONG_JOINT_TYPE when this joint is of another type"
 *>
 fn RevoluteJointId? JointId.as_revolute(self) {
+    if (!self.is_valid()) return INVALID_HANDLE~;
     if (self.type() != JointType.REVOLUTE) return WRONG_JOINT_TYPE~;
     return (RevoluteJointId)self;
 }

@@ -1715,3 +1715,78 @@ extern fn float DistanceJointId.min_length(self) @cname("b3DistanceJoint_GetMinL
  min_length().
 *>
 extern fn float DistanceJointId.max_length(self) @cname("b3DistanceJoint_GetMaxLength");
+
+<*
+ Enables or disables this joint's spring, and with it every part of the joint the solver reaches
+ through the spring: box3d solves the spring, the limit and the motor together inside one branch,
+ and its other half is a single rigid constraint. So this is the joint's master switch rather than
+ the spring's alone — enabling the limit or the motor on a joint whose spring is off changes
+ nothing — and it is not the only way into the rigid half. The whole condition is the one
+ DistanceJointDef describes.
+
+ Unlike the revolute joint's flag of the same name, this one leaves the joint's accumulated
+ impulses alone.
+*>
+extern fn void DistanceJointId.enable_spring(self, bool enable_spring) @cname("b3DistanceJoint_EnableSpring");
+
+<*
+ Whether this joint's spring is enabled. False on a joint built from a default definition. The
+ flag is stored whatever the rest of the joint is set to, so a true reading says the spring was
+ asked for and not that the joint is sprung: the other half of the condition DistanceJointDef
+ describes can still send it down the rigid branch.
+*>
+extern fn bool DistanceJointId.is_spring_enabled(self) @cname("b3DistanceJoint_IsSpringEnabled");
+
+<*
+ Sets the spring's stiffness in hertz. 0 on a joint built from a default definition, and box3d
+ solves the spring only while this is above 0, so an enabled spring left at the default pulls on
+ nothing — the joint still takes the sprung branch and its limit and motor still act, but the
+ spring itself contributes no impulse.
+
+ Unlike the revolute joint's setter of the same name, this one asserts nothing at all, so a
+ negative or non-finite stiffness is not even checked in a build that keeps box3d's assertions.
+*>
+extern fn void DistanceJointId.set_spring_hertz(self, float hertz) @cname("b3DistanceJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz.
+*>
+extern fn float DistanceJointId.spring_hertz(self) @cname("b3DistanceJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional: 1 settles the joint on its rest length without
+ overshooting it. 0 on a joint built from a default definition. Asserts nothing, the same absence
+ set_spring_hertz describes.
+*>
+extern fn void DistanceJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3DistanceJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional.
+*>
+extern fn float DistanceJointId.spring_damping_ratio(self) @cname("b3DistanceJoint_GetSpringDampingRatio");
+
+<*
+ Sets the two forces the spring's pull is held between, in newtons: -float::max and float::max on
+ a joint built from a default definition, which leaves it unbounded either way. box3d holds the
+ spring's accumulated impulse between the pair scaled by the sub-step, and only inside the branch
+ it solves the spring in, so the range acts under the compound condition DistanceJointDef
+ describes and only while spring_hertz() is above 0.
+
+ This setter neither clamps its pair nor orders it. It asserts that the lower force does not
+ exceed the upper and stores both verbatim; this package links a release build where that
+ assertion is compiled out, so an inverted pair is accepted in full and spring_force_range()
+ reports it back the way it arrived. That is the opposite of set_length_range, which clamps both
+ ends and swaps them into order, and the two sit one accessor apart — neither the clamp nor the
+ swap carries over. An inverted range is not inert either: box3d clamps against it as stored.
+*>
+extern fn void DistanceJointId.set_spring_force_range(self, float lower_force, float upper_force) @cname("b3DistanceJoint_SetSpringForceRange");
+
+<*
+ Raw spring force range accessor. Private because it reports the pair through two out-parameters;
+ box3d_joint_distance.c3's DistanceJointId.spring_force_range() returns them as one value.
+*>
+extern fn void spring_force_range_raw(
+  DistanceJointId joint_id,
+  float* lower_force,
+  float* upper_force,
+) @cname("b3DistanceJoint_GetSpringForceRange") @private;

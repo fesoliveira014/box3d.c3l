@@ -2046,3 +2046,139 @@ fn void the_limit_flag_of_a_rope_starts_off_and_round_trips() @test {
     assert(flags.after_enabling);
     assert(!flags.after_disabling);
 }
+
+// The joint is built sprung and soft and then handed the stiffness under test, so the setter is
+// what separates the two callers rather than the definition. Everything else matches the rigid
+// and sprung fixtures above: the body starts one length unit under the anchor, the rope is twice
+// that, and five seconds at 1/60 s is long past the settling.
+fn float the_measured_length_of_a_sprung_rope(float hertz) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 1.0;
+    joint_def.damping_ratio = 0.5;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    rope.set_spring_hertz(hertz);
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return rope.current_length();
+}
+
+struct RopeSpringSettings {
+    bool enabled;
+    float hertz;
+    float damping_ratio;
+    bool enabled_after;
+    float hertz_after;
+    float damping_ratio_after;
+}
+
+fn RopeSpringSettings the_spring_settings_of_a_rope_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    RopeSpringSettings settings = {
+        .enabled = rope.is_spring_enabled(),
+        .hertz = rope.spring_hertz(),
+        .damping_ratio = rope.spring_damping_ratio(),
+    };
+
+    rope.enable_spring(false);
+    rope.set_spring_hertz(8.0);
+    rope.set_spring_damping_ratio(0.25);
+
+    settings.enabled_after = rope.is_spring_enabled();
+    settings.hertz_after = rope.spring_hertz();
+    settings.damping_ratio_after = rope.spring_damping_ratio();
+    return settings;
+}
+
+struct RopeSpringForces {
+    b3::SpringForceRange from_construction;
+    b3::SpringForceRange inverted;
+}
+
+// One rope read twice, the pair construction stored first so that the setter cannot have touched
+// it. The inverted pair holds two different values of opposite sign, so a reading that reported
+// the upper force as the lower would fail rather than agree with itself.
+fn RopeSpringForces the_spring_force_ranges_a_rope_takes_from_its_setter() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, anchor, hanging);
+
+    RopeSpringForces forces = {.from_construction = rope.spring_force_range()};
+
+    rope.set_spring_force_range(7.0, -3.0);
+    forces.inverted = rope.spring_force_range();
+    return forces;
+}
+
+// What the spring family owns: not that a sprung rope stretches, which the limit family's matrix
+// already covers, but that the stiffness decides how far. Both ropes are sprung, carry the same
+// damping and hang the same weight, so the value the setter gave them is the only thing between
+// the measured 2.254364 and 2.015831. The two bands are two-sided and disjoint, so neither
+// reading can pass for the other.
+fn void a_stiffer_spring_holds_the_rope_closer_to_its_rest_length() @test {
+    float soft = the_measured_length_of_a_sprung_rope(1.0);
+    float stiff = the_measured_length_of_a_sprung_rope(4.0);
+
+    assert(soft > 2.25f && soft < 2.26f, "a soft spring lets the weight stretch the rope well past its rest length");
+    assert(stiff > 2.01f && stiff < 2.02f, "and four times the stiffness holds it most of the way back");
+}
+
+// 2, 1, 8 and 0.25 are all exactly representable as floats, so they compare exactly.
+fn void the_spring_settings_of_a_rope_round_trip() @test {
+    RopeSpringSettings settings = the_spring_settings_of_a_rope_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the spring its definition asked for");
+    assert(settings.hertz == 2.0);
+    assert(settings.damping_ratio == 1.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.hertz_after == 8.0);
+    assert(settings.damping_ratio_after == 0.25);
+}
+
+fn void the_spring_force_range_of_a_new_rope_is_unbounded_either_way() @test {
+    RopeSpringForces forces = the_spring_force_ranges_a_rope_takes_from_its_setter();
+
+    assert(forces.from_construction.lower == -float::max, "a default definition holds the spring back by nothing");
+    assert(forces.from_construction.upper == float::max, "and lets it pull by as much");
+}
+
+// The asymmetry between the joint's three range setters, pinned. set_length_range one accessor
+// away clamps both ends and swaps them into order; this one does neither, because the assertion
+// it would have refused an inverted pair with is compiled out of this build.
+fn void an_inverted_spring_force_range_comes_back_the_way_it_arrived() @test {
+    RopeSpringForces forces = the_spring_force_ranges_a_rope_takes_from_its_setter();
+
+    assert(forces.inverted.lower == 7.0, "the lower force is the 7 it was handed, not the smaller of the pair");
+    assert(forces.inverted.upper == -3.0, "and the upper force the -3, neither clamped nor swapped into order");
+}

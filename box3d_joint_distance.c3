@@ -32,3 +32,16 @@ fn DistanceJointId? JointId.as_distance(self) {
     if (self.type() != JointType.DISTANCE) return WRONG_JOINT_TYPE~;
     return (DistanceJointId)self;
 }
+
+<*
+ The two forces this joint's spring is held between, which box3d reports through two
+ out-parameters. The pair comes back the way set_spring_force_range stored it, inverted order
+ included: that setter neither clamps nor swaps.
+
+ @return "the joint's lower and upper spring force in newtons, -float::max and float::max on a joint built from a default definition"
+*>
+fn SpringForceRange DistanceJointId.spring_force_range(self) {
+    SpringForceRange range;
+    spring_force_range_raw(self, &range.lower, &range.upper);
+    return range;
+}

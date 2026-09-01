@@ -544,6 +544,16 @@ struct MeshDef {
 }
 
 <*
+ A mesh shape's geometry as the shape holds it: the mesh it borrows and the scale it reads that
+ mesh through. ShapeId.mesh() hands back a copy of the pair, never of the geometry — data is the
+ caller's own mesh pointer, still the caller's to destroy and still bound to outlive the shape.
+*>
+struct Mesh {
+    MeshData* data;
+    Vec3 scale;
+}
+
+<*
  The collision data behind a height field shape. Ownership, the byte count and the trailing
  arrays all work exactly as they do for MeshData — see there.
 
@@ -657,6 +667,23 @@ extern fn void ShapeId.set_restitution(self, float restitution) @cname("b3Shape_
 extern fn float ShapeId.restitution(self) @cname("b3Shape_GetRestitution");
 extern fn void ShapeId.set_surface_material(self, SurfaceMaterial surface_material) @cname("b3Shape_SetSurfaceMaterial");
 extern fn SurfaceMaterial ShapeId.surface_material(self) @cname("b3Shape_GetSurfaceMaterial");
+
+<*
+ How many surface materials this shape holds. Despite the name it is not a mesh-only count and it
+ is never zero: a shape whose definition named fewer than two materials keeps one inline and
+ reports 1 whatever its type, and only a definition naming several — one per material index the
+ mesh's triangles carry — makes it larger. Replacing the geometry does not change it.
+*>
+extern fn int ShapeId.mesh_material_count(self) @cname("b3Shape_GetMeshMaterialCount");
+
+<*
+ Raw indexed material accessors. box3d asserts the index is in range and this release build
+ compiles that assertion out, leaving a read and a write past the end of the shape's material
+ array, so the wrappers in box3d_shape.c3 are the only public way in.
+*>
+extern fn SurfaceMaterial mesh_surface_material_raw(ShapeId shape_id, int index) @cname("b3Shape_GetMeshSurfaceMaterial") @private;
+extern fn void set_mesh_material_raw(ShapeId shape_id, SurfaceMaterial surface_material, int index) @cname("b3Shape_SetMeshMaterial") @private;
+
 extern fn Filter ShapeId.filter(self) @cname("b3Shape_GetFilter");
 extern fn void ShapeId.set_filter(self, Filter filter, bool invoke_contacts) @cname("b3Shape_SetFilter");
 extern fn void ShapeId.enable_contact_events(self, bool flag) @cname("b3Shape_EnableContactEvents");
@@ -674,6 +701,8 @@ extern fn bool ShapeId.are_hit_events_enabled(self) @cname("b3Shape_AreHitEvents
 extern fn Sphere sphere_raw(ShapeId shape_id) @cname("b3Shape_GetSphere") @private;
 extern fn Capsule capsule_raw(ShapeId shape_id) @cname("b3Shape_GetCapsule") @private;
 extern fn HullData* hull_raw(ShapeId shape_id) @cname("b3Shape_GetHull") @private;
+extern fn Mesh mesh_raw(ShapeId shape_id) @cname("b3Shape_GetMesh") @private;
+extern fn HeightFieldData* height_field_raw(ShapeId shape_id) @cname("b3Shape_GetHeightField") @private;
 
 <*
  Sets the shape's geometry and, with it, its type — a capsule handed a sphere becomes a sphere.
@@ -682,6 +711,13 @@ extern fn HullData* hull_raw(ShapeId shape_id) @cname("b3Shape_GetHull") @privat
 extern fn void ShapeId.set_sphere(self, Sphere* sphere) @cname("b3Shape_SetSphere");
 extern fn void ShapeId.set_capsule(self, Capsule* capsule) @cname("b3Shape_SetCapsule");
 extern fn void ShapeId.set_hull(self, HullData* hull) @cname("b3Shape_SetHull");
+
+<*
+ Raw mesh setter. Private because a null mesh here is a segmentation fault rather than a refusal —
+ box3d recomputes the shape's bounds through the pointer as part of the change — so the wrapper in
+ box3d_shape.c3 is the only public way in.
+*>
+extern fn void set_mesh_raw(ShapeId shape_id, MeshData* mesh, Vec3 scale) @cname("b3Shape_SetMesh") @private;
 
 extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
 extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");

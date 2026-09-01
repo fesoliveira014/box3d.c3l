@@ -1,6 +1,7 @@
 module b3_test;
 
 import b3;
+import std::math;
 
 fn void the_joint_types_match_the_c_layout() @test {
     assert(b3::JointType::size == 4);
@@ -1359,8 +1360,8 @@ fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_
     return {.while_the_limit_is_off = off, .once_the_limit_is_exceeded = hinge.angular_separation()};
 }
 
-// The closing condition for the limit family. The band holds 0.500134 and excludes both a hinge
-// the limit never caught and the angle the same motor reaches with the limit cleared.
+// The band holds 0.500134 and excludes both a hinge the limit never caught and the angle the same
+// motor reaches with the limit cleared.
 fn void a_limit_stops_the_motor_that_drives_the_hinge_into_it() @test {
     float angle = the_angle_of_a_motor_driven_hinge_after_two_seconds(true);
 
@@ -1496,8 +1497,7 @@ fn SpringSettings the_spring_settings_of_a_hinge_before_and_after_the_setters() 
     return settings;
 }
 
-// The closing condition for the spring family. The band holds the measured 0.699938 and excludes
-// a hinge the spring never moved.
+// The band holds the measured 0.699938 and excludes a hinge the spring never moved.
 fn void a_spring_settles_the_hinge_on_its_target_angle() @test {
     float angle = the_angle_of_a_sprung_hinge_after_five_seconds(true, 0.7);
 
@@ -1531,4 +1531,1010 @@ fn void the_spring_settings_of_a_hinge_round_trip() @test {
     assert(settings.hertz_after == 8.0);
     assert(settings.damping_ratio_after == 0.25);
     assert(settings.target_after == -1.5);
+}
+
+fn void the_distance_joint_types_match_the_c_layout() @test {
+    assert(b3::DistanceJointDef::size == 160);
+    assert(b3::DistanceJointDef::alignment == 8);
+}
+
+// Unlike the revolute default, this one does not zero the fields it adds to the base: four of the
+// twelve arrive set. 1, 0 and float::max are exactly representable as floats and are copied
+// straight out of the definition, so they compare exactly rather than in a band. max_length is
+// box3d's huge value, which is 1.0e5 scaled by the length unit rather than a constant, so it is
+// compared against that scaling and not against a literal.
+fn void the_default_distance_joint_definition_carries_the_four_values_it_does_not_zero() @test {
+    b3::DistanceJointDef def = b3::default_distance_joint_def();
+
+    assert(def.length == 1.0, "a default distance joint holds its bodies one length unit apart");
+    assert(def.lower_spring_force == -float::max);
+    assert(def.upper_spring_force == float::max);
+    assert(def.max_length == 1.0e5f * b3::length_units_per_meter());
+}
+
+fn void the_default_distance_joint_definition_zeroes_the_other_eight() @test {
+    b3::DistanceJointDef def = b3::default_distance_joint_def();
+
+    assert(!def.enable_spring, "a default distance joint is rigid");
+    assert(def.hertz == 0.0);
+    assert(def.damping_ratio == 0.0);
+    assert(!def.enable_limit);
+    assert(def.min_length == 0.0);
+    assert(!def.enable_motor);
+    assert(def.max_motor_force == 0.0, "0, not the float::max the base thresholds carry");
+    assert(def.motor_speed == 0.0);
+}
+
+fn void a_default_distance_joint_definition_carries_the_cookie_every_definition_shares() @test {
+    b3::DistanceJointDef def = b3::default_distance_joint_def();
+    b3::FilterJointDef filter_def = b3::default_filter_joint_def();
+
+    assert(def.internal_value == def.base.internal_value, "the direct field names the embedded base");
+    assert(def.internal_value == filter_def.internal_value, "every definition starts from the same base");
+}
+
+fn b3::DistanceJointId link_with_a_distance_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    return world.create_distance_joint(&joint_def)!!;
+}
+
+struct DistanceHandleReport {
+    b3::JointType type;
+    b3::BodyId expected_a;
+    b3::BodyId reported_a;
+    bool valid;
+}
+
+// Every accessor here is a shared JointId one called on a DistanceJointId with no cast, which is
+// what the inline typedef buys.
+fn DistanceHandleReport the_shared_accessors_on_a_new_rope() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, a, b);
+
+    return {
+        .type = rope.type(),
+        .expected_a = a,
+        .reported_a = rope.body_a(),
+        .valid = rope.is_valid(),
+    };
+}
+
+fn fault refusal_of_a_distance_joint_definition(b3::DistanceJointDef* def, bool name_bodies) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    if (name_bodies) {
+        def.body_id_a = a_dynamic_sphere_at(world, -1.0);
+        def.body_id_b = a_dynamic_sphere_at(world, 1.0);
+    }
+
+    if (catch err = world.create_distance_joint(def)) return err;
+    return {};
+}
+
+struct RopeConversion {
+    b3::JointId rope;
+    b3::JointId narrowed;
+    bool converted;
+    fault hinge_refusal;
+    fault rope_refusal;
+}
+
+// The two conversions are taken on the same pair of bodies in the same world, so the only thing
+// separating the joint each one refuses is its type.
+fn RopeConversion the_conversions_of_a_rope_and_a_hinge() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId rope = link_with_a_distance_joint(world, a, b);
+    b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
+
+    RopeConversion conversion = {.rope = rope};
+    if (try narrowed = rope.as_distance()) {
+        conversion.narrowed = narrowed;
+        conversion.converted = true;
+    }
+    if (catch err = hinge.as_distance()) conversion.hinge_refusal = err;
+    if (catch err = rope.as_revolute()) conversion.rope_refusal = err;
+    return conversion;
+}
+
+struct DestroyedRopeConversion {
+    bool valid_before;
+    b3::JointType type_after;
+    fault refusal;
+}
+
+// The joint is destroyed while its world lives on, so the handle names a joint slot box3d has
+// freed rather than a world that is gone. box3d leaves the slot's type where it was, which is why
+// reading the type is not on its own enough to refuse the handle.
+fn DestroyedRopeConversion the_conversion_of_a_destroyed_rope() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
+    b3::JointId rope = link_with_a_distance_joint(world, a, b);
+
+    DestroyedRopeConversion conversion = {.valid_before = rope.is_valid()};
+    rope.destroy(false);
+    conversion.type_after = rope.type();
+    if (catch err = rope.as_distance()) conversion.refusal = err;
+    return conversion;
+}
+
+fn void a_distance_joint_reports_its_own_type() @test {
+    DistanceHandleReport report = the_shared_accessors_on_a_new_rope();
+
+    assert(report.type == b3::JointType.DISTANCE);
+}
+
+fn void the_shared_joint_accessors_reach_a_distance_handle_uncast() @test {
+    DistanceHandleReport report = the_shared_accessors_on_a_new_rope();
+
+    assert(report.reported_a.index1 == report.expected_a.index1, "body_a() takes the handle as it is");
+    assert(report.reported_a.world0 == report.expected_a.world0);
+    assert(report.reported_a.generation == report.expected_a.generation);
+    assert(report.valid, "and so do type() and is_valid()");
+}
+
+fn void a_zeroed_distance_joint_definition_is_refused() @test {
+    b3::DistanceJointDef zeroed;
+
+    fault refusal = refusal_of_a_distance_joint_definition(&zeroed, true);
+
+    assert(refusal == b3::INVALID_DEFINITION, "box3d accepts a zeroed joint definition; the binding must not");
+}
+
+fn void a_distance_joint_definition_naming_no_bodies_is_refused() @test {
+    b3::DistanceJointDef bodiless = b3::default_distance_joint_def();
+
+    fault refusal = refusal_of_a_distance_joint_definition(&bodiless, false);
+
+    assert(refusal == b3::INVALID_DEFINITION,
+        "an unset body identifier indexes outside box3d's body array, which creating the joint writes through");
+
+    fault none;
+    b3::DistanceJointDef named = b3::default_distance_joint_def();
+    fault accepted = refusal_of_a_distance_joint_definition(&named, true);
+    assert(accepted == none, "the same definition naming two bodies of the calling world is accepted");
+}
+
+fn void a_distance_joint_and_a_revolute_joint_do_not_convert_to_each_other() @test {
+    RopeConversion conversion = the_conversions_of_a_rope_and_a_hinge();
+
+    assert(conversion.converted, "as_distance takes back the joint it was given");
+    assert(conversion.narrowed.index1 == conversion.rope.index1);
+    assert(conversion.narrowed.world0 == conversion.rope.world0);
+    assert(conversion.narrowed.generation == conversion.rope.generation);
+    assert(conversion.hinge_refusal == b3::WRONG_JOINT_TYPE,
+        "a distance accessor on a hinge reinterprets the hinge's solver union");
+    assert(conversion.rope_refusal == b3::WRONG_JOINT_TYPE,
+        "and a revolute accessor on a distance joint reinterprets that joint's");
+}
+
+fn void a_destroyed_joint_does_not_narrow_to_a_distance_handle() @test {
+    DestroyedRopeConversion conversion = the_conversion_of_a_destroyed_rope();
+
+    assert(conversion.valid_before, "the joint was live before it was destroyed");
+    assert(conversion.type_after == b3::JointType.DISTANCE,
+        "the freed slot still reports the type it held, so the type test alone would hand the handle back");
+    assert(conversion.refusal == b3::INVALID_HANDLE,
+        "a handle to a joint that no longer exists is refused before its type is read");
+}
+
+fn b3::BodyId a_dynamic_sphere_below_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, -1.0, 0.0};
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct RopeLengths {
+    float rest;
+    float current;
+    b3::Pos anchor;
+    b3::Pos hanging;
+}
+
+// The body starts one length unit under the anchor and the rope is twice that, so the fall is
+// the rope taking up its own slack under the world's default gravity of -10. Five seconds at
+// 1/60 s is far longer than that takes, so what is left is the residual the solver holds rather
+// than a body still moving. The two positions come back beside the two length readings so that
+// the caller can check the accessor against the geometry and not only against itself.
+fn RopeLengths the_lengths_of_a_hanging_rope() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .rest = rope.length(),
+        .current = rope.current_length(),
+        .anchor = anchor.position(),
+        .hanging = hanging.position(),
+    };
+}
+
+struct RopeRestLengths {
+    float clamped;
+    float round_tripped;
+}
+
+// Both readings come off the same joint, the clamped one first: the second is a length well
+// inside the range, so it separates a setter that stores what it is given from one that always
+// hands back the floor.
+fn RopeRestLengths the_rest_lengths_a_rope_takes_from_its_setter() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, anchor, hanging);
+
+    rope.set_length(-5.0);
+    float clamped = rope.length();
+    rope.set_length(3.5);
+    float round_tripped = rope.length();
+
+    return {.clamped = clamped, .round_tripped = round_tripped};
+}
+
+struct RopeConstructionLengths {
+    float under_the_slop;
+    float over_the_ceiling;
+    float through_the_setter;
+}
+
+// The floor is common to construction and the setter, so a length past the ceiling is the only
+// thing that separates them: the second rope is built at one and then handed the same number
+// again through the setter, so the two readings come off one joint with nothing but the path
+// between them.
+fn RopeConstructionLengths the_rest_lengths_a_rope_takes_from_its_definition() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 0.0;
+    b3::DistanceJointId slack = world.create_distance_joint(&joint_def)!!;
+
+    joint_def.length = 1.0e7;
+    b3::DistanceJointId stretched = world.create_distance_joint(&joint_def)!!;
+
+    RopeConstructionLengths lengths = {
+        .under_the_slop = slack.length(),
+        .over_the_ceiling = stretched.length(),
+    };
+
+    stretched.set_length(1.0e7);
+    lengths.through_the_setter = stretched.length();
+    return lengths;
+}
+
+// Construction does not run the setter's clamp: it raises the definition's length to the slop and
+// gives it no ceiling of its own, so a definition keeps a length the setter would have cut down.
+// A zero length is not refused either, because the check that would have refused it is compiled
+// out of this build. The slop and box3d's huge value both scale with the length unit, so neither
+// is asserted as a bare number; 1.0e7 is the definition's own and is exactly representable.
+fn void the_rest_length_of_a_new_rope_is_the_one_construction_stored() @test {
+    RopeConstructionLengths lengths = the_rest_lengths_a_rope_takes_from_its_definition();
+
+    assert(lengths.under_the_slop == 0.005f * b3::length_units_per_meter(),
+        "a definition length of zero arrives raised to the slop rather than refused");
+    assert(lengths.over_the_ceiling == 1.0e7f,
+        "and one far past the setter's ceiling arrives untouched, because construction has none");
+    assert(lengths.through_the_setter == 1.0e5f * b3::length_units_per_meter(),
+        "while the setter handed that same length cuts it down to box3d's huge value");
+}
+
+// The rope takes up the fall and holds the body at the length it was built with. The band
+// excludes both the separation the pair starts at and the fall a body nothing held would have
+// taken. The separation is worked out from the two body positions as well as read off the joint,
+// so the accessor answers to where the bodies are and not only to itself. The last band is the
+// tight one on purpose: current_length() and the geometry agree exactly, while the rest length
+// stands 0.00007 away, so anything looser than that gap would let a reading of the rest length
+// through — and that is the reading this one is most easily crossed with.
+fn void a_distance_joint_holds_two_bodies_at_its_length() @test {
+    RopeLengths lengths = the_lengths_of_a_hanging_rope();
+
+    float dx = lengths.hanging.x - lengths.anchor.x;
+    float dy = lengths.hanging.y - lengths.anchor.y;
+    float dz = lengths.hanging.z - lengths.anchor.z;
+    float separation = math::sqrt(dx * dx + dy * dy + dz * dz);
+
+    assert(separation > 1.999f && separation < 2.001f,
+        "the two bodies stand two length units apart, neither at the one they started at nor in free fall");
+    assert(lengths.current > 1.999f && lengths.current < 2.001f, "and current_length() reports that separation");
+    assert(math::abs(lengths.current - separation) < 0.00001f,
+        "the joint measures its anchors, so its reading and the geometry agree");
+}
+
+// The point of the pair. The rest length is the 2 the definition carried and the measured length
+// is the 2.000070 the solver settles at, so a binding that crossed the two over would report one
+// number twice and fail here. 2 is exactly representable and is copied straight out of the
+// definition, so it compares exactly.
+fn void the_rest_length_and_the_measured_length_of_a_rope_are_two_different_readings() @test {
+    RopeLengths lengths = the_lengths_of_a_hanging_rope();
+
+    assert(lengths.rest == 2.0, "the rest length is the definition's, and the run leaves it alone");
+
+    float stretch = lengths.current - lengths.rest;
+    assert(stretch > 0.00001f && stretch < 0.001f,
+        "the measured length stands a little past the rest length, by the residual the solver holds");
+}
+
+// The floor is box3d's linear slop, which is not a fixed number: it scales with the length unit,
+// so the assertion is against that expression and not against the 0.005 it takes at unit scale.
+fn void a_rest_length_under_box3ds_slop_is_raised_to_it() @test {
+    RopeRestLengths lengths = the_rest_lengths_a_rope_takes_from_its_setter();
+
+    assert(lengths.clamped == 0.005f * b3::length_units_per_meter(),
+        "a rest length below the slop is clamped up to it rather than refused");
+    assert(lengths.round_tripped == 3.5, "and a length inside the range is stored as it was given");
+}
+
+// The rope is built at twice the separation the bodies start at, so the fall takes up its slack
+// under the world's default gravity of -10 and five seconds at 1/60 s is long past the settling.
+// A rigid rope ends at its rest length and a sprung one hangs well below it, and the two are far
+// enough apart that a single reading tells them apart. The four settings the callers pass differ
+// from each other one flag at a time, which is what pins the condition down: any three of them
+// on their own are consistent with a wrong reading of it.
+fn float the_measured_length_of_a_hanging_rope(
+  bool enable_spring,
+  bool enable_limit,
+  float min_length,
+  float max_length,
+) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.hertz = 1.0;
+    joint_def.damping_ratio = 0.5;
+    joint_def.enable_spring = enable_spring;
+    joint_def.enable_limit = enable_limit;
+    joint_def.min_length = min_length;
+    joint_def.max_length = max_length;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return rope.current_length();
+}
+
+struct RopeLengthRange {
+    float from_construction_min;
+    float from_construction_max;
+    float reversed_min;
+    float reversed_max;
+    float under_the_slop_min;
+    float under_the_slop_max;
+}
+
+// One rope read three times, the pair construction stored first so that the setter cannot have
+// touched it. The reversed pair sits well inside the range box3d clamps to, so it separates the
+// ordering from the clamping, and the pair under the floor is read afterwards to show that the
+// second call replaces the first rather than accumulating.
+fn RopeLengthRange the_length_ranges_a_rope_takes_from_its_setter() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, anchor, hanging);
+
+    RopeLengthRange range = {
+        .from_construction_min = rope.min_length(),
+        .from_construction_max = rope.max_length(),
+    };
+
+    rope.set_length_range(3.0, 1.0);
+    range.reversed_min = rope.min_length();
+    range.reversed_max = rope.max_length();
+
+    rope.set_length_range(-9.0, -9.0);
+    range.under_the_slop_min = rope.min_length();
+    range.under_the_slop_max = rope.max_length();
+    return range;
+}
+
+struct RopeCrossedLengthRange {
+    float min;
+    float max;
+}
+
+// A definition that looks valid: its minimum left at the default and its maximum set under the
+// slop. Construction raises the minimum to the slop but takes the maximum as the larger of the
+// two raw definition lengths, so the two corrections never meet.
+fn RopeCrossedLengthRange the_length_range_of_a_rope_capped_under_the_slop() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.max_length = 0.001;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    return {.min = rope.min_length(), .max = rope.max_length()};
+}
+
+struct RopeLimitFlags {
+    bool on_a_default_rope;
+    bool from_the_definition;
+    bool after_enabling;
+    bool after_disabling;
+}
+
+fn RopeLimitFlags the_limit_flags_of_a_bare_rope_and_a_limited_one() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId bare = link_with_a_distance_joint(world, anchor, hanging);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.enable_limit = true;
+    joint_def.min_length = 1.0;
+    joint_def.max_length = 3.0;
+    b3::DistanceJointId limited = world.create_distance_joint(&joint_def)!!;
+
+    RopeLimitFlags flags = {
+        .on_a_default_rope = bare.is_limit_enabled(),
+        .from_the_definition = limited.is_limit_enabled(),
+    };
+
+    bare.enable_limit(true);
+    limited.enable_limit(false);
+    flags.after_enabling = bare.is_limit_enabled();
+    flags.after_disabling = limited.is_limit_enabled();
+    return flags;
+}
+
+// The first half of the condition, with the limit on and a range the rope can move inside for
+// both readings, so the spring flag is the only thing that differs between them.
+fn void a_distance_joint_with_room_inside_its_limit_is_rigid_until_its_spring_is_on() @test {
+    float rigid = the_measured_length_of_a_hanging_rope(
+      enable_spring: false,
+      enable_limit: true,
+      min_length: 1.0,
+      max_length: 3.0,
+    );
+    float sprung = the_measured_length_of_a_hanging_rope(
+      enable_spring: true,
+      enable_limit: true,
+      min_length: 1.0,
+      max_length: 3.0,
+    );
+
+    assert(rigid > 1.999f && rigid < 2.001f, "with no spring the rope holds the body at its rest length");
+    assert(sprung > 2.25f && sprung < 2.26f, "and with one it stretches under the weight it carries");
+}
+
+// The second half, and the counter-intuitive one: both readings have the spring on and a range
+// that pins the rope to a single length, so the limit flag is the only thing that differs — and
+// it is the joint whose limit is on that comes back rigid, because min_length < max_length is
+// false and the limit being on is what stops that short-circuiting.
+fn void a_sprung_distance_joint_goes_rigid_when_its_limit_pins_the_range_shut() @test {
+    float rigid = the_measured_length_of_a_hanging_rope(
+      enable_spring: true,
+      enable_limit: true,
+      min_length: 2.0,
+      max_length: 2.0,
+    );
+    float sprung = the_measured_length_of_a_hanging_rope(
+      enable_spring: true,
+      enable_limit: false,
+      min_length: 2.0,
+      max_length: 2.0,
+    );
+
+    assert(rigid > 1.999f && rigid < 2.001f, "a shut range with the limit on sends the rope down the rigid branch");
+    assert(sprung > 2.25f && sprung < 2.26f, "and clearing the limit on that same range leaves it sprung");
+}
+
+fn void a_reversed_length_range_is_swapped_into_order_rather_than_refused() @test {
+    RopeLengthRange range = the_length_ranges_a_rope_takes_from_its_setter();
+
+    assert(range.reversed_min == 1.0, "box3d takes the smaller of the pair as the minimum");
+    assert(range.reversed_max == 3.0, "and the larger as the maximum, whichever order they arrived in");
+}
+
+// The floor is box3d's linear slop, which is not a fixed number: it scales with the length unit,
+// so the assertion is against that expression and not against the 0.005 it takes at unit scale.
+fn void a_length_range_under_box3ds_slop_is_raised_to_it() @test {
+    RopeLengthRange range = the_length_ranges_a_rope_takes_from_its_setter();
+
+    assert(range.under_the_slop_min == 0.005f * b3::length_units_per_meter(),
+        "both ends of a range below the slop are clamped up to it rather than refused");
+    assert(range.under_the_slop_max == 0.005f * b3::length_units_per_meter(),
+        "and the swap then leaves the pair equal rather than inverted");
+}
+
+// Construction does not run the setter's clamp: it raises the definition's minimum to the slop
+// and takes the maximum as the larger of the two it was handed, with no ceiling of its own. Both
+// bounds scale with the length unit, so neither is asserted as a bare number.
+fn void the_length_range_of_a_new_rope_is_the_one_construction_stored() @test {
+    RopeLengthRange range = the_length_ranges_a_rope_takes_from_its_setter();
+
+    assert(range.from_construction_min == 0.005f * b3::length_units_per_meter(),
+        "a default definition's zero minimum arrives raised to the slop");
+    assert(range.from_construction_max == 1.0e5f * b3::length_units_per_meter(),
+        "and its huge maximum arrives untouched");
+}
+
+// The consequence of construction's two mismatched corrections, and it is reachable from a
+// definition nothing about it looks wrong: the range comes back with its low end above its high
+// one, which set_length_range cannot produce because it clamps both ends and then orders them.
+fn void a_definition_can_leave_a_rope_whose_minimum_length_is_above_its_maximum() @test {
+    RopeCrossedLengthRange range = the_length_range_of_a_rope_capped_under_the_slop();
+
+    assert(range.min == 0.005f * b3::length_units_per_meter(),
+        "the definition's default minimum arrives raised to the slop");
+    assert(range.max == 0.001f, "while its maximum arrives as it was given, under that floor");
+    assert(range.min > range.max, "so the two corrections leave the range crossed");
+}
+
+fn void the_limit_flag_of_a_rope_starts_off_and_round_trips() @test {
+    RopeLimitFlags flags = the_limit_flags_of_a_bare_rope_and_a_limited_one();
+
+    assert(!flags.on_a_default_rope, "a default distance joint carries no limit");
+    assert(flags.from_the_definition, "the joint reports the limit its definition asked for");
+    assert(flags.after_enabling);
+    assert(!flags.after_disabling);
+}
+
+// The joint is built sprung and soft and then handed the stiffness under test, so the setter is
+// what separates the two callers rather than the definition. Everything else matches the rigid
+// and sprung fixtures above: the body starts one length unit under the anchor, the rope is twice
+// that, and five seconds at 1/60 s is long past the settling.
+fn float the_measured_length_of_a_sprung_rope(float hertz) {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 1.0;
+    joint_def.damping_ratio = 0.5;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    rope.set_spring_hertz(hertz);
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return rope.current_length();
+}
+
+struct RopeSpringSettings {
+    bool enabled;
+    float hertz;
+    float damping_ratio;
+    bool enabled_after;
+    float hertz_after;
+    float damping_ratio_after;
+}
+
+fn RopeSpringSettings the_spring_settings_of_a_rope_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 2.0;
+    joint_def.damping_ratio = 1.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    RopeSpringSettings settings = {
+        .enabled = rope.is_spring_enabled(),
+        .hertz = rope.spring_hertz(),
+        .damping_ratio = rope.spring_damping_ratio(),
+    };
+
+    rope.enable_spring(false);
+    rope.set_spring_hertz(8.0);
+    rope.set_spring_damping_ratio(0.25);
+
+    settings.enabled_after = rope.is_spring_enabled();
+    settings.hertz_after = rope.spring_hertz();
+    settings.damping_ratio_after = rope.spring_damping_ratio();
+    return settings;
+}
+
+struct RopeSpringForces {
+    b3::SpringForceRange from_construction;
+    b3::SpringForceRange inverted;
+}
+
+// One rope read twice, the pair construction stored first so that the setter cannot have touched
+// it. The inverted pair holds two different values of opposite sign, so a reading that reported
+// the upper force as the lower would fail rather than agree with itself.
+fn RopeSpringForces the_spring_force_ranges_a_rope_takes_from_its_setter() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, anchor, hanging);
+
+    RopeSpringForces forces = {.from_construction = rope.spring_force_range()};
+
+    rope.set_spring_force_range(7.0, -3.0);
+    forces.inverted = rope.spring_force_range();
+    return forces;
+}
+
+// A stiffer spring settles the rope shorter. Both ropes are sprung, carry the same damping and
+// hang the same weight, so the stiffness the setter gave them is the only thing between the
+// measured 2.254364 and 2.015831. The two bands are two-sided and disjoint, so neither reading
+// can pass for the other.
+fn void a_stiffer_spring_holds_the_rope_closer_to_its_rest_length() @test {
+    float soft = the_measured_length_of_a_sprung_rope(1.0);
+    float stiff = the_measured_length_of_a_sprung_rope(4.0);
+
+    assert(soft > 2.25f && soft < 2.26f, "a soft spring lets the weight stretch the rope well past its rest length");
+    assert(stiff > 2.01f && stiff < 2.02f, "and four times the stiffness holds it most of the way back");
+}
+
+// 2, 1, 8 and 0.25 are all exactly representable as floats, so they compare exactly.
+fn void the_spring_settings_of_a_rope_round_trip() @test {
+    RopeSpringSettings settings = the_spring_settings_of_a_rope_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the spring its definition asked for");
+    assert(settings.hertz == 2.0);
+    assert(settings.damping_ratio == 1.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.hertz_after == 8.0);
+    assert(settings.damping_ratio_after == 0.25);
+}
+
+fn void the_spring_force_range_of_a_new_rope_is_unbounded_either_way() @test {
+    RopeSpringForces forces = the_spring_force_ranges_a_rope_takes_from_its_setter();
+
+    assert(forces.from_construction.lower == -float::max, "a default definition holds the spring back by nothing");
+    assert(forces.from_construction.upper == float::max, "and lets it pull by as much");
+}
+
+// The asymmetry between the joint's three range setters, pinned. set_length_range one accessor
+// away clamps both ends and swaps them into order; this one does neither, because the assertion
+// it would have refused an inverted pair with is compiled out of this build.
+fn void an_inverted_spring_force_range_comes_back_the_way_it_arrived() @test {
+    RopeSpringForces forces = the_spring_force_ranges_a_rope_takes_from_its_setter();
+
+    assert(forces.inverted.lower == 7.0, "the lower force is the 7 it was handed, not the smaller of the pair");
+    assert(forces.inverted.upper == -3.0, "and the upper force the -3, neither clamped nor swapped into order");
+}
+
+// A sphere at the rest length the motor tests build their joint with, so a joint that holds its
+// length leaves the body exactly where it started and only the motor can move it.
+fn b3::BodyId a_dynamic_sphere_two_units_below_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, -2.0, 0.0};
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct RopeDrive {
+    float motor_force;
+    b3::Vec3 constraint_force;
+    float current_length;
+}
+
+// The body starts exactly the rope's rest length under a static anchor with gravity off, so the
+// motor is the only thing that can move it and a measured length still at 2.0 means it did not.
+// Two seconds at 1/60 s is far past the point the motor reaches whatever force it settles at.
+fn RopeDrive a_driven_rope(
+  bool enable_spring,
+  float hertz,
+  bool enable_motor,
+  float max_motor_force,
+) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_two_units_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.enable_spring = enable_spring;
+    joint_def.hertz = hertz;
+    joint_def.damping_ratio = 1.0;
+    joint_def.enable_motor = enable_motor;
+    joint_def.motor_speed = 0.5;
+    joint_def.max_motor_force = max_motor_force;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .motor_force = rope.motor_force(),
+        .constraint_force = rope.constraint_force(),
+        .current_length = rope.current_length(),
+    };
+}
+
+struct RopeMotorForces {
+    float driven;
+    float after_the_spring_flag;
+    float after_the_limit_flag;
+    float after_the_motor_flag;
+}
+
+// One saturated motor read four times, each reading after a flag has been toggled to the other
+// value and back, and no step anywhere between them — so the flag is the only thing that can move
+// the number. The spring and limit flags come first: they leave the accumulated impulse where it
+// stands, which is what gives the motor flag's zero its meaning.
+fn RopeMotorForces the_motor_force_of_a_driven_rope_around_toggling_its_flags() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_two_units_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    joint_def.enable_spring = true;
+    joint_def.hertz = 1.0;
+    joint_def.damping_ratio = 1.0;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 0.5;
+    joint_def.max_motor_force = 100.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 120; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    RopeMotorForces forces = {.driven = rope.motor_force()};
+
+    rope.enable_spring(false);
+    rope.enable_spring(true);
+    forces.after_the_spring_flag = rope.motor_force();
+
+    rope.enable_limit(true);
+    rope.enable_limit(false);
+    forces.after_the_limit_flag = rope.motor_force();
+
+    rope.enable_motor(false);
+    rope.enable_motor(true);
+    forces.after_the_motor_flag = rope.motor_force();
+    return forces;
+}
+
+struct RopeMotorSettings {
+    bool enabled;
+    float speed;
+    float max_force;
+    bool enabled_after;
+    float speed_after;
+    float max_force_after;
+}
+
+fn RopeMotorSettings the_motor_settings_of_a_rope_before_and_after_the_setters() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.enable_motor = true;
+    joint_def.motor_speed = 0.5;
+    joint_def.max_motor_force = 100.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    RopeMotorSettings settings = {
+        .enabled = rope.is_motor_enabled(),
+        .speed = rope.motor_speed(),
+        .max_force = rope.max_motor_force(),
+    };
+
+    rope.enable_motor(false);
+    rope.set_motor_speed(-0.25);
+    rope.set_max_motor_force(12.5);
+
+    settings.enabled_after = rope.is_motor_enabled();
+    settings.speed_after = rope.motor_speed();
+    settings.max_force_after = rope.max_motor_force();
+    return settings;
+}
+
+// The motor asks for 0.5 m/s against a spring holding the rope on its rest length, which is far
+// more than 100 newtons buys, so the reading is the ceiling rather than a load the motor balances.
+// The length band is disjoint from the 2.0 both controls below sit at.
+fn void a_motor_pulling_against_the_spring_saturates_at_its_ceiling() @test {
+    RopeDrive driven = a_driven_rope(
+      enable_spring: true,
+      hertz: 1.0,
+      enable_motor: true,
+      max_motor_force: 100.0,
+    );
+
+    assert(driven.motor_force > 99.9f && driven.motor_force < 100.1f,
+        "the motor is held at the ceiling it was given");
+    assert(driven.current_length > 2.03f && driven.current_length < 2.05f,
+        "and it has driven the rope out past the rest length the spring holds it on");
+}
+
+// The first control: the same definition with only the motor flag cleared, so the speed and the
+// ceiling the joint still carries drive nothing.
+fn void a_rope_whose_motor_is_disabled_applies_no_motor_force() @test {
+    RopeDrive idle = a_driven_rope(
+      enable_spring: true,
+      hertz: 1.0,
+      enable_motor: false,
+      max_motor_force: 100.0,
+    );
+
+    assert(idle.motor_force > -0.001f && idle.motor_force < 0.001f, "a disabled motor applies nothing");
+    assert(idle.current_length > 1.999f && idle.current_length < 2.001f, "and the rope stays where it started");
+}
+
+// The second control, and the one the compound condition earns: the same motor on a joint whose
+// spring is off. box3d solves that joint as a single rigid constraint and never reaches the motor,
+// so both readings match the disabled motor above rather than the driven rope.
+fn void a_motor_on_a_rope_whose_spring_is_off_drives_nothing() @test {
+    RopeDrive rigid = a_driven_rope(
+      enable_spring: false,
+      hertz: 1.0,
+      enable_motor: true,
+      max_motor_force: 100.0,
+    );
+
+    assert(rigid.motor_force > -0.001f && rigid.motor_force < 0.001f,
+        "the rigid branch never reaches the motor, whatever it was set to");
+    assert(rigid.current_length > 1.999f && rigid.current_length < 2.001f, "so the rope holds its rest length");
+}
+
+// Same accessor name, different contract, within one joint type: the motor flag discards the
+// impulse it had accumulated and the spring and limit flags beside it discard nothing. The two
+// controls are what make this discriminate — they are the same shape of call on the same joint,
+// so a reading that survives them and then falls to zero can only have been the motor flag.
+fn void toggling_the_motor_discards_the_force_it_had_where_the_other_two_flags_do_not() @test {
+    RopeMotorForces forces = the_motor_force_of_a_driven_rope_around_toggling_its_flags();
+
+    assert(forces.driven > 99.9f && forces.driven < 100.1f, "the motor is held at the ceiling it was given");
+    assert(forces.after_the_spring_flag > 99.9f && forces.after_the_spring_flag < 100.1f,
+        "toggling the spring leaves the motor's accumulated force alone");
+    assert(forces.after_the_limit_flag > 99.9f && forces.after_the_limit_flag < 100.1f,
+        "and so does toggling the limit");
+    assert(forces.after_the_motor_flag > -0.001f && forces.after_the_motor_flag < 0.001f,
+        "while toggling the motor throws that force away, before any step could rebuild it");
+}
+
+// 0.5, 100, -0.25 and 12.5 are all exactly representable as floats, so they compare exactly.
+fn void the_motor_settings_of_a_rope_round_trip() @test {
+    RopeMotorSettings settings = the_motor_settings_of_a_rope_before_and_after_the_setters();
+
+    assert(settings.enabled, "the joint reports the motor its definition asked for");
+    assert(settings.speed == 0.5);
+    assert(settings.max_force == 100.0);
+    assert(!settings.enabled_after, "and then the values the setters gave it");
+    assert(settings.speed_after == -0.25);
+    assert(settings.max_force_after == 12.5);
+}
+
+// The relationship a consumer reaching for the shared accessor needs, and it is not the revolute
+// joint's: box3d sums this joint's axial impulses once and lays the total along the segment
+// between the anchors, so with the spring silent at 0 hertz and no limit the motor is the whole
+// sum. The vector points from the anchor down to the hanging body, which is the direction the
+// motor drives it, so a positive motor force reads as a negative y component.
+fn void the_shared_constraint_force_carries_a_distance_motor_force_once() @test {
+    RopeDrive driven = a_driven_rope(
+      enable_spring: true,
+      hertz: 0.0,
+      enable_motor: true,
+      max_motor_force: 10.0,
+    );
+
+    assert(driven.motor_force > 9.99f && driven.motor_force < 10.01f, "the motor is held at the ceiling it was given");
+    assert(driven.constraint_force.x > -0.001f && driven.constraint_force.x < 0.001f,
+        "the whole force lies along the segment between the anchors");
+    assert(driven.constraint_force.z > -0.001f && driven.constraint_force.z < 0.001f);
+
+    float ratio = -driven.constraint_force.y / driven.motor_force;
+    assert(ratio > 0.999f && ratio < 1.001f, "the shared accessor carries the motor force once, not twice");
+}
+
+// The other half of that relationship: once the spring is working the two readings are not a
+// multiple of each other at all. The spring pulls back against the motor and the shared accessor
+// reports the net, so a motor saturated at 100 newtons leaves it under 2.
+fn void a_spring_pulling_back_leaves_the_shared_force_far_under_the_motor_force() @test {
+    RopeDrive driven = a_driven_rope(
+      enable_spring: true,
+      hertz: 1.0,
+      enable_motor: true,
+      max_motor_force: 100.0,
+    );
+
+    assert(driven.motor_force > 99.9f && driven.motor_force < 100.1f, "the motor is held at its ceiling");
+    assert(driven.constraint_force.y > 1.8f && driven.constraint_force.y < 1.95f,
+        "while the joint's whole force is the small remainder the spring does not cancel");
 }

@@ -384,3 +384,18 @@ $assert RevoluteJointDef::members[7].offset == 136 && RevoluteJointDef::members[
 $assert RevoluteJointDef::members[8].offset == 140 && RevoluteJointDef::members[8].name == "enable_motor";
 $assert RevoluteJointDef::members[9].offset == 144 && RevoluteJointDef::members[9].name == "max_motor_torque";
 $assert RevoluteJointDef::members[10].offset == 148 && RevoluteJointDef::members[10].name == "motor_speed";
+$assert DistanceJointDef::size == 160;
+$assert DistanceJointDef::alignment == 8;
+$assert DistanceJointDef::members[0].offset == 0 && DistanceJointDef::members[0].name == "base";
+$assert DistanceJointDef::members[1].offset == 112 && DistanceJointDef::members[1].name == "length";
+$assert DistanceJointDef::members[2].offset == 116 && DistanceJointDef::members[2].name == "enable_spring";
+$assert DistanceJointDef::members[3].offset == 120 && DistanceJointDef::members[3].name == "lower_spring_force";
+$assert DistanceJointDef::members[4].offset == 124 && DistanceJointDef::members[4].name == "upper_spring_force";
+$assert DistanceJointDef::members[5].offset == 128 && DistanceJointDef::members[5].name == "hertz";
+$assert DistanceJointDef::members[6].offset == 132 && DistanceJointDef::members[6].name == "damping_ratio";
+$assert DistanceJointDef::members[7].offset == 136 && DistanceJointDef::members[7].name == "enable_limit";
+$assert DistanceJointDef::members[8].offset == 140 && DistanceJointDef::members[8].name == "min_length";
+$assert DistanceJointDef::members[9].offset == 144 && DistanceJointDef::members[9].name == "max_length";
+$assert DistanceJointDef::members[10].offset == 148 && DistanceJointDef::members[10].name == "enable_motor";
+$assert DistanceJointDef::members[11].offset == 152 && DistanceJointDef::members[11].name == "max_motor_force";
+$assert DistanceJointDef::members[12].offset == 156 && DistanceJointDef::members[12].name == "motor_speed";

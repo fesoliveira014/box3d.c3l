@@ -33,3 +33,15 @@ fn JointId? WorldId.create_filter_joint(self, FilterJointDef* def) {
     if (def.body_id_a.is_null() || def.body_id_b.is_null()) return INVALID_DEFINITION~;
     return create_filter_joint_raw(self, def).checked();
 }
+
+<*
+ The soft-constraint tuning this joint is solved with, which box3d reports through two
+ out-parameters.
+
+ @return "the joint's stiffness in hertz and its damping ratio, 60 and 2 on a joint built from a default definition"
+*>
+fn ConstraintTuning JointId.constraint_tuning(self) {
+    ConstraintTuning tuning;
+    constraint_tuning_raw(self, &tuning.hertz, &tuning.damping_ratio);
+    return tuning;
+}

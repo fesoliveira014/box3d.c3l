@@ -464,3 +464,122 @@ fn void waking_a_joint_wakes_both_of_the_bodies_it_links() @test {
     assert(outcome.asleep_a && outcome.asleep_b, "both bodies must be asleep for the wake to mean anything");
     assert(outcome.awake_a && outcome.awake_b, "the wake reaches both bodies the joint links");
 }
+
+struct JointReaction {
+    b3::Vec3 force;
+    b3::Vec3 torque;
+    float linear_separation;
+    float angular_separation;
+}
+
+fn JointReaction the_reaction_of_a_filter_joint_anchored_off_centre() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
+
+    b3::FilterJointDef joint_def = b3::default_filter_joint_def();
+    joint_def.body_id_a = a;
+    joint_def.body_id_b = b;
+    joint_def.local_frame_a = ANCHOR_A;
+    joint_def.local_frame_b = ANCHOR_B;
+    b3::JointId joint = world.create_filter_joint(&joint_def)!!;
+
+    for (int i = 0; i < 8; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .force = joint.constraint_force(),
+        .torque = joint.constraint_torque(),
+        .linear_separation = joint.linear_separation(),
+        .angular_separation = joint.angular_separation(),
+    };
+}
+
+// The two anchors are offset and their bodies are six apart, so a separation measured from them
+// would be nowhere near zero. box3d answers zero from a branch on the joint's type instead: the
+// zero belongs to the type, not to a joint that happens to be sitting unloaded.
+fn void a_filter_joint_reports_no_force_no_torque_and_no_separation() @test {
+    JointReaction reaction = the_reaction_of_a_filter_joint_anchored_off_centre();
+
+    assert(reaction.force.x == 0.0 && reaction.force.y == 0.0 && reaction.force.z == 0.0,
+        "a joint type that enforces nothing reports no force, whatever its anchors");
+    assert(reaction.torque.x == 0.0 && reaction.torque.y == 0.0 && reaction.torque.z == 0.0);
+    assert(reaction.linear_separation == 0.0, "and no separation, though its anchors are metres apart");
+    assert(reaction.angular_separation == 0.0);
+}
+
+struct JointTuning {
+    b3::ConstraintTuning from_definition;
+    b3::ConstraintTuning after_set;
+}
+
+fn JointTuning the_constraint_tuning_of_a_filter_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
+    b3::JointId joint = link_with_a_filter_joint(world, a, b);
+
+    b3::ConstraintTuning from_definition = joint.constraint_tuning();
+    joint.set_constraint_tuning(30.0f, 1.5f);
+
+    return {.from_definition = from_definition, .after_set = joint.constraint_tuning()};
+}
+
+// 60, 2, 30 and 1.5 are exactly representable as floats, and each is either copied out of the
+// definition or written straight back by the setter, so they compare exactly rather than in a band.
+fn void a_joint_carries_the_constraint_tuning_its_definition_set_and_takes_a_new_one() @test {
+    JointTuning tuning = the_constraint_tuning_of_a_filter_joint();
+
+    assert(tuning.from_definition.hertz == 60.0, "a default definition builds a joint tuned at 60 hertz");
+    assert(tuning.from_definition.damping_ratio == 2.0);
+    assert(tuning.after_set.hertz == 30.0, "the setter writes both halves of the pair");
+    assert(tuning.after_set.damping_ratio == 1.5, "each to its own, so a swap fails");
+}
+
+struct JointThresholds {
+    float force_before;
+    float torque_before;
+    float force_after;
+    float torque_after;
+}
+
+fn JointThresholds the_event_thresholds_of_a_filter_joint() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
+    b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
+    b3::JointId joint = link_with_a_filter_joint(world, a, b);
+
+    float force_before = joint.force_threshold();
+    float torque_before = joint.torque_threshold();
+    joint.set_force_threshold(0.0f);
+    joint.set_torque_threshold(7.5f);
+
+    return {
+        .force_before = force_before,
+        .torque_before = torque_before,
+        .force_after = joint.force_threshold(),
+        .torque_after = joint.torque_threshold(),
+    };
+}
+
+// float::max, 0 and 7.5 are exactly representable as floats, and each is either copied out of the
+// definition or written straight back by the setter, so they compare exactly rather than in a band.
+fn void a_joint_holds_both_event_thresholds_out_of_reach_until_they_are_set() @test {
+    JointThresholds thresholds = the_event_thresholds_of_a_filter_joint();
+
+    assert(thresholds.force_before == float::max,
+        "both thresholds start out of reach, which is what keeps the joint out of the events");
+    assert(thresholds.torque_before == float::max);
+    assert(thresholds.force_after == 0.0, "a zero threshold arms the check on every awake step");
+    assert(thresholds.torque_after == 7.5, "and each threshold takes its own value, so a swap fails");
+}

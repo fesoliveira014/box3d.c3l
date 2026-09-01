@@ -1234,3 +1234,83 @@ extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
  world is locked, mid WorldId.step or inside a callback box3d runs during one.
 *>
 extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");
+
+<*
+ The force this joint is applying to hold its constraint, in newtons.
+
+ What comes back describes the constraint, not how hard the joint is working: box3d answers each
+ joint type from a branch of its own, and a type that enforces nothing gets the zero vector as
+ that type's fixed answer. A filter joint therefore reports no force permanently — it is not
+ reporting that it happens to be unloaded, it can report nothing else.
+*>
+extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce");
+
+<*
+ The torque this joint is applying to hold its constraint, in newton-metres. Zero for a joint
+ type that enforces nothing, by type and permanently rather than by state — see constraint_force.
+*>
+extern fn Vec3 JointId.constraint_torque(self) @cname("b3Joint_GetConstraintTorque");
+
+<*
+ How far apart this joint's two anchors have drifted, usually in metres. Zero for a joint type
+ that constrains no distance, by type and permanently rather than by state — see
+ constraint_force, and note that the zero holds however far the anchors really are.
+*>
+extern fn float JointId.linear_separation(self) @cname("b3Joint_GetLinearSeparation");
+
+<*
+ How far this joint's two anchors have twisted out of alignment, usually in radians. Zero for a
+ joint type that constrains no angle, by type and permanently rather than by state — see
+ constraint_force.
+*>
+extern fn float JointId.angular_separation(self) @cname("b3Joint_GetAngularSeparation");
+
+<*
+ Retunes the soft constraint this joint is solved with, which box3d calls an advanced feature. A
+ joint built from a default definition carries 60 hertz and a damping ratio of 2.
+
+ @param hertz : "the stiffness in cycles per second"
+ @param damping_ratio : "the non-dimensional damping ratio, one for critical damping"
+*>
+extern fn void JointId.set_constraint_tuning(self, float hertz, float damping_ratio) @cname("b3Joint_SetConstraintTuning");
+
+<*
+ Raw constraint tuning accessor. Private because it reports the pair through two out-parameters;
+ box3d_joint.c3's JointId.constraint_tuning() returns them as one value.
+*>
+extern fn void constraint_tuning_raw(
+  JointId joint_id,
+  float* hertz,
+  float* damping_ratio,
+) @cname("b3Joint_GetConstraintTuning") @private;
+
+<*
+ Sets the force at which this joint starts appearing in WorldId.joint_events(), in newtons.
+
+ One check covers both thresholds, and it is armed only while at least one of the two is below
+ float::max — so a joint stays out of the events only while both keep the default. Once armed,
+ the joint is reported on any step where its force reaches this threshold or its torque reaches
+ the torque threshold, which makes a threshold of zero report the joint on every step it is
+ awake. box3d asserts the value is finite and non-negative; this package links a release build
+ where that assertion is compiled out, and the wrappers do not restore it.
+*>
+extern fn void JointId.set_force_threshold(self, float threshold) @cname("b3Joint_SetForceThreshold");
+
+<*
+ The force at which this joint starts appearing in WorldId.joint_events(), float::max on a joint
+ built from a default definition.
+*>
+extern fn float JointId.force_threshold(self) @cname("b3Joint_GetForceThreshold");
+
+<*
+ Sets the torque at which this joint starts appearing in WorldId.joint_events(), in
+ newton-metres. It shares one check with the force threshold, so the arming rule and the
+ compiled-out assertion described on set_force_threshold govern this one too.
+*>
+extern fn void JointId.set_torque_threshold(self, float threshold) @cname("b3Joint_SetTorqueThreshold");
+
+<*
+ The torque at which this joint starts appearing in WorldId.joint_events(), float::max on a joint
+ built from a default definition.
+*>
+extern fn float JointId.torque_threshold(self) @cname("b3Joint_GetTorqueThreshold");

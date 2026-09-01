@@ -852,3 +852,16 @@ struct ContactData {
     Manifold* manifolds;
     int manifold_count;
 }
+
+extern fn QueryFilter default_query_filter() @cname("b3DefaultQueryFilter");
+
+<*
+ Raw closest-hit accessor. Private because a miss comes back as a struct whose point, normal and
+ fraction are undefined; WorldId.cast_ray_closest() turns that into a fault.
+*>
+extern fn RayResult cast_ray_closest_raw(
+  WorldId world_id,
+  Pos origin,
+  Vec3 translation,
+  QueryFilter filter,
+) @cname("b3World_CastRayClosest") @private;

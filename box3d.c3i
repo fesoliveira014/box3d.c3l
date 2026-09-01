@@ -1624,3 +1624,36 @@ extern fn JointId create_distance_joint_raw(
   WorldId world_id,
   DistanceJointDef* def,
 ) @cname("b3CreateDistanceJoint") @private;
+
+<*
+ Sets the rest length this joint holds its two anchors at. Not the distance they are at now,
+ which is what current_length() reads.
+
+ The value is clamped between box3d's linear slop and its huge value, neither of which is a fixed
+ number: the floor is 0.005 length units and the ceiling 1.0e5 of them, so a floor of 0.005 at
+ unit scale becomes 0.010 once the length unit is 2. The clamp is silent — length() reports what
+ was stored, not what was asked for. Setting the length also zeroes the joint's three accumulated
+ impulses, discarding the warm-start state the solver had built, so the joint rebuilds its hold
+ over the following steps rather than resuming the one it had.
+*>
+extern fn void DistanceJointId.set_length(self, float length) @cname("b3DistanceJoint_SetLength");
+
+<*
+ The rest length this joint holds its two anchors at: what its definition carried, or what
+ set_length last stored after clamping. Not the distance the anchors are at now, which is what
+ current_length() reads — even a rigid joint sits a little off its rest length, by the residual
+ the solver leaves. Both are plain floats, so either one compiles where the other is meant.
+*>
+extern fn float DistanceJointId.length(self) @cname("b3DistanceJoint_GetLength");
+
+<*
+ The distance between this joint's two anchors as they stand now, measured from the two bodies'
+ current transforms. Not the rest length the joint holds them at, which is what length() reads.
+
+ The reading is meaningful whether the joint is rigid or sprung, and it is how the two are told
+ apart: a rigid joint keeps this within a hair of its rest length and a sprung one does not.
+ Which of the two a joint is follows the compound condition DistanceJointDef describes, not the
+ spring flag on its own. Zero while the world is locked, mid WorldId.step or inside a callback
+ box3d runs during one.
+*>
+extern fn float DistanceJointId.current_length(self) @cname("b3DistanceJoint_GetCurrentLength");

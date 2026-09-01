@@ -1,6 +1,7 @@
 module b3_test;
 
 import b3;
+import std::math;
 
 fn void the_joint_types_match_the_c_layout() @test {
     assert(b3::JointType::size == 4);
@@ -1733,4 +1734,123 @@ fn void a_destroyed_joint_does_not_narrow_to_a_distance_handle() @test {
         "the freed slot still reports the type it held, so the type test alone would hand the handle back");
     assert(conversion.refusal == b3::INVALID_HANDLE,
         "a handle to a joint that no longer exists is refused before its type is read");
+}
+
+fn b3::BodyId a_dynamic_sphere_below_the_origin(b3::WorldId world) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, -1.0, 0.0};
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+struct RopeLengths {
+    float rest;
+    float current;
+    b3::Pos anchor;
+    b3::Pos hanging;
+}
+
+// The body starts one length unit under the anchor and the rope is twice that, so the fall is
+// the rope taking up its own slack under the world's default gravity of -10. Five seconds at
+// 1/60 s is far longer than that takes, so what is left is the residual the solver holds rather
+// than a body still moving. The two positions come back beside the two length readings so that
+// the caller can check the accessor against the geometry and not only against itself.
+fn RopeLengths the_lengths_of_a_hanging_rope() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+
+    b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
+    joint_def.body_id_a = anchor;
+    joint_def.body_id_b = hanging;
+    joint_def.length = 2.0;
+    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+
+    for (int i = 0; i < 300; i++) {
+        world.step(1.0f / 60.0f, 4);
+    }
+
+    return {
+        .rest = rope.length(),
+        .current = rope.current_length(),
+        .anchor = anchor.position(),
+        .hanging = hanging.position(),
+    };
+}
+
+struct RopeRestLengths {
+    float clamped;
+    float round_tripped;
+}
+
+// Both readings come off the same joint, the clamped one first: the second is a length well
+// inside the range, so it separates a setter that stores what it is given from one that always
+// hands back the floor.
+fn RopeRestLengths the_rest_lengths_a_rope_takes_from_its_setter() {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer world.destroy();
+
+    b3::BodyId anchor = a_static_sphere_at_the_origin(world);
+    b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
+    b3::DistanceJointId rope = link_with_a_distance_joint(world, anchor, hanging);
+
+    rope.set_length(-5.0);
+    float clamped = rope.length();
+    rope.set_length(3.5);
+    float round_tripped = rope.length();
+
+    return {.clamped = clamped, .round_tripped = round_tripped};
+}
+
+// The closing condition for the length family: the rope takes up the fall and holds the body at
+// the length it was built with. The band excludes both the separation the pair starts at and the
+// fall a body nothing held would have taken. The separation is worked out from the two body
+// positions as well as read off the joint, so the accessor answers to where the bodies are and
+// not only to itself.
+fn void a_distance_joint_holds_two_bodies_at_its_length() @test {
+    RopeLengths lengths = the_lengths_of_a_hanging_rope();
+
+    float dx = lengths.hanging.x - lengths.anchor.x;
+    float dy = lengths.hanging.y - lengths.anchor.y;
+    float dz = lengths.hanging.z - lengths.anchor.z;
+    float separation = math::sqrt(dx * dx + dy * dy + dz * dz);
+
+    assert(separation > 1.999f && separation < 2.001f,
+        "the two bodies stand two length units apart, neither at the one they started at nor in free fall");
+    assert(lengths.current > 1.999f && lengths.current < 2.001f, "and current_length() reports that separation");
+    assert(math::abs(lengths.current - separation) < 0.0001f,
+        "the joint measures its anchors, so its reading and the geometry agree");
+}
+
+// The point of the pair. The rest length is the 2 the definition carried and the measured length
+// is the 2.000070 the solver settles at, so a binding that crossed the two over would report one
+// number twice and fail here. 2 is exactly representable and is copied straight out of the
+// definition, so it compares exactly.
+fn void the_rest_length_and_the_measured_length_of_a_rope_are_two_different_readings() @test {
+    RopeLengths lengths = the_lengths_of_a_hanging_rope();
+
+    assert(lengths.rest == 2.0, "the rest length is the definition's, and the run leaves it alone");
+
+    float stretch = lengths.current - lengths.rest;
+    assert(stretch > 0.00001f && stretch < 0.001f,
+        "the measured length stands a little past the rest length, by the residual the solver holds");
+}
+
+// The floor is box3d's linear slop, which is not a fixed number: it scales with the length unit,
+// so the assertion is against that expression and not against the 0.005 it takes at unit scale.
+fn void a_rest_length_under_box3ds_slop_is_raised_to_it() @test {
+    RopeRestLengths lengths = the_rest_lengths_a_rope_takes_from_its_setter();
+
+    assert(lengths.clamped == 0.005f * b3::length_units_per_meter(),
+        "a rest length below the slop is clamped up to it rather than refused");
+    assert(lengths.round_tripped == 3.5, "and a length inside the range is stored as it was given");
 }

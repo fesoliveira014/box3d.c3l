@@ -445,6 +445,41 @@ struct Capsule {
 }
 
 <*
+ The mass, centre of mass and inertia of a solid ball of this radius at this density. The centre
+ is the sphere's own and the tensor is about that centre, never about the shape frame's origin,
+ so moving the sphere moves the centre and leaves the inertia where it was.
+
+ box3d checks neither the radius nor the density. Both run straight into the volume, so a
+ negative one of either yields a negative mass instead of a refusal.
+*>
+extern fn MassData Sphere.compute_mass_data(&self, float density) @cname("b3ComputeSphereMass");
+
+<*
+ The bounds of the sphere placed by this transform. Exact rather than conservative: box3d carries
+ the centre through the transform and adds the radius on each axis, so a rotation moves the box
+ without widening it. The hull, mesh, height field and compound bounds all rotate a cached box
+ instead and do widen — see HullData.compute_aabb().
+*>
+extern fn Aabb Sphere.compute_aabb(&self, Transform transform) @cname("b3ComputeSphereAABB");
+
+<*
+ The mass, centre of mass and inertia of the capsule at this density: a cylinder between the two
+ centres plus one ball's worth of end caps. The centre is the midpoint of the two, and the tensor
+ is rotated so its axial column follows the segment rather than the y axis it is built on.
+
+ Two centres close enough to leave no cylinder weigh the end caps alone, which is a ball rather
+ than a refusal, and box3d checks the radius and the density no more than it does for a sphere.
+*>
+extern fn MassData Capsule.compute_mass_data(&self, float density) @cname("b3ComputeCapsuleMass");
+
+<*
+ The bounds of the capsule placed by this transform. Exact for the reason Sphere.compute_aabb()
+ is: box3d carries both centres through the transform and adds the radius to the box around them,
+ so a rotation moves the box without widening it.
+*>
+extern fn Aabb Capsule.compute_aabb(&self, Transform transform) @cname("b3ComputeCapsuleAABB");
+
+<*
  The ceiling create_hull() clamps max_vertex_count to. Mirrors B3_MAX_HULL_VERTICES in
  constants.h, which the C API does not expose as a function and no layout pin can see. box3d
  fixes it for performance: the hull's vertex, edge and face indices are all single bytes.
@@ -548,6 +583,23 @@ extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform trans
 extern fn void HullData.destroy(&self) @cname("b3DestroyHull");
 
 <*
+ The mass, centre of mass and inertia of the hull at this density. box3d scales the volume,
+ centroid and central inertia it baked at build time rather than integrating again, so mass and
+ inertia are both linear in density and the tensor is about the hull's own centroid.
+ HullData.clone_and_transform() is what re-bakes all three for a placed or scaled copy.
+*>
+extern fn MassData HullData.compute_mass_data(&self, float density) @cname("b3ComputeHullMass");
+
+<*
+ The bounds of the hull placed by this transform: the box in HullData.aabb carried through the
+ transform, never a refit of the points. box3d widens it by the absolute of the rotation matrix,
+ so every rotation but a multiple of a right angle answers wider than the hull reaches.
+ HullData.clone_and_transform() bakes a rotation into the points, and the copy's own aabb is then
+ the tight one.
+*>
+extern fn Aabb HullData.compute_aabb(&self, Transform transform) @cname("b3ComputeHullAABB");
+
+<*
  The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it: call
  destroy() exactly once, and hold the pointer until every shape built on it is gone. byte_count()
  carries the allocation, so a mesh never destroyed shifts that count for the rest of the process
@@ -642,6 +694,15 @@ extern fn void MeshData.destroy(&self) @cname("b3DestroyMesh");
 extern fn int MeshData.tree_height(&self) @cname("b3GetHeight");
 
 <*
+ The bounds of the mesh scaled and then placed by this transform. The scale multiplies the mesh's
+ cached bounds component by component in mesh space and box3d re-orders the corners afterwards,
+ so a negative component mirrors the box rather than turning it inside out, and a zero one
+ flattens it. The placement then widens the box under rotation exactly as
+ HullData.compute_aabb() does.
+*>
+extern fn Aabb MeshData.compute_aabb(&self, Transform transform, Vec3 scale) @cname("b3ComputeMeshAABB");
+
+<*
  Raw height field constructors. None of them can return a null pointer — box3d allocates
  whatever it is asked for, including a grid with no cells at all — so the wrappers in
  box3d_mesh.c3 carry the guards instead and are the only public way in.
@@ -654,6 +715,14 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
  Releases the height field. The caller owns it and must call this exactly once — see MeshData.
 *>
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
+
+<*
+ The bounds of the height field placed by this transform. The scale the field was built with is
+ already inside the cached box this carries through, which is why there is no scale argument
+ here and MeshData.compute_aabb() has one. The placement widens the box under rotation exactly
+ as HullData.compute_aabb() does.
+*>
+extern fn Aabb HeightFieldData.compute_aabb(&self, Transform transform) @cname("b3ComputeHeightFieldAABB");
 
 <*
  The two children of an internal tree node, as indices into the tree's own node array. box3d
@@ -1053,6 +1122,13 @@ extern fn CompoundSphere compound_sphere_raw(CompoundData* compound, int index) 
  wrapper in box3d_compound.c3 pairs it with the count and is the only public way in.
 *>
 extern fn SurfaceMaterial* compound_materials_raw(CompoundData* compound) @cname("b3GetCompoundMaterials") @private;
+
+<*
+ Raw compound bounds. box3d indexes the compound's node array at the tree's root without testing
+ it, and a compound with no children carries the root -1, so the wrapper in box3d_compound.c3
+ refuses that one case and is the only public way in.
+*>
+extern fn Aabb compute_compound_aabb_raw(CompoundData* compound, Transform transform) @cname("b3ComputeCompoundAABB") @private;
 
 <*
  Raw shape constructors. Each bypasses the definition-cookie guard its wrapper in

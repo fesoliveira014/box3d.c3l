@@ -124,6 +124,21 @@ fn SurfaceMaterial[] CompoundData.materials(&self) {
 }
 
 <*
+ The bounds of the compound placed by this transform: the box its tree root holds, which is the
+ union of every child's, widened under rotation exactly as HullData.compute_aabb() is.
+
+ A compound with no children carries the root -1 and box3d indexes its node array with it, a read
+ landing back inside the compound's own header that answers a zero-extent box at the transform's
+ position — a plausible empty box rather than an obvious wrong one, which is why it is refused.
+
+ @return "the bounds, or DEGENERATE_GEOMETRY when the compound holds no children"
+*>
+fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
+    if (self.tree.root < 0) return DEGENERATE_GEOMETRY~;
+    return compute_compound_aabb_raw(self, transform);
+}
+
+<*
  Attaches a baked compound to this body, under the definition and null guards create_mesh_shape
  describes and borrowing the compound exactly as that call borrows its mesh.
 

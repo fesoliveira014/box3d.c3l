@@ -2132,6 +2132,132 @@ extern fn void collide_triangle_and_sphere_raw(
   Sphere* sphere_b,
 ) @cname("b3CollideTriangleAndSphere") @private;
 
+<*
+ Two convex proxies and the pose of B in A's frame. The query runs in A's frame and is origin
+ independent, so each proxy keeps its points in its own shape's frame and transform alone relates
+ the two. use_radii subtracts both radii from the distance and moves each witness point out onto
+ its own proxy's perimeter; without it the answer is between the two cores.
+*>
+struct DistanceInput {
+    ShapeProxy proxy_a;
+    ShapeProxy proxy_b;
+    Transform transform;
+    bool use_radii;
+}
+
+<*
+ The closest points between two proxies, in shape A's frame, with distance clamped at zero. normal
+ runs from A to B and is zero exactly when the two cores overlap, which a caller normalising it
+ turns into a NaN. Where use_radii alone drove the distance to zero the normal is real and the two
+ points have crossed, point_b sitting behind point_a along it.
+*>
+struct DistanceOutput {
+    Vec3 point_a;
+    Vec3 point_b;
+    Vec3 normal;
+    float distance;
+    int iterations;
+    int simplex_count;
+}
+
+<*
+ Two convex proxies, the pose of B in A's frame and B's translation in that frame — what
+ shape_cast() sweeps, each proxy keeping its points in its own shape's frame. can_encroach is read
+ only on box3d's first pass and only while the two radii sum past about three linear slops, where
+ it lets a pair that begins overlapped close a further slop rather than answer at fraction zero.
+*>
+struct ShapeCastPairInput {
+    ShapeProxy proxy_a;
+    ShapeProxy proxy_b;
+    Transform transform;
+    Vec3 translation_b;
+    float max_fraction;
+    bool can_encroach;
+}
+
+<*
+ Raw proxy-pair distance. Private because box3d's warm-start cache and its diagnostic simplex
+ array are both the caller's to supply, and reusing a cache across pairs reads one pair's vertex
+ indices against another's arrays. shape_distance() owns both.
+*>
+extern fn DistanceOutput shape_distance_raw(
+  DistanceInput* input,
+  SimplexCache* cache,
+  void* simplexes,
+  int simplex_capacity,
+) @cname("b3ShapeDistance") @private;
+
+<*
+ Raw proxy-pair shape cast. Private for the reason the single-shape casts are — a miss comes back
+ as a struct whose remaining fields are undefined — and because a proxy of no points is read as
+ though it held its first. shape_cast() checks both proxies and turns a miss into a fault.
+*>
+extern fn CastOutput shape_cast_pair_raw(ShapeCastPairInput* input) @cname("b3ShapeCast") @private;
+
+<*
+ The motion of one shape over a time-of-impact interval. The centre of mass runs c1 to c2 and the
+ rotation q1 to q2, while local_center places the shape's own origin against that centre — so the
+ proxy points swept against this stay in the shape's frame and the sweep carries them.
+*>
+struct Sweep {
+    Vec3 local_center;
+    Vec3 c1;
+    Vec3 c2;
+    Quat q1;
+    Quat q2;
+}
+
+struct ToiInput {
+    ShapeProxy proxy_a;
+    ShapeProxy proxy_b;
+    Sweep sweep_a;
+    Sweep sweep_b;
+    float max_fraction;
+}
+
+enum ToiState : int {
+    UNKNOWN,
+    FAILED,
+    OVERLAPPED,
+    HIT,
+    SEPARATED,
+}
+
+<*
+ What a time-of-impact query found. used_fallback is not written by the query at all — box3d's own
+ continuous solver sets it after re-running a zero-fraction result against a sphere around the fast
+ shape's centroid, so a call made here always reads it false. The three counts are diagnostics.
+*>
+struct ToiOutput {
+    ToiState state;
+    Vec3 point;
+    Vec3 normal;
+    float fraction;
+    float distance;
+    int distance_iterations;
+    int push_back_iterations;
+    int root_iterations;
+    bool used_fallback;
+}
+
+<*
+ One plane a mover is solved against. push_limit caps how far this plane may move the mover, and
+ push is the solve's own output, zeroed on entry rather than read. A velocity clip passes over a
+ plane whose clip_velocity is false, and over one whose push is zero whatever that flag says, so a
+ plane the solve never leaned on is skipped either way.
+*>
+struct CollisionPlane {
+    Plane plane;
+    float push_limit;
+    float push;
+    bool clip_velocity;
+}
+
+struct PlaneSolverResult {
+    Vec3 delta;
+    int iteration_count;
+}
+
 enum JointType : int {
     PARALLEL,
     DISTANCE,

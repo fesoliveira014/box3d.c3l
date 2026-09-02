@@ -89,3 +89,12 @@ b3SATCache 8 4 separation=0 type=4 indexA=5 indexB=6 hit=7
 b3FeaturePair 4 1 owner1=0 index1=1 owner2=2 index2=3
 b3LocalManifoldPoint 24 4 point=0 separation=12 pair=16 triangleIndex=20
 b3LocalManifold 64 8 normal=0 triangleNormal=12 points=24 pointCount=32 triangleIndex=36 i1=40 i2=44 i3=48 squaredDistance=52 feature=56 triangleFlags=60
+b3DistanceInput 64 8 proxyA=0 proxyB=16 transform=32 useRadii=60
+b3DistanceOutput 48 4 pointA=0 pointB=12 normal=24 distance=36 iterations=40 simplexCount=44
+b3ShapeCastPairInput 80 8 proxyA=0 proxyB=16 transform=32 translationB=60 maxFraction=72 canEncroach=76
+b3Sweep 68 4 localCenter=0 c1=12 c2=24 q1=36 q2=52
+b3TOIInput 176 8 proxyA=0 proxyB=16 sweepA=32 sweepB=100 maxFraction=168
+b3TOIState 4 4
+b3TOIOutput 52 4 state=0 point=4 normal=16 fraction=28 distance=32 distanceIterations=36 pushBackIterations=40 rootIterations=44 usedFallback=48
+b3CollisionPlane 28 4 plane=0 pushLimit=16 push=20 clipVelocity=24
+b3PlaneSolverResult 16 4 delta=0 iterationCount=12

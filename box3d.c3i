@@ -1927,10 +1927,12 @@ extern fn void HeightFieldData.query(&self, Aabb bounds, MeshQueryFn fcn, void* 
 extern fn void CompoundData.query(&self, Aabb aabb, CompoundQueryFn fcn, void* context) @cname("b3QueryCompound");
 
 <*
- Three vertices in the frame of whatever they are collided against — the collide entry points
- that take one apply no transform. Every one of them culls the back side, so the winding decides
- which side answers: the plane normal is the cross product of the second and third vertices taken
- about the first, and a shape behind it reports nothing however deep the overlap.
+ Three vertices in the frame of whatever they are collided against — these entry points apply no
+ transform. The plane normal is the cross product of the second and third vertices about the first,
+ and each pair culls what lies behind it, though the point tested and the tolerance differ per pair.
+
+ A triangle with no area has no plane, so nothing is culled and a contact can carry a NaN point.
+ The wrappers refuse one.
 *>
 typedef Triangle = Vec3[3];
 
@@ -1994,7 +1996,7 @@ struct FeaturePair {
  exactly meet, negative for an overlap, and positive for a point the two have not reached — which
  only some pairs report at all.
  triangle_index names the triangle a mesh or height field contributed and is left alone by every
- pair of convex shapes.
+ collide pair bound here, the triangle pairs included.
 *>
 struct LocalManifoldPoint {
     Vec3 point;
@@ -2038,8 +2040,9 @@ struct CollisionManifold {
 
 <*
  The manifold of the one pair whose point count the caller's buffer is the only bound on, in
- shape A's frame. The points borrow that buffer and live exactly as long as it does, and a count
- equal to its length means box3d had more of the contact to report than there was room for.
+ shape A's frame. The points borrow that buffer and live exactly as long as it does; a count equal
+ to its length may mean more was clipped away, or that the clip landed on exactly that many.
+ box3d writes only the point, the separation and the feature pair, so the rest is the buffer's.
 *>
 struct CollisionManifoldView {
     Vec3 normal;

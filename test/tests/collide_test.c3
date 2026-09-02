@@ -492,11 +492,11 @@ fn TriangleAndSphereReadings the_readings_of_a_triangle_under_a_sphere() {
     b3::Sphere behind = { .center = { 0.0, -0.4, 0.0 }, .radius = 0.5 };
 
     return {
-      .overlapping = the_reading_of(triangle.collide_sphere(overlapping)),
-      .touching = the_reading_of(triangle.collide_sphere(touching)),
-      .just_clear = the_reading_of(triangle.collide_sphere(just_clear)),
-      .apart = the_reading_of(triangle.collide_sphere(apart)),
-      .behind = the_reading_of(triangle.collide_sphere(behind)),
+      .overlapping = the_reading_of(triangle.collide_sphere(overlapping)!!),
+      .touching = the_reading_of(triangle.collide_sphere(touching)!!),
+      .just_clear = the_reading_of(triangle.collide_sphere(just_clear)!!),
+      .apart = the_reading_of(triangle.collide_sphere(apart)!!),
+      .behind = the_reading_of(triangle.collide_sphere(behind)!!),
     };
 }
 
@@ -567,11 +567,11 @@ fn TriangleAndCapsuleReadings the_readings_of_a_triangle_under_a_capsule() {
     b3::Capsule tipped = { .center1 = { -0.3, 0.2, 0.0 }, .center2 = { 0.3, -0.4, 0.0 }, .radius = 0.25 };
 
     return {
-      .overlapping = the_reading_of(triangle.collide_capsule(overlapping)),
-      .just_clear = the_reading_of(triangle.collide_capsule(just_clear)),
-      .apart = the_reading_of(triangle.collide_capsule(apart)),
-      .behind = the_reading_of(triangle.collide_capsule(behind)),
-      .midpoint_behind = the_reading_of(triangle.collide_capsule(tipped)),
+      .overlapping = the_reading_of(triangle.collide_capsule(overlapping)!!),
+      .just_clear = the_reading_of(triangle.collide_capsule(just_clear)!!),
+      .apart = the_reading_of(triangle.collide_capsule(apart)!!),
+      .behind = the_reading_of(triangle.collide_capsule(behind)!!),
+      .midpoint_behind = the_reading_of(triangle.collide_capsule(tipped)!!),
     };
 }
 
@@ -827,4 +827,42 @@ fn void a_triangle_and_hull_call_never_inherits_the_previous_call_axis() @test {
         "two thousandths lower the same triangle cuts the hull and reports its far face");
     assert(math::abs(across.points[0].separation + 0.504f) < 0.001,
         "at the depth that face lies below the plane, not at anything the culled call left behind");
+}
+
+struct DegenerateTriangleRefusals {
+    fault sphere;
+    fault capsule;
+    fault hull;
+    int anchor_points;
+}
+
+fn DegenerateTriangleRefusals the_refusals_of_a_triangle_with_no_area() {
+    // Two coincident vertices: box3d's plane normal falls under its own degeneracy floor, so it
+    // culls nothing and the closest-point solve divides by a zero barycentric sum.
+    b3::Triangle flat = { { -1.0, 0.0, 0.0 }, { -1.0, 0.0, 0.0 }, { 1.0, 0.0, 0.0 } };
+    b3::Sphere ball = { .center = { 0.0, 0.2, 0.0 }, .radius = 0.5 };
+    b3::Capsule rod = { .center1 = { -0.3, 0.2, 0.0 }, .center2 = { 0.3, 0.2, 0.0 }, .radius = 0.25 };
+    b3::BoxHull cube = b3::make_cube_hull(0.5);
+    b3::LocalManifoldPoint[8] buffer;
+
+    DegenerateTriangleRefusals refused;
+    if (catch err = flat.collide_sphere(ball)) refused.sphere = err;
+    if (catch err = flat.collide_capsule(rod)) refused.capsule = err;
+    if (catch err = flat.collide_hull(&cube.base, true, buffer[..])) refused.hull = err;
+
+    b3::Triangle real = a_wide_triangle_facing_up();
+    if (try contact = real.collide_sphere(ball)) refused.anchor_points = contact.point_count;
+
+    return refused;
+}
+
+// A triangle whose vertices name no area has no plane, so box3d culls nothing and answers the
+// sphere pair with a NaN point. Refused before it reaches a caller's solver, where a NaN spreads.
+fn void a_triangle_with_no_area_is_refused_by_every_pair_that_takes_one() @test {
+    DegenerateTriangleRefusals refused = the_refusals_of_a_triangle_with_no_area();
+
+    assert(refused.sphere == b3::DEGENERATE_GEOMETRY, "a triangle of no area names no plane to cull against");
+    assert(refused.capsule == b3::DEGENERATE_GEOMETRY, "and the capsule pair reads the same plane");
+    assert(refused.hull == b3::DEGENERATE_GEOMETRY, "and so does the hull pair, before its buffer check");
+    assert(refused.anchor_points == 1, "while a triangle with area still answers the same sphere");
 }

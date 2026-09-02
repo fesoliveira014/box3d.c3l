@@ -3,10 +3,14 @@
 C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rigid body physics
 library written in C17.
 
-Status: early. Worlds, bodies, the sphere, capsule and convex-hull shapes, the world's event arrays
-with the pre-solve and custom-filter callbacks, the ray casts, shape casts, overlap queries and
-contact data, and the filter joint with the accessors every joint type shares are bound; the rest
-of the API surface follows incrementally.
+Status: most of the API surface is bound. Worlds and bodies, every shape kind — sphere, capsule,
+convex hull, mesh, height field and baked compound — the world's event arrays with the pre-solve
+and custom-filter callbacks, the ray casts, shape casts, overlap queries and contact data, all nine
+joint types, the dynamic tree, and the standalone geometry, distance and manifold functions that
+answer about shapes with no world in play. The character mover, explosions, debug draw, and
+recording and replay follow. Rather than trust this paragraph, derive the remainder: every bound
+symbol is a `@cname` in `box3d.c3i`, and every available one is a `B3_API` in
+`vendor/box3d/include/box3d/*.h`.
 
 ## Using it
 

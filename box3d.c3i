@@ -509,17 +509,12 @@ extern fn BoxHull make_transformed_box_hull(float hx, float hy, float hz, Transf
 extern fn BoxHull make_scaled_box_hull(Vec3 half_widths, Transform transform, Vec3 post_scale) @cname("b3MakeScaledBoxHull");
 
 <*
- The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it:
- call destroy() exactly once, and hold the pointer until every shape built on it is gone. The
- allocation is counted by byte_count(), so a mesh that is never destroyed shifts that count for
- the rest of the process exactly as a leaked world does.
-
- The binding allocates nothing of its own: box3d allocates, the caller frees, and C3 carries
- only the pointer. The triangles, vertices and hierarchy hang off the end of that one
- allocation and are reached through byte offsets from its own address, so the mesh is opaque
- here and could not be copied even if it were not.
-
- Build one with create_grid_mesh() and its siblings in box3d_mesh.c3.
+ The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it: call
+ destroy() exactly once, and hold the pointer until every shape built on it is gone. byte_count()
+ carries the allocation, so a mesh never destroyed shifts that count for the rest of the process
+ exactly as a leaked world does. The triangles, vertices and hierarchy hang off the end of that
+ one allocation at byte offsets from its own address, so the mesh is opaque here and could not be
+ copied anyway. Build one with create_grid_mesh() and its siblings in box3d_mesh.c3.
 *>
 typedef MeshData = void;
 
@@ -622,31 +617,54 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
 
 <*
- The ceiling on a compound's children, which is one more than the number it can hold: box3d
- refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
- API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER
- upstream moves the real ceiling without moving this.
+ The two children of an internal tree node, as indices into the tree's own node array. box3d
+ writes -1 in either of them where there is no child.
 *>
-const int MAX_CHILD_SHAPES = 1048576;
+struct TreeNodeChildren {
+    int child1;
+    int child2;
+}
 
 <*
- The number of surface materials one mesh child of a compound can carry. Mirrors
- B3_MAX_COMPOUND_MESH_MATERIALS in types.h, which the C API does not expose as a function. A mesh
- with more materials than this has to be used outside a compound.
+ A tree node's flags. box3d sets LEAF with ALLOCATED when a proxy is created and clears the word
+ when the slot is freed; nothing else in the tree writes either bit, so LEAF is an exact test for
+ whether a node index names a live proxy. ENLARGED is box3d's own rebuild bookkeeping.
 *>
-const int MAX_COMPOUND_MESH_MATERIALS = 4;
+const ushort TREE_NODE_ALLOCATED = 0x0001;
+const ushort TREE_NODE_ENLARGED = 0x0002;
+const ushort TREE_NODE_LEAF = 0x0004;
 
 <*
- A node of a bounding volume hierarchy. box3d calls it private data placed in a public header for
- performance, and nothing in this binding reads one, so it is carried as an opaque pointer target.
+ One node of a dynamic tree, declared because the tree's two proxy accessors are inline in box3d's
+ header rather than exported, so box3d_tree.c3 reimplements them over these fields.
+
+ A node is a leaf, an internal node or a free slot: the shared eight bytes are a proxy's user
+ data, two child indices, or the next free slot. flags says which — TREE_NODE_LEAF is the only
+ reading under which user_data and aabb mean anything.
 *>
-typedef TreeNode = void;
+struct TreeNode {
+    Aabb aabb;
+    ulong category_bits;
+    union {
+        TreeNodeChildren children;
+        ulong user_data;
+    }
+    union {
+        int parent;
+        int next;
+    }
+    ushort height;
+    ushort flags;
+}
 
 <*
- A bounding volume hierarchy over whatever it indexes. box3d calls this private data too, and it
- is declared in full only because CompoundData embeds one by value and the layout pins have to
- reach the fields past it. A compound's tree is immutable: its nodes live inside the compound's
- own allocation and the four rebuild arrays it would otherwise scratch in are null.
+ A bounding volume hierarchy over proxies, held by value: 80 bytes pointing at a pool box3d
+ allocated, so a copy leaves two structs sharing one pool and only one may be destroyed. Pass it
+ on as &tree; the pool moves every node as it grows, so nodes is not a pointer to hold on to.
+
+ A compound's tree is neither the caller's to destroy nor to modify: destroy() frees into the
+ middle of the compound, and its free list points at live geometry, so create_proxy() overwrites
+ a child and hides it from every query with nothing reporting the loss.
 *>
 struct DynamicTree {
     ulong version;
@@ -664,25 +682,158 @@ struct DynamicTree {
 }
 
 <*
+ Builds an empty tree and the node pool it inserts into.
+
+ proxy_capacity is a starting size and never a ceiling: box3d raises anything below 16 — a
+ negative argument included — to 16, so every argument from 16 down builds the same tree, and the
+ pool grows past it as needed. The tree comes back by value and the caller owns it: destroy() it
+ exactly once, and see DynamicTree for what a copy means. The 80-byte struct is the caller's own
+ storage; the node pool is on byte_count(), as a world or a mesh is.
+*>
+extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Create");
+
+<*
+ Releases the node pool and the rebuild arrays, then zeroes the tree, so a second call on the
+ same struct frees nothing. That protects no copy: a copy still holds the freed pointer. See
+ DynamicTree, which also covers the tree a compound owns.
+
+ The zero it leaves is not the empty-tree state — box3d marks an empty root with -1, so height(),
+ area_ratio() and root_bounds() read a freed pool afterwards and crash. Everything else here is
+ safe on it: the rest test the node count, which the zeroing sets to 0.
+*>
+extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
+
+extern fn int create_proxy_raw(
+  DynamicTree* tree,
+  Aabb aabb,
+  ulong category_bits,
+  ulong user_data,
+) @cname("b3DynamicTree_CreateProxy") @private;
+
+<*
+ Raw proxy calls that index the node array on an id the caller supplies, under assertions this
+ build compiles out. box3d_tree.c3 carries the guards and is the only public way in.
+*>
+extern fn void destroy_proxy_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_DestroyProxy") @private;
+extern fn void move_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_MoveProxy") @private;
+extern fn void enlarge_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_EnlargeProxy") @private;
+extern fn void set_category_bits_raw(DynamicTree* tree, int proxy_id, ulong category_bits) @cname("b3DynamicTree_SetCategoryBits") @private;
+extern fn ulong category_bits_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_GetCategoryBits") @private;
+
+<*
+ The number of levels below the root, so a tree holding a single proxy reports 0 and so does an
+ empty one.
+*>
+extern fn int DynamicTree.height(&self) @cname("b3DynamicTree_GetHeight");
+
+<*
+ The summed perimeter of the internal nodes over the root's. Leaves and the root are skipped, so
+ a tree whose only internal node is the root reports 0 — two proxies or fewer, not an empty tree.
+ A root with no volume, which proxies holding the zero box give at any count, divides by zero and
+ reports NaN rather than 0.
+*>
+extern fn float DynamicTree.area_ratio(&self) @cname("b3DynamicTree_GetAreaRatio");
+
+<*
+ The box containing every proxy. An empty tree reports the type's zero rather than an inverted or
+ otherwise marked box, so a caller cannot tell it from a degenerate box at the origin.
+*>
+extern fn Aabb DynamicTree.root_bounds(&self) @cname("b3DynamicTree_GetRootBounds");
+
+<*
+ Arithmetic over the capacities rather than a reading of the heap: it counts the caller's own
+ 80-byte struct, which is not on the heap, and after a rebuild two arrays box3d's median split
+ never allocates. The module's byte_count() is the number the allocator agrees with.
+*>
+extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount");
+
+<*
+ Rebalances the tree and returns the number of boxes it sorted. A partial build keeps every
+ subtree box3d has not marked enlarged and so sorts far fewer boxes than a full one — but any
+ enlarge_proxy() marks the whole ancestor chain, so one of those undoes the saving. Either build
+ allocates the rebuild arrays when it has something to sort, and byte_count() carries them.
+*>
+extern fn int DynamicTree.rebuild(&self, bool full_build) @cname("b3DynamicTree_Rebuild");
+
+<*
+ Called once for each proxy a query finds. Returning false ends the traversal, and the tree must
+ not be modified from inside the call: the traversal carries node indices across it, and a proxy
+ created or destroyed there makes them name something else.
+*>
+alias TreeQueryFn = fn bool(int proxy_id, ulong user_data, void* context);
+
+<*
+ Called once for each proxy a closest query reaches, given the search bound as it stands. Only a
+ return value below that bound takes effect, so the callback is what measures anything — see
+ DynamicTree.query_closest(). TreeQueryFn's rule against modifying the tree holds here too, and
+ for the same reason.
+*>
+alias TreeClosestFn = fn float(float search_bound, int proxy_id, ulong user_data, void* context);
+
+<*
+ Reports proxies whose box overlaps aabb, calling fcn once for each until it returns false — every
+ one, unless the tree exhausts box3d's 1024-entry traversal stack, which drops a whole subtree and
+ reports the short answer as a normal one. Only a degenerate tree of nested boxes reaches that.
+
+ The mask flags do not refine each other: loosely a node passes on any bit in common, strictly on
+ every bit of the mask, and only a single-bit mask agrees for every proxy. A zero mask reports
+ nothing loosely and everything strictly.
+*>
+extern fn TreeStats DynamicTree.query(
+  &self,
+  Aabb aabb,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeQueryFn fcn,
+  void* context,
+) @cname("b3DynamicTree_Query");
+
+<*
+ The closest traversal, whose in-out float box3d calls minDistanceSqr. box3d_tree.c3 takes that
+ bound by value and is the only public way in.
+*>
+extern fn TreeStats query_closest_raw(
+  DynamicTree* tree,
+  Vec3 point,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeClosestFn fcn,
+  void* context,
+  float* search_bound,
+) @cname("b3DynamicTree_QueryClosest") @private;
+
+<*
+ What a closest query ended with: box3d's traversal counters and the bound the callback left,
+ which is the bound the query started with when nothing returned anything smaller. A C3 type with
+ no C counterpart — box3d passes the bound back through the in-out float it was given.
+*>
+struct ClosestSearch {
+    TreeStats stats;
+    float search_bound;
+}
+
+<*
+ The ceiling on a compound's children, which is one more than the number it can hold: box3d
+ refuses a definition naming this many. Mirrors B3_MAX_CHILD_SHAPES in constants.h, which the C
+ API does not expose as a function and no layout pin can see, so a change to B3_SHAPE_POWER
+ upstream moves the real ceiling without moving this.
+*>
+const int MAX_CHILD_SHAPES = 1048576;
+
+<*
+ The number of surface materials one mesh child of a compound can carry. Mirrors
+ B3_MAX_COMPOUND_MESH_MATERIALS in types.h, which the C API does not expose as a function. A mesh
+ with more materials than this has to be used outside a compound.
+*>
+const int MAX_COMPOUND_MESH_MATERIALS = 4;
+
+<*
  The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened
- into one tree that a world populates as a single shape. Ownership and the byte count work as they
- do for MeshData — see there — with one difference: this type is declared in full rather than left
- opaque, because the counts the accessors need are reachable nowhere else.
-
- The children themselves live past the end of the struct and are reached through the byte offsets
- it carries, so a bare CompoundData must never be copied, and a caller reaches a child through the
- accessors in box3d_compound.c3 rather than through an offset. What the fields are good for is the
- counts those accessors are bounded by: one per kind, plus material_count over the array they all
- index into. The flat index child() takes runs over the four kinds together — see child_count().
- shared_hull_count and shared_mesh_count count distinct geometry rather than children and are
- box3d's own diagnostics.
-
- Every field here is box3d's, written once when the compound was baked and never again — box3d
- takes a const pointer everywhere it reads one. The accessors trust the counts, so writing one is
- not refused: it moves the bound they check and an index the guard would otherwise reject reads
- past the array instead. Read these fields; do not assign to them.
-
- Build one with create_compound() in box3d_compound.c3.
+ into one tree a world populates as a single shape. Ownership and the byte count are MeshData's;
+ this type is declared in full because its counts are reachable nowhere else. The children live
+ past the end of the struct at byte offsets, so a bare CompoundData must never be copied, and the
+ accessors trust the counts — assigning to one moves the bound they check. shared_hull_count and
+ shared_mesh_count count distinct geometry, not children.
 *>
 struct CompoundData {
     ulong version;
@@ -732,18 +883,12 @@ struct CompoundHullDef {
 }
 
 <*
- A mesh child of a compound. The mesh is cloned into the compound, so it does not have to outlive
- create_compound(), and children naming the same mesh store it once between them.
-
- material_count must equal the mesh's own material count, not merely be compatible with it: box3d
- asserts the two are equal and this build compiles the assertion out. Naming fewer folds every
- triangle material above the last one named onto entry 0, silently and with no refusal, so a mesh
- built for four materials and given one here reports one surface everywhere. The count is also
- capped at MAX_COMPOUND_MESH_MATERIALS, which is why a mesh carrying more materials than a
- compound has room for belongs outside one.
-
- scale is stored as given. Unlike a mesh shape's, it is not pushed away from zero, and a zero
- component reaches the tree and the child's bounds as a zero.
+ A mesh child of a compound. The mesh is cloned in, so it need not outlive create_compound(), and
+ children naming the same mesh store it once between them. material_count must equal the mesh's
+ own material count, not merely be compatible: box3d asserts that and this build compiles the
+ assertion out, so naming fewer silently folds every triangle material above the last named onto
+ entry 0. It is capped at MAX_COMPOUND_MESH_MATERIALS too. scale is stored as given — unlike a
+ mesh shape's it is not pushed away from zero.
 *>
 struct CompoundMeshDef {
     MeshData* mesh_data;
@@ -793,15 +938,12 @@ struct CompoundHull {
 }
 
 <*
- A mesh child as the compound holds it. mesh_data points inside the compound's own allocation
- rather than at the mesh create_compound() was given — the compound clones it — so it lives and
- dies with the compound and must not be destroyed on its own.
-
- material_indices is a second level of indirection: a triangle's own material index, clamped to
- MAX_COMPOUND_MESH_MATERIALS, selects a slot here, and that slot selects an entry of
- CompoundData.materials(). box3d fills one slot per material the child named and zeroes the whole
- compound beforehand, so every unused slot reads 0 — a real material index rather than a marker,
- which is why this struct cannot say how many of its slots are meaningful.
+ A mesh child as the compound holds it. mesh_data points inside the compound's own allocation, not
+ at the mesh create_compound() was given, so it dies with the compound and must not be destroyed
+ on its own. material_indices is a second indirection: a triangle's material index, clamped to
+ MAX_COMPOUND_MESH_MATERIALS, selects a slot here, which selects an entry of
+ CompoundData.materials(). Unused slots read 0, a real index rather than a marker, so the struct
+ cannot say how many are meaningful.
 *>
 struct CompoundMesh {
     MeshData* mesh_data;
@@ -823,25 +965,11 @@ struct CompoundSphere {
 <*
  One child of a compound in the flat form CompoundData.child() reports, whatever kind it is.
 
- type is the union's tag and the only thing that says which arm holds data. Reading another arm
- reinterprets the same bytes and yields plausible geometry rather than an error, so a caller that
- already knows the kind it wants should reach for CompoundData.capsule(), hull(), mesh() or
- sphere() instead, which are typed and bounded by their own count.
-
- transform is identity for a capsule and a sphere however the child is placed, because those two
- carry their placement in their own geometry; only a hull and a mesh have a transform of their
- own.
-
- material_indices holds one useful slot for a capsule, a hull or a sphere: slot 0 is that child's
- material index, and the rest are zero fill. For a mesh child it works as it does on CompoundMesh
- — one slot per material the child named, and the rest read 0. Since 0 is a real material index
- rather than a marker, the struct cannot say which reading applies without its type.
-
- The hull and mesh arms are borrows into the compound's own allocation, not geometry of their
- own: hull and mesh.data address bytes inside the compound and are owned by it. Destroying either
- frees a pointer that was never separately allocated and aborts the process. Only geometry a
- constructor handed back is the caller's to destroy — see CompoundHull and CompoundMesh, which
- carry the same warning for the typed accessors.
+ type is the union's tag; reading another arm yields plausible geometry rather than an error, so a
+ caller that knows the kind it wants should reach for capsule(), hull(), mesh() or sphere().
+ transform is identity for a capsule and a sphere, which carry their own placement.
+ material_indices reads as on CompoundMesh, and the hull and mesh arms borrow the compound's
+ allocation: destroying either frees a pointer never separately allocated and aborts.
 *>
 struct ChildShape {
     union {
@@ -897,11 +1025,9 @@ extern fn ShapeId create_hull_shape_raw(BodyId body_id, ShapeDef* def, HullData*
 extern fn ShapeId create_transformed_hull_shape_raw(BodyId body_id, ShapeDef* def, HullData* hull, Transform transform, Vec3 scale) @cname("b3CreateTransformedHullShape") @private;
 
 <*
- Raw mesh and height field shape constructors. Both bypass the guards their wrappers in
- box3d_mesh.c3 apply, so they are private to the module. Those wrappers carry one guard the
- other shape constructors have no need of: box3d reads a version field through the geometry
- pointer before it tests anything, so a null mesh or height field faults inside box3d rather
- than coming back as a null identifier.
+ Raw mesh and height field shape constructors, private because they bypass the null-geometry guard
+ their wrappers in box3d_mesh.c3 apply — box3d reads a version field through the pointer before it
+ tests anything.
 *>
 extern fn ShapeId create_mesh_shape_raw(
   BodyId body_id,
@@ -946,32 +1072,24 @@ extern fn void ShapeId.set_restitution(self, float restitution) @cname("b3Shape_
 extern fn void ShapeId.set_surface_material(self, SurfaceMaterial surface_material) @cname("b3Shape_SetSurfaceMaterial");
 
 <*
- The shape's surface material, and the two of its fields that have accessors of their own. All
- three read the shape's first material.
-
- A shape whose mesh_material_count() is 0 has no first material to read, and answers with an
- inline one box3d never assigned — in a recycled shape slot that is the previous shape's material,
- and the definition's own base_material is not it. Only a shape built from an empty compound
- reports 0, so only such a shape can read this way; mesh_surface_material() refuses every index on
- it instead, which is the honest answer these three cannot give.
+ The shape's surface material, and the two of its fields that have accessors of their own; all
+ three read the shape's first material. A shape whose mesh_material_count() is 0 has none to read
+ and answers with an inline one box3d never assigned — in a recycled slot, the previous shape's
+ material, not the definition's base_material. Only a shape built from an empty compound reports
+ 0, and mesh_surface_material() refuses every index on it instead.
 *>
 extern fn float ShapeId.friction(self) @cname("b3Shape_GetFriction");
 extern fn float ShapeId.restitution(self) @cname("b3Shape_GetRestitution");
 extern fn SurfaceMaterial ShapeId.surface_material(self) @cname("b3Shape_GetSurfaceMaterial");
 
 <*
- How many surface materials this shape holds. Despite the name it is not a mesh-only count: a
- shape whose definition named fewer than two materials keeps one inline and reports 1 whatever
- its type, and only a definition naming several — one per material index the mesh's triangles
- carry — makes it larger.
+ How many surface materials this shape holds — not a mesh-only count despite the name. A
+ definition naming fewer than two keeps one inline and reports 1 whatever the type; a shape built
+ from a compound answers from the compound's distinct child materials, so an empty compound gives
+ 0.
 
- A shape built from a compound answers from the compound rather than from the definition: box3d
- copies the compound's materials, one per distinct child material, so a compound with no children
- gives 0.
-
- The count is fixed when the shape is created and replacing the geometry does not change it, so a
- shape built from an empty compound still reports 0 once set_sphere() has made it a sphere. Do not
- read the count as a statement about the geometry the shape holds now.
+ The count is fixed at creation, so such a shape still reports 0 once set_sphere() has made it a
+ sphere. It says nothing about the geometry the shape holds now.
 *>
 extern fn int ShapeId.mesh_material_count(self) @cname("b3Shape_GetMeshMaterialCount");
 
@@ -1163,10 +1281,8 @@ alias PreSolveFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, Pos point, Ve
 
 <*
  Called when two shapes whose definitions enabled custom filtering are about to begin colliding.
- Returning false stops the pair from colliding at all. Only one of the two shapes needs to have
- enabled it. box3d may call this from a worker thread, and the world must not be modified from
- inside it. The context pointer is stored in the world and dereferenced on every call, so it must
- outlive the world.
+ Returning false stops the pair from colliding at all, and only one of the two shapes needs to have
+ enabled it. The worker-thread and context rules are PreSolveFn's.
 *>
 alias CustomFilterFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, void* context);
 
@@ -1666,15 +1782,11 @@ extern fn Transform JointId.local_frame_b(self) @cname("b3Joint_GetLocalFrameB")
 <*
  Lets the two linked bodies collide again, or stops them colliding.
 
- This flag, not the joint's type, is what suppresses the collision: box3d refuses the pair for any
- joint linking the two bodies whose collide_connected is false, whatever its type. Turning it on
- has them colliding again from the next step; turning it off ends the collision at once, dropping
- the contacts they already had. The effect is observable only while at least one of the two bodies
- is dynamic — two non-dynamic bodies never collide anyway. Dropping the contacts is reported: each
- one that was touching and whose shapes asked for contact events pushes an end-touch event, and
- because it is appended outside a step it surfaces in the batch the next step() fills, not in the
- one WorldId.contact_end_touch_events() returns beforehand. Silently does nothing while the world
- is locked, mid WorldId.step or inside a callback box3d runs during one.
+ This flag, not the joint's type, suppresses the collision, and only while one of the bodies is
+ dynamic. Turning it on has them colliding from the next step; turning it off ends the collision
+ at once and drops their contacts, and each dropped contact whose shapes asked for contact events
+ pushes an end-touch event into the batch the next step() fills, not the one
+ contact_end_touch_events() returns beforehand. Silently does nothing while the world is locked.
 *>
 extern fn void JointId.set_collide_connected(self, bool should_collide) @cname("b3Joint_SetCollideConnected");
 
@@ -1695,27 +1807,23 @@ extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
 extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");
 
 <*
- The force this joint is applying to hold its constraint, in newtons.
+ The force this joint is applying to hold its constraint, in newtons. box3d branches on the
+ joint's own type, so a zero says nothing until read against that type: the joint may be unloaded,
+ the channel may be one the type never measures, or one it measures only in some states.
 
- box3d answers this and the three accessors that follow from a branch on the joint's own type, so
- a zero says nothing until it is read against that type. It can be a joint that is genuinely
- unloaded. It can be a channel the type never measures, which a parallel joint's force and a
- distance joint's torque both are however hard either joint is working. It can be a channel the
- type measures only in some of its states, which ordinary runtime setters turn on and off. And a
- wheel joint's angular separation is a case upstream has left unwritten, handed back as a zero
- rather than refused. A filter joint enforces nothing and reports zero from all four permanently,
- but it is one instance of the second reason, not the rule the other eight types follow.
+ A non-zero can be wrong too — the prismatic and wheel readings are permuted, and the wheel's
+ axial term sums a stored suspension limit in metres into the impulse, so it carries a length
+ whatever the permutation. Prefer the per-type accessor.
 *>
 extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce");
 
 <*
  The torque this joint is applying to hold its constraint, in newton-metres. A zero is read
  against the joint's type rather than taken for an idle joint — see constraint_force. A non-zero
- needs care too: some types double-count an axis here, the revolute joint's hinge axis among them,
- so a per-type torque getter such as RevoluteJointId.motor_torque() is the honest reading wherever
- one exists. Nor is it a pure getter on a revolute joint, where box3d writes the joint's two
- perpendicular warm-starting axes on the way past — a write the next substep recomputes from the
- same frames.
+ needs care too: some types double-count an axis here, the revolute hinge axis among them, so a
+ per-type getter such as RevoluteJointId.motor_torque() is the honest reading where one exists.
+ Nor is it a pure getter on a revolute joint, where box3d writes the joint's two perpendicular
+ warm-starting axes on the way past.
 *>
 extern fn Vec3 JointId.constraint_torque(self) @cname("b3Joint_GetConstraintTorque");
 
@@ -1759,15 +1867,11 @@ extern fn void constraint_tuning_raw(
 <*
  Sets the force at which this joint starts appearing in WorldId.joint_events(), in newtons.
 
- One check covers both thresholds. It is armed only while at least one of the two is below
- float::max, so a joint whose thresholds both keep the default is never even checked. Being armed
- is not being reported: an armed joint is reported on the steps where its force reaches this
- threshold or its torque reaches the torque threshold, so a joint armed by a threshold it never
- reaches appears in no event, while a threshold of zero reports the joint on every step it is
- awake. The force compared against this threshold is a reaction force box3d computes inside the
- solve; it is not the value constraint_force() returns, which is a different per-type computation
- sharing the same unit. box3d asserts the value is finite and non-negative; this package links a
- release build where that assertion is compiled out, and the wrappers do not restore it.
+ One check covers both thresholds, armed only while one is below float::max, so a joint keeping
+ both defaults is never checked; an armed joint is reported on the steps where its force or its
+ torque reaches its own threshold, and a zero threshold reports it every awake step. The compared
+ force is a reaction force from the solve, not constraint_force()'s per-type value, and box3d's
+ finite non-negative assertion is compiled out here.
 *>
 extern fn void JointId.set_force_threshold(self, float threshold) @cname("b3Joint_SetForceThreshold");
 
@@ -1809,26 +1913,19 @@ extern fn int body_joints_raw(
 ) @cname("b3Body_GetJoints") @private;
 
 <*
- A joint known to be revolute. box3d resolves every per-type accessor through a joint-type
- assertion this release build compiles out, so a revolute accessor reaching a joint of another
- type reinterprets that joint's solver union instead: a getter hands back nonsense and a setter
- writes over the other type's state. The distinct handle moves that check to the one place the
- type is genuinely in question. A RevoluteJointId converts to a JointId on its own, so every
- shared joint accessor reaches it uncast; the way back is JointId.as_revolute(), which checks.
+ A joint known to be revolute, so its per-type accessors need no check at each call. It converts
+ to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_revolute(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef RevoluteJointId = inline JointId;
 
 <*
- A revolute joint definition. The joint fixes a point on body B to a point on body A and leaves
- the two free to turn about the z axis of their local frames, with an optional spring, limit and
- motor. Must come from default_revolute_joint_def(), which zeroes every field it adds to the
- base: no spring, no limit, no motor, and hertz, damping_ratio and max_motor_torque all 0 rather
- than the float::max thresholds the base defaults to. A default revolute joint is a bare hinge.
-
- Three of the angles are corrected on the way in rather than taken as written: target_angle is
- clamped into [-pi, pi], and lower_angle and upper_angle are swapped into order if they are
- reversed and then both clamped into [-0.99 pi, 0.99 pi] — the same correction set_limits applies
- at runtime. A joint's limits need not read back as the definition set them.
+ A revolute joint definition: a hinge about the frames' z axis, with an optional spring, limit and
+ motor. Must come from default_revolute_joint_def(), which zeroes every field it adds to the base
+ — hertz, damping_ratio and max_motor_torque included, not the base's float::max — so a default
+ revolute joint is a bare hinge. Three angles are then corrected on the way in, so limits need not
+ read back as set: target_angle is clamped into [-pi, pi], and lower_angle and upper_angle are
+ swapped into order and clamped into [-0.99 pi, 0.99 pi].
 *>
 struct RevoluteJointDef {
     inline JointDef base;
@@ -1885,13 +1982,11 @@ extern fn void RevoluteJointId.set_motor_speed(self, float motor_speed) @cname("
 extern fn float RevoluteJointId.motor_speed(self) @cname("b3RevoluteJoint_GetMotorSpeed");
 
 <*
- The torque the motor applied over the last step, in newton-metres, bounded by
- max_motor_torque(). This is the honest reading of the two available. The shared
- constraint_torque() double-counts the hinge axis: box3d adds the joint's axial impulse — spring
- plus motor plus limit — along the frame z axis and then, under a note leaving pivot torque
- unwritten, adds that identical quantity along the same axis a second time. On a joint with no
- spring and no limit that makes constraint_torque() report exactly twice this value about the
- hinge axis.
+ The torque the motor applied over the last step, in newton-metres, bounded by max_motor_torque(),
+ and the honest reading of the two available. The shared constraint_torque() double-counts the
+ hinge axis — box3d adds the joint's axial impulse along the frame z axis and then adds the same
+ quantity along that axis a second time — so on a joint with no spring and no limit it reports
+ exactly twice this value about the hinge.
 *>
 extern fn float RevoluteJointId.motor_torque(self) @cname("b3RevoluteJoint_GetMotorTorque");
 
@@ -1925,13 +2020,13 @@ extern fn float RevoluteJointId.angle(self) @cname("b3RevoluteJoint_GetAngle");
 extern fn void RevoluteJointId.enable_limit(self, bool enable_limit) @cname("b3RevoluteJoint_EnableLimit");
 
 <*
- Whether this joint's limit is enabled. False on a joint built from a default definition. While it
- is off — and while it is on but not exceeded — the shared angular_separation() strips the hinge
- angle out of the relative rotation and reports what is left of the misalignment, which is zero for
- a hinge whose perpendicular constraint is holding and non-zero for one bent off its axis under
+ Whether this joint's limit is enabled. False on a joint built from a default definition.
+
+ While it is off — and while it is on but not exceeded — the shared angular_separation() strips
+ the hinge angle out of the relative rotation and reports what is left of the misalignment: zero
+ for a hinge whose perpendicular constraint is holding, non-zero for one bent off its axis under
  load. Once the limit is on and the angle is past it the full relative rotation is reported
- instead, which is the state-dependent zero JointId.constraint_force describes rather than a
- permanent one.
+ instead, the state-dependent zero JointId.constraint_force describes rather than a permanent one.
 *>
 extern fn bool RevoluteJointId.is_limit_enabled(self) @cname("b3RevoluteJoint_IsLimitEnabled");
 
@@ -1951,12 +2046,10 @@ extern fn float RevoluteJointId.upper_limit(self) @cname("b3RevoluteJoint_GetUpp
 
 <*
  Sets the two angles in radians the limit holds the hinge between. box3d takes the smaller of the
- pair as the lower and the larger as the upper, so a reversed pair is quietly corrected rather than
- refused, and then clamps both into [-0.99 pi, 0.99 pi]. A wrapper faulting on a reversed pair would
- contradict the library, so the binding documents the swap instead of guarding it. The limit acts
- only while enable_limit() is on. box3d asserts both values are finite — their order and their
- range it corrects rather than asserts; this package links a release build where that assertion is
- compiled out, and the wrappers do not restore it.
+ pair as the lower and the larger as the upper, so a reversed pair is quietly corrected rather
+ than refused, and then clamps both into [-0.99 pi, 0.99 pi]. The limit acts only while
+ enable_limit() is on. box3d asserts both values are finite — order and range it corrects rather
+ than asserts — and that assertion is compiled out of this release build and not restored.
 *>
 extern fn void RevoluteJointId.set_limits(self, float lower_radians, float upper_radians) @cname("b3RevoluteJoint_SetLimits");
 
@@ -1998,15 +2091,12 @@ extern fn void RevoluteJointId.set_spring_damping_ratio(self, float damping_rati
 extern fn float RevoluteJointId.spring_damping_ratio(self) @cname("b3RevoluteJoint_GetSpringDampingRatio");
 
 <*
- Sets the spring's rest angle in radians about the frames' z axis: the angle the spring pulls the
- hinge toward while enable_spring() is on. The spring is the only thing box3d reads it for, and
- angle() in particular is not measured against it — angle() is the twist between the two local
- frames and carries no target term, so a hinge a spring has settled on a target of 0.7 reads 0.7.
-
- The value is stored as handed. box3d clamps a definition's target_angle into [-pi, pi] on the way
- through the constructor but this setter only asserts that the value is finite and inside the same
- range, and this package links a release build where that assertion is compiled out — a target set
- here can sit outside the range the same target in a definition would have been clamped into.
+ Sets the spring's rest angle in radians about the frames' z axis, the angle the spring pulls the
+ hinge toward while enable_spring() is on. The spring is the only thing box3d reads it for:
+ angle() is the twist between the two local frames and carries no target term, so a hinge settled
+ on a target of 0.7 reads 0.7. The value is stored as handed — the constructor clamps a
+ definition's target_angle into [-pi, pi], but this setter only asserts the range, and that
+ assertion is compiled out here.
 *>
 extern fn void RevoluteJointId.set_target_angle(self, float target_radians) @cname("b3RevoluteJoint_SetTargetAngle");
 
@@ -2018,29 +2108,19 @@ extern fn void RevoluteJointId.set_target_angle(self, float target_radians) @cna
 extern fn float RevoluteJointId.target_angle(self) @cname("b3RevoluteJoint_GetTargetAngle");
 
 <*
- A joint known to be a distance joint. box3d resolves every per-type accessor through a joint-type
- assertion this release build compiles out, so a distance accessor reaching a joint of another
- type reinterprets that joint's solver union instead: a getter hands back nonsense and a setter
- writes over the other type's state. The distinct handle moves that check to the one place the
- type is genuinely in question. A DistanceJointId converts to a JointId on its own, so every
- shared joint accessor reaches it uncast; the way back is JointId.as_distance(), which checks.
+ A joint known to be a distance joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_distance(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef DistanceJointId = inline JointId;
 
 <*
- A distance joint definition. The joint connects a point on body A to a point on body B by a
- segment held at length, with an optional spring, limit and motor. Must come from
- default_distance_joint_def(), which — unlike the revolute default — does not zero the fields it
- adds to the base: length is 1, lower_spring_force is -float::max, upper_spring_force is
- float::max, and max_length is box3d's huge value, 1.0e5 scaled by the length unit. The remaining
- fields are zero or false.
-
- A default distance joint is rigid, and it stays rigid under more settings than the header
- describes. box3d solves the spring, the limit and the motor together only while
- enable_spring && (min_length < max_length || enable_limit == false); otherwise it solves a single
- rigid constraint and skips the limit and the motor entirely. So a sprung joint whose limit is
- enabled with min_length equal to max_length is rigid, and clearing enable_limit on that same
- joint makes it sprung again.
+ A distance joint definition: two anchors held at length by a segment, with an optional spring,
+ limit and motor. Must come from default_distance_joint_def(), which — unlike the revolute default
+ — does not zero what it adds: length is 1, the spring force range is -float::max to float::max,
+ and max_length is 1.0e5 scaled by the length unit. box3d solves the spring, limit and motor
+ together only while enable_spring && (min_length < max_length || enable_limit == false), and
+ otherwise solves one rigid constraint, skipping the limit and the motor.
 *>
 struct DistanceJointDef {
     inline JointDef base;
@@ -2081,31 +2161,23 @@ extern fn JointId create_distance_joint_raw(
 ) @cname("b3CreateDistanceJoint") @private;
 
 <*
- Sets the rest length this joint holds its two anchors at. Not the distance they are at now,
- which is what current_length() reads.
+ Sets the rest length this joint holds its two anchors at, not the distance they are at now, which
+ current_length() reads.
 
- The value is clamped between box3d's linear slop and its huge value, neither of which is a fixed
- number: the floor is 0.005 length units and the ceiling 1.0e5 of them, so a floor of 0.005 at
- unit scale becomes 0.010 once the length unit is 2. The clamp is silent — length() reports what
- was stored, not what was asked for. Setting the length also zeroes the joint's three accumulated
- impulses, discarding the warm-start state the solver had built, so the joint rebuilds its hold
- over the following steps rather than resuming the one it had.
+ The value is clamped between box3d's linear slop and its huge value, neither a fixed number:
+ 0.005 and 1.0e5 length units, so the floor is 0.010 once the length unit is 2. The clamp is
+ silent — length() reports what was stored, not what was asked for. Setting the length also zeroes
+ the joint's three accumulated impulses, so it rebuilds its hold over the following steps.
 *>
 extern fn void DistanceJointId.set_length(self, float length) @cname("b3DistanceJoint_SetLength");
 
 <*
- The rest length this joint holds its two anchors at. Not the distance the anchors are at now,
- which is what current_length() reads — even a rigid joint sits a little off its rest length, by
- the residual the solver leaves. Both are plain floats, so either one compiles where the other is
- meant.
-
- It is what box3d stored, and the two paths that store it disagree at both ends. Construction
- raises the definition's length to the linear slop and gives it no ceiling at all, so a
- definition's 0 arrives as 0.005 length units while a definition's 1.0e7 arrives untouched — and
- a zero or negative definition length is not refused on the way, because the check that would
- have refused it is compiled out of this release build. set_length clamps instead, between that
- same floor and box3d's huge value of 1.0e5 scaled by the length unit, so the very length a
- definition keeps comes back from the setter cut down to 1.0e5 length units.
+ The rest length this joint holds its two anchors at, not the distance the anchors are at now,
+ which current_length() reads — even a rigid joint sits a little off its rest length, and both are
+ plain floats, so either compiles where the other is meant. The two paths that store it disagree
+ at both ends: construction raises a definition's length to the linear slop and gives it no
+ ceiling, so a 0 arrives as 0.005 length units and a 1.0e7 untouched, while set_length clamps
+ between that floor and 1.0e5.
 *>
 extern fn float DistanceJointId.length(self) @cname("b3DistanceJoint_GetLength");
 
@@ -2113,11 +2185,10 @@ extern fn float DistanceJointId.length(self) @cname("b3DistanceJoint_GetLength")
  The distance between this joint's two anchors as they stand now, measured from the two bodies'
  current transforms. Not the rest length the joint holds them at, which is what length() reads.
 
- The reading is meaningful whether the joint is rigid or sprung, and it is how the two are told
- apart: a rigid joint keeps this within a hair of its rest length and a sprung one does not.
- Which of the two a joint is follows the compound condition DistanceJointDef describes, not the
- spring flag on its own. Zero while the world is locked, mid WorldId.step or inside a callback
- box3d runs during one.
+ It is meaningful whether the joint is rigid or sprung, and is how the two are told apart: a rigid
+ joint keeps this within a hair of its rest length and a sprung one does not, and which a joint is
+ follows the compound condition DistanceJointDef describes, not the spring flag alone. Zero while
+ the world is locked.
 *>
 extern fn float DistanceJointId.current_length(self) @cname("b3DistanceJoint_GetCurrentLength");
 
@@ -2126,11 +2197,8 @@ extern fn float DistanceJointId.current_length(self) @cname("b3DistanceJoint_Get
  and max_length. box3d reaches the limit only inside the branch it solves the spring in, so the
  flag acts under the compound condition DistanceJointDef describes rather than on its own:
  enabling it on a joint whose spring is off changes nothing, and enabling it with min_length equal
- to max_length turns the joint rigid rather than tightening it, because that is the other half of
- the same condition.
-
- Unlike the revolute joint's flag of the same name, this one leaves the joint's accumulated
- impulses alone.
+ to max_length turns the joint rigid rather than tightening it. Unlike the revolute joint's flag
+ of the same name, this one leaves the accumulated impulses alone.
 *>
 extern fn void DistanceJointId.enable_limit(self, bool enable_limit) @cname("b3DistanceJoint_EnableLimit");
 
@@ -2144,19 +2212,11 @@ extern fn bool DistanceJointId.is_limit_enabled(self) @cname("b3DistanceJoint_Is
 
 <*
  Sets the two lengths the limit holds the anchors' separation between. box3d clamps each of the
- pair between its linear slop and its huge value — 0.005 length units and 1.0e5 of them, so the
- floor is 0.010 once the length unit is 2 — and then stores the smaller of the clamped pair as the
- minimum and the larger as the maximum. A reversed pair is accepted and quietly corrected rather
- than refused, and a pair under the floor comes back as two equal lengths. Both corrections are
- silent: min_length() and max_length() report what was stored, not what was asked for.
-
- The clamp and the swap are this setter's own, and none of the joint's three range setters agrees
- with another: set_length clamps its single value and has nothing to order, and the setter for the
- spring's force range neither clamps nor orders its pair. Read each rather than carrying one over.
-
- Setting the range also zeroes the joint's three accumulated impulses, discarding the warm-start
- state the solver had built, so the joint rebuilds its hold over the following steps rather than
- resuming the one it had.
+ pair between 0.005 and 1.0e5 length units — so the floor is 0.010 once the length unit is 2 — and
+ then stores the smaller of the clamped pair as the minimum and the larger as the maximum. Both
+ corrections are silent: min_length() and max_length() report what was stored, and a pair under
+ the floor comes back as two equal lengths. Setting the range also zeroes the joint's three
+ accumulated impulses, so it rebuilds its hold over the following steps.
 *>
 extern fn void DistanceJointId.set_length_range(self, float min_length, float max_length) @cname("b3DistanceJoint_SetLengthRange");
 
@@ -2180,15 +2240,12 @@ extern fn float DistanceJointId.min_length(self) @cname("b3DistanceJoint_GetMinL
 extern fn float DistanceJointId.max_length(self) @cname("b3DistanceJoint_GetMaxLength");
 
 <*
- Enables or disables this joint's spring, and with it every part of the joint the solver reaches
- through the spring: box3d solves the spring, the limit and the motor together inside one branch,
- and its other half is a single rigid constraint. So this is the joint's master switch rather than
- the spring's alone — enabling the limit or the motor on a joint whose spring is off changes
- nothing — and it is not the only way into the rigid half. The whole condition is the one
- DistanceJointDef describes.
-
- Unlike the revolute joint's flag of the same name, this one leaves the joint's accumulated
- impulses alone.
+ Enables or disables this joint's spring, and with it the limit and the motor: box3d solves all
+ three in one branch whose other half is a single rigid constraint. So this is the joint's master
+ switch rather than the spring's alone — enabling the limit or the motor on a joint whose spring
+ is off changes nothing — and it is not the only way into the rigid half, whose whole condition
+ DistanceJointDef describes. Unlike the revolute joint's flag of the same name, this one leaves
+ the accumulated impulses alone.
 *>
 extern fn void DistanceJointId.enable_spring(self, bool enable_spring) @cname("b3DistanceJoint_EnableSpring");
 
@@ -2229,18 +2286,13 @@ extern fn void DistanceJointId.set_spring_damping_ratio(self, float damping_rati
 extern fn float DistanceJointId.spring_damping_ratio(self) @cname("b3DistanceJoint_GetSpringDampingRatio");
 
 <*
- Sets the two forces the spring's pull is held between, in newtons: -float::max and float::max on
- a joint built from a default definition, which leaves it unbounded either way. box3d holds the
- spring's accumulated impulse between the pair scaled by the sub-step, and only inside the branch
- it solves the spring in, so the range acts under the compound condition DistanceJointDef
- describes and only while spring_hertz() is above 0.
+ Sets the two forces the spring's pull is held between, in newtons; -float::max and float::max on
+ a joint built from a default definition. The range acts under the compound condition
+ DistanceJointDef describes and only while spring_hertz() is above 0.
 
- This setter neither clamps its pair nor orders it. It asserts that the lower force does not
- exceed the upper and stores both verbatim; this package links a release build where that
- assertion is compiled out, so an inverted pair is accepted in full and spring_force_range()
- reports it back the way it arrived. That is the opposite of set_length_range, which clamps both
- ends and swaps them into order, and the two sit one accessor apart — neither the clamp nor the
- swap carries over. An inverted range is not inert either: box3d clamps against it as stored.
+ This setter neither clamps its pair nor orders it: box3d's assertion that the lower does not
+ exceed the upper is compiled out here, so an inverted pair is stored, reported back verbatim, and
+ clamped against as stored. set_length_range, one accessor away, does both — neither carries over.
 *>
 extern fn void DistanceJointId.set_spring_force_range(self, float lower_force, float upper_force) @cname("b3DistanceJoint_SetSpringForceRange");
 
@@ -2257,14 +2309,11 @@ extern fn void spring_force_range_raw(
 <*
  Enables or disables this joint's motor, which drives the two anchors apart at motor_speed() with
  at most max_motor_force() behind it. box3d reaches the motor only inside the branch it solves the
- spring in, so the flag acts under the compound condition DistanceJointDef describes rather than
- on its own: on a joint whose spring is off an enabled motor drives nothing at all, whatever speed
- and force it carries, and the joint holds its rest length as though the motor were not there.
+ spring in, so the flag acts under the compound condition DistanceJointDef describes: on a joint
+ whose spring is off an enabled motor drives nothing at all.
 
  A change to the flag discards the motor's accumulated impulse, so motor_force() reads zero until
- the next step rather than the force the motor was applying before. Storing the value the flag
- already holds discards nothing. This one does match the revolute joint's flag of the same name,
- unlike the spring and limit flags beside it.
+ the next step; storing the value the flag already holds discards nothing.
 *>
 extern fn void DistanceJointId.enable_motor(self, bool enable_motor) @cname("b3DistanceJoint_EnableMotor");
 
@@ -2278,14 +2327,10 @@ extern fn bool DistanceJointId.is_motor_enabled(self) @cname("b3DistanceJoint_Is
 
 <*
  Sets the speed the motor drives the two anchors apart at, in metres per second along the segment
- between them: a positive speed lengthens the joint and a negative one shortens it. It is a target
- the motor pursues only as far as max_motor_force() lets it, not a separation speed the joint is
- made to hold, and the solver pursues it only under the compound condition DistanceJointDef
- describes.
-
- Unlike the revolute joint's setter of the same name, which asserts the value is finite, this one
- asserts nothing at all. It stores the speed and leaves the motor's accumulated impulse as it
- stands.
+ between them: positive lengthens the joint, negative shortens it. It is a target the motor
+ pursues only as far as max_motor_force() lets it, and only under the compound condition
+ DistanceJointDef describes. Unlike the revolute joint's setter of the same name it asserts
+ nothing at all, and it leaves the motor's accumulated impulse as it stands.
 *>
 extern fn void DistanceJointId.set_motor_speed(self, float motor_speed) @cname("b3DistanceJoint_SetMotorSpeed");
 
@@ -2296,15 +2341,12 @@ extern fn void DistanceJointId.set_motor_speed(self, float motor_speed) @cname("
 extern fn float DistanceJointId.motor_speed(self) @cname("b3DistanceJoint_GetMotorSpeed");
 
 <*
- Sets the largest force the motor may apply, in newtons. 0 on a joint built from a default
+ Sets the largest force the motor may apply, in newtons; 0 on a joint built from a default
  definition, which leaves an enabled motor unable to move anything. box3d holds the motor's
- accumulated impulse between this force scaled by the sub-step either way, so a motor asked for
- more speed than that force buys settles at exactly this reading.
-
- Unlike the revolute joint's setter of the same shape, which asserts the value is finite and
- non-negative, this one asserts nothing at all. It stores the ceiling and leaves the motor's
- accumulated impulse as it stands, so motor_force() reports the force from the last step until
- another one is taken under the new ceiling.
+ impulse between this force scaled by the sub-step, so a motor asked for more speed than it buys
+ settles at exactly this reading. Unlike the revolute joint's setter of the same shape it asserts
+ nothing, and it leaves the accumulated impulse alone, so motor_force() reports the last step's
+ force until another is taken under the new ceiling.
 *>
 extern fn void DistanceJointId.set_max_motor_force(self, float force) @cname("b3DistanceJoint_SetMaxMotorForce");
 
@@ -2314,47 +2356,29 @@ extern fn void DistanceJointId.set_max_motor_force(self, float force) @cname("b3
 extern fn float DistanceJointId.max_motor_force(self) @cname("b3DistanceJoint_GetMaxMotorForce");
 
 <*
- The force the motor applied over the last step, in newtons, bounded by max_motor_force() either
- way: a motor asked for more speed than its ceiling buys reads exactly that ceiling. Zero on a
- joint the solver has only ever taken the rigid branch for, whatever speed and ceiling the motor
- carries. That branch leaves the motor's impulse untouched rather than clearing it, so a joint
- driven while it was sprung goes on reporting the last force its motor applied once it is made
- rigid.
-
- This is the motor's own share, where the shared constraint_force() is the whole joint's: box3d
- sums the spring's impulse, the two limit impulses and the motor's once each and lays the total
- along the segment between the anchors. So the shared reading carries this force exactly once —
- not twice, the way the revolute joint's constraint_torque() carries its motor torque — and the
- two agree only while the spring and the limit contribute nothing. Against a working spring they
- disagree by however hard the spring pulls back, which is no fixed relation at all: a motor held
- at 100 newtons against a spring holding the joint on its rest length leaves constraint_force()
- reporting under 2.
+ The force the motor applied over the last step, in newtons, bounded by max_motor_force(). Zero on
+ a joint the solver has only ever taken the rigid branch for, though that branch leaves the
+ impulse untouched, so a joint driven while sprung goes on reporting its last force once made
+ rigid. This is the motor's own share where the shared constraint_force() is the whole joint's,
+ which carries it exactly once — not twice the way revolute's constraint_torque() does — and
+ agrees only while the spring and the limit contribute nothing.
 *>
 extern fn float DistanceJointId.motor_force(self) @cname("b3DistanceJoint_GetMotorForce");
 
 <*
- A joint known to be prismatic. box3d resolves every per-type accessor through a joint-type
- assertion this release build compiles out, so a prismatic accessor reaching a joint of another
- type reinterprets that joint's solver union instead: a getter hands back nonsense and a setter
- writes over the other type's state. The distinct handle moves that check to the one place the
- type is genuinely in question. A PrismaticJointId converts to a JointId on its own, so every
- shared joint accessor reaches it uncast; the way back is JointId.as_prismatic(), which checks.
+ A joint known to be prismatic, so its per-type accessors need no check at each call. It converts
+ to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_prismatic(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef PrismaticJointId = inline JointId;
 
 <*
- A prismatic joint definition. The joint lets body B slide along the x axis of local frame A and
- leaves it no rotation at all relative to body A — a slider, where the revolute joint is a hinge
- about z. The translation the joint measures is zero where the two local frame origins coincide
- in world space. An optional spring, limit and motor act along that one axis. Must come from
- default_prismatic_joint_def(), which zeroes every field it adds to the base: no spring, no
- limit, no motor, and hertz, damping_ratio and max_motor_force all 0 rather than the float::max
- thresholds the base defaults to. A default prismatic joint is a bare slider.
-
- The two translations are stored as the definition wrote them, where the revolute constructor
- swaps a reversed pair of angles into order: box3d asserts the pair is ordered instead, and this
- release build compiles that assertion out, so a definition whose lower translation is above its
- upper one is accepted and kept that way round.
+ A prismatic joint definition: a slider letting body B move along local frame A's x axis alone,
+ with an optional spring, limit and motor. The translation it measures is zero where the two local
+ frame origins coincide in world space. Must come from default_prismatic_joint_def(), which zeroes
+ what it adds to the base — hertz, damping_ratio and max_motor_force included, not the base's
+ float::max — so a default prismatic joint is a bare slider. The two translations are stored as
+ written: box3d asserts the pair is ordered, and that assertion is compiled out.
 *>
 struct PrismaticJointDef {
     inline JointDef base;
@@ -2427,16 +2451,11 @@ extern fn float PrismaticJointId.lower_limit(self) @cname("b3PrismaticJoint_GetL
 extern fn float PrismaticJointId.upper_limit(self) @cname("b3PrismaticJoint_GetUpperLimit");
 
 <*
- Sets the two translations in metres the limit holds the slider between. box3d takes the smaller
- of the pair as the lower and the larger as the upper, so a reversed pair is quietly corrected
- rather than refused — and it stops there: neither end is bounded, where the revolute joint's
- identically named set_limits clamps its swapped pair into [-0.99 pi, 0.99 pi] and the distance
- joint's set_length_range clamps both ends of its own. This is also where the setter and the
- constructor part company: PrismaticJointDef's two translations are stored as the definition
- wrote them, reversed pair and all, so the pair that stays reversed through construction comes
- back ordered through here. The limit acts only while enable_limit() is on. box3d asserts both
- values are finite; this package links a release build where that assertion is compiled out, and
- the wrappers do not restore it.
+ Sets the two translations in metres the limit holds the slider between, both asserted finite
+ under an assertion this build compiles out. box3d takes the smaller as the lower, so a reversed
+ pair is quietly corrected rather than refused, and it stops there — neither end is bounded, where
+ the revolute set_limits also clamps. This is where the setter and the constructor part company:
+ PrismaticJointDef stores its pair as written. The limit acts only while enable_limit() is on.
 *>
 extern fn void PrismaticJointId.set_limits(self, float lower, float upper) @cname("b3PrismaticJoint_SetLimits");
 
@@ -2479,18 +2498,12 @@ extern fn void PrismaticJointId.set_spring_damping_ratio(self, float damping_rat
 extern fn float PrismaticJointId.spring_damping_ratio(self) @cname("b3PrismaticJoint_GetSpringDampingRatio");
 
 <*
- Sets the spring's rest translation in metres along local frame A's x axis: the translation the
- spring pulls the slider toward while enable_spring() is on. The spring is the only thing box3d
- reads it for, and translation() in particular is not measured against it — translation() is the
- offset between the two local frame origins and carries no target term, so a slider a spring has
- settled on a target of 0.7 reads 0.7.
-
- The value is stored as handed and the limit, if it is on, still holds the slider inside its own
- pair, so a target outside that pair is pulled toward rather than reached. box3d asserts only
- that the value is finite, and PrismaticJointDef's target_translation goes through construction
- the same way — the two paths agree here, where the revolute joint's clamp their target angle in
- the constructor and leave it alone in the setter. This package links a release build where that
- assertion is compiled out, and the wrappers do not restore it.
+ Sets the spring's rest translation in metres along local frame A's x axis, the translation the
+ spring pulls the slider toward while enable_spring() is on. translation() is not measured against
+ it — that is the offset between the two local frame origins and carries no target term, so a
+ slider settled on a target of 0.7 reads 0.7. The value is stored as handed, and the limit if it
+ is on still holds the slider inside its own pair, so a target outside that pair is pulled toward
+ rather than reached. box3d's finiteness assertion is compiled out here.
 *>
 extern fn void PrismaticJointId.set_target_translation(self, float target_translation) @cname("b3PrismaticJoint_SetTargetTranslation");
 
@@ -2541,59 +2554,29 @@ extern fn void PrismaticJointId.set_max_motor_force(self, float force) @cname("b
 extern fn float PrismaticJointId.max_motor_force(self) @cname("b3PrismaticJoint_GetMaxMotorForce");
 
 <*
- The force the motor applied over the last step, in newtons, bounded by max_motor_force(). This is
- the honest reading: on this type the shared constraint_force() is wrong in both its direction and
- its magnitude, and the shared constraint_torque() is wrong in its direction as well.
-
- The force vector is a full cyclic permutation of its three components, not merely the axial term
- laid on the wrong axis. box3d assembles the joint-space impulse as the two perpendicular terms
- followed by the axial one, where local frame A's basis carries the axial term first, so every
- component lands one slot over: the transverse reaction the slider is really carrying comes back
- along the frame's x axis, which is the one direction the slider leaves free. On identity frames
- under gravity along -y, the whole of a hanging body's weight reads on world x.
-
- The magnitude is wrong whenever a limit opposes a motor or a spring. box3d adds the lower and the
- upper limit impulse where the joint's own warm start subtracts the upper from the lower, so an
- opposed pair sums instead of cancelling: a motor at a 25 newton ceiling driven into its own limit
- reports 50 newtons of constraint force while the body is stationary and the net axial force is
- zero. With no limit live the axial sum is honest, each impulse counted once rather than twice the
- way the revolute joint's constraint_torque() counts its own.
-
- The shared constraint_torque() is double-rotated. box3d accumulates this joint's angular impulse
- in world space and then rotates it by local frame A and again by body A's transform, a chain
- copied from the force accessor, which legitimately needs it. The magnitude survives; the direction
- does not, as soon as either body A or local frame A is off identity. The weld joint's torque
- applies no rotation and is right, so this is a bug in one type rather than a convention to carry
- across them.
+ The force the motor applied over the last step, in newtons, bounded by max_motor_force(), and the
+ only sound reading on this type. The shared constraint_force() permutes its components
+ cyclically, so the transverse reaction comes back along the frame's free x axis, and it adds an
+ opposed limit and motor where the solver subtracts them; the shared constraint_torque() is
+ rotated twice, so only its magnitude survives.
 *>
 extern fn float PrismaticJointId.motor_force(self) @cname("b3PrismaticJoint_GetMotorForce");
 
 <*
- A joint known to be a weld joint. box3d resolves every per-type accessor through a joint-type
- assertion this release build compiles out, so a weld accessor reaching a joint of another type
- reinterprets that joint's solver union instead: a getter hands back nonsense and a setter writes
- over the other type's state. The distinct handle moves that check to the one place the type is
- genuinely in question. A WeldJointId converts to a JointId on its own, so every shared joint
- accessor reaches it uncast; the way back is JointId.as_weld(), which checks.
+ A joint known to be a weld joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_weld(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef WeldJointId = inline JointId;
 
 <*
- A weld joint definition. The joint holds the two bodies at the relative transform their local
- frames describe, with one spring over the translation and another over the rotation. Must come
- from default_weld_joint_def(), which zeroes all four fields it adds to the base.
+ A weld joint definition: the two bodies held at the relative transform their local frames
+ describe, with one spring over the translation and another over the rotation. Must come from
+ default_weld_joint_def(), which zeroes all four fields it adds to the base.
 
- Zero hertz means rigid here rather than "no spring", which inverts the reading every other
- sprung joint type invites: box3d solves a channel with the joint's own constraint softness while
- its hertz is exactly 0 and builds a soft spring at any other value, so raising linear_hertz off 0
- makes the weld sag where raising a distance joint's hertz makes it firmer. The two channels are
- tested separately, so one may be rigid while the other is soft.
-
- box3d asserts all four fields are at or above 0 and this release build compiles that assertion
- out, so a negative or NaN value is stored verbatim. A negative hertz is where the two halves of
- the solver part company: the prepare step tests for exactly 0, so it builds a soft spring out of
- the negative value, while the solve's bias gate tests for above 0 and so does not engage that
- spring on its own.
+ Zero hertz means rigid here rather than "no spring", inverting the reading every other sprung
+ type invites — raising linear_hertz off 0 makes the weld sag — and the two channels are tested
+ separately. box3d's assertion that all four fields are at or above 0 is compiled out here.
 *>
 struct WeldJointDef {
     inline JointDef base;
@@ -2618,15 +2601,11 @@ extern fn JointId create_weld_joint_raw(
 <*
  Sets the stiffness in hertz of the spring over the two bodies' relative translation. 0 on a joint
  built from a default definition, where it asks for a rigid channel rather than an absent spring,
- as WeldJointDef describes. The value is stored as handed: nothing is clamped, and the joint's
- accumulated impulses stand rather than being discarded the way a prismatic joint's flags discard
- theirs.
+ as WeldJointDef describes. Nothing is clamped and the accumulated impulses stand.
 
- box3d asserts the value is finite and at or above 0, and this package links a release build where
- that assertion is compiled out. A negative value is where the two halves of the solver part
- company: the prepare step tests for exactly 0, so it builds a spring out of the negative number,
- while the solve engages that spring of its own accord only above 0 and otherwise leaves it to the
- passes that already carry bias.
+ box3d's assertion that the value is finite and non-negative is compiled out, and a negative
+ splits the solver: prepare tests for exactly 0 and builds a spring from it, while the solve
+ engages it only above 0.
 *>
 extern fn void WeldJointId.set_linear_hertz(self, float hertz) @cname("b3WeldJoint_SetLinearHertz");
 
@@ -2678,29 +2657,19 @@ extern fn void WeldJointId.set_angular_damping_ratio(self, float damping_ratio) 
 extern fn float WeldJointId.angular_damping_ratio(self) @cname("b3WeldJoint_GetAngularDampingRatio");
 
 <*
- A joint known to be a parallel joint. box3d resolves every per-type accessor through a
- joint-type assertion this release build compiles out, so a parallel accessor reaching a joint of
- another type reinterprets that joint's solver union instead: a getter hands back nonsense and a
- setter writes over the other type's state. The distinct handle moves that check to the one place
- the type is genuinely in question. A ParallelJointId converts to a JointId on its own, so every
- shared joint accessor reaches it uncast; the way back is JointId.as_parallel(), which checks.
+ A joint known to be a parallel joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_parallel(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef ParallelJointId = inline JointId;
 
 <*
- A parallel joint definition. The joint constrains the angle between the z axis of local frame A
- and the z axis of local frame B with a spring and holds nothing else — the two bodies are left
- free to translate and to spin about that shared axis — which is what keeps a body upright. Must
- come from default_parallel_joint_def(), which, unlike the prismatic and the weld default, zeroes
- nothing it adds to the base: hertz is 1, damping_ratio is 1 and max_torque is float::max. A
- default parallel joint is already sprung.
-
- The spring is gated on max_torque rather than merely bounded by it: box3d solves it only while
- the ceiling is above 0, so a max_torque of 0 stops the joint constraining anything at all.
-
- box3d asserts hertz, damping_ratio and max_torque are each a real number at or above 0 and this
- release build compiles that assertion out, so a negative or NaN value is stored verbatim and
- reaches the solver.
+ A parallel joint definition: a spring holding local frame A's z axis parallel to local frame B's
+ and holding nothing else, so the bodies stay free to translate and to spin about that axis —
+ which is what keeps a body upright. Must come from default_parallel_joint_def(), which unlike the
+ prismatic and weld defaults zeroes nothing it adds: hertz 1, damping_ratio 1, max_torque
+ float::max, so a default parallel joint is already sprung. The spring is gated on max_torque
+ rather than bounded by it, so a max_torque of 0 stops the joint constraining anything.
 *>
 struct ParallelJointDef {
     inline JointDef base;
@@ -2723,20 +2692,13 @@ extern fn JointId create_parallel_joint_raw(
 ) @cname("b3CreateParallelJoint") @private;
 
 <*
- Sets the spring's stiffness in hertz. 1 on a joint built from a default definition, where the weld
- joint's two are 0 — and 0 does not mean here what it means there: box3d's softness for a zero
- hertz carries a zero mass scale, so a parallel spring at 0 stops solving rather than going rigid,
- the way a max_torque of 0 does.
+ Sets the spring's stiffness in hertz, asserted finite and at or above 0 under an assertion this
+ build compiles out. 1 by default, and 0 means the opposite of the weld joint's: box3d's softness
+ for a zero hertz carries a zero mass scale, so a parallel spring at 0 stops solving, not goes rigid.
 
- That leaves the two frames free only on a joint set to 0 before it has accumulated an impulse.
- box3d's warm start re-applies the impulse the spring already holds every substep and is gated on
- neither the hertz nor the ceiling, while the zero mass scale stops that impulse ever being updated
- or decayed, so a joint silenced after it has been working goes on pushing the bodies with the
- impulse it was holding at the time.
-
- box3d asserts the value is finite and at or above 0, and this package links a release build where
- that assertion is compiled out. The value is stored as handed, nothing is clamped, and the
- spring's accumulated impulse stands.
+ That frees the frames only on a joint silenced before it accumulated an impulse — the warm start
+ re-applies the impulse the spring holds every substep, gated on neither hertz nor ceiling, so one
+ silenced after working goes on pushing with it.
 *>
 extern fn void ParallelJointId.set_spring_hertz(self, float hertz) @cname("b3ParallelJoint_SetSpringHertz");
 
@@ -2758,22 +2720,12 @@ extern fn void ParallelJointId.set_spring_damping_ratio(self, float damping_rati
 extern fn float ParallelJointId.spring_damping_ratio(self) @cname("b3ParallelJoint_GetSpringDampingRatio");
 
 <*
- Sets the ceiling in newton-metres on the torque the spring may apply: box3d bounds the spring's
- accumulated impulse to the time step times this value. float::max on a joint built from a default
- definition. The ceiling gates the constraint as well as bounding it, so set_max_torque(0) leaves
- the joint solving nothing at all — this joint holds nothing else. Upstream names the parameter a
- force; what it stores and everything that reads it is a torque.
-
- A joint set to 0 before it has accumulated an impulse leaves the two bodies turning freely; one
- silenced after it has been working does not. box3d's warm start re-applies the impulse the spring
- already holds every substep and is gated on neither the ceiling nor the hertz, while the gate on
- the solve stops that impulse ever being updated or decayed, so it goes on being applied unchanged
- for as long as the joint lives — measured, a body left spinning under a joint silenced this way is
- pushed off the rate it was turning at rather than holding it.
-
- box3d asserts the value is finite and at or above 0, and this package links a release build where
- that assertion is compiled out. The value is stored as handed, and the spring's accumulated
- impulse stands.
+ Sets the ceiling in newton-metres on the torque the spring may apply, asserted finite and at or
+ above 0 under an assertion this build compiles out. float::max by default. The ceiling gates the
+ constraint as well as bounding it, so set_max_torque(0) leaves the joint solving nothing at all.
+ Upstream names the parameter a force; what it stores and everything reading it is a torque.
+ Silencing a spring that has already worked does not undo the impulse it holds — see
+ set_spring_hertz.
 *>
 extern fn void ParallelJointId.set_max_torque(self, float torque) @cname("b3ParallelJoint_SetMaxTorque");
 
@@ -2784,31 +2736,19 @@ extern fn void ParallelJointId.set_max_torque(self, float torque) @cname("b3Para
 extern fn float ParallelJointId.max_torque(self) @cname("b3ParallelJoint_GetMaxTorque");
 
 <*
- A joint known to be a motor joint. box3d resolves every per-type accessor through a joint-type
- assertion this release build compiles out, so a motor accessor reaching a joint of another type
- reinterprets that joint's solver union instead: a getter hands back nonsense and a setter writes
- over the other type's state. The distinct handle moves that check to the one place the type is
- genuinely in question. A MotorJointId converts to a JointId on its own, so every shared joint
- accessor reaches it uncast; the way back is JointId.as_motor(), which checks.
+ A joint known to be a motor joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_motor(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef MotorJointId = inline JointId;
 
 <*
- A motor joint definition. The joint drives body B towards a relative linear and angular velocity
- and, separately, pulls it towards the transform the two local frames describe through a linear
- and an angular spring. Both velocities are whole Vec3 values rather than the single motor speed
- the joint types with one driven axis carry.
-
- This type has no enable flags at all. Each of its four channels is switched by its own ceiling
- instead: box3d solves the linear and the angular drive only while max_velocity_force and
- max_velocity_torque respectively are above 0, and each spring only while both its ceiling and its
- hertz are. So a ceiling of 0 is not a bound this joint never reaches — it is the channel turned
- off.
-
- Must come from default_motor_joint_def(), which zeroes every field it adds to the base. A
- default motor joint therefore drives and holds nothing until a ceiling is raised. The
- constructor copies all ten fields across verbatim: nothing here is validated, clamped or
- reordered on the way in.
+ A motor joint definition: body B driven towards a relative linear and angular velocity, and
+ pulled towards the transform the two local frames describe by a linear and an angular spring. The
+ type has no enable flags — each of the four channels is switched by its own ceiling, so a ceiling
+ of 0 is the channel turned off, and default_motor_joint_def(), which it must come from, zeroes
+ all of them. The constructor copies all ten fields verbatim: nothing is validated, clamped or
+ reordered.
 *>
 struct MotorJointDef {
     inline JointDef base;
@@ -2838,15 +2778,11 @@ extern fn JointId create_motor_joint_raw(
 
 <*
  Sets the velocity the joint drives body B towards relative to body A, in metres per second along
- the world axes. box3d subtracts this vector from the two bodies' relative velocity as it stands,
- rotating it into no frame and projecting it onto no axis, so a velocity of (1, 0, 0) drives along
- world x however the two local frames are turned.
-
- The drive acts only while max_velocity_force() is above 0. This joint type carries no enable flag
- of any kind, so that ceiling is the whole switch. box3d asserts nothing here — not finiteness,
- not a bound — and clamps nothing. The value is stored as handed and the drive's accumulated
- impulse is left standing rather than discarded, so a joint retargeted mid-run works towards the
- new velocity from the force it was already applying.
+ the world axes: box3d subtracts it from the bodies' relative velocity, rotating it into no frame
+ and projecting it onto no axis, so (1, 0, 0) drives along world x however the local frames are
+ turned. The drive acts only while max_velocity_force() is above 0, the whole switch on a type
+ with no enable flags. Nothing is asserted or clamped, and the drive's accumulated impulse stands,
+ so a joint retargeted mid-run works from the force it was already applying.
 *>
 extern fn void MotorJointId.set_linear_velocity(self, Vec3 velocity) @cname("b3MotorJoint_SetLinearVelocity");
 
@@ -2858,37 +2794,23 @@ extern fn void MotorJointId.set_linear_velocity(self, Vec3 velocity) @cname("b3M
 extern fn Vec3 MotorJointId.linear_velocity(self) @cname("b3MotorJoint_GetLinearVelocity");
 
 <*
- Sets the ceiling in newtons on the force the linear drive may apply. It is the drive's switch as
- well as its bound: box3d solves the linear drive only while this is above 0, so a joint whose
- ceiling is 0 — which is what a default definition gives it — drives nothing at all whatever
- linear_velocity() asks for, rather than driving weakly. A negative ceiling silences it the same
- way.
-
- Dropping a ceiling on a channel that has already been working does not undo what it holds.
- box3d's warm start re-applies all four of this joint's accumulated impulses every substep and is
- gated on nothing, while these gates stop those impulses ever being updated again, so a silenced
- channel goes on applying what it last held for as long as the joint lives — measured on the
- linear spring, a body it was holding against gravity stays exactly where it was for as long
- again after the ceiling is dropped to 0, where the same body under a spring whose ceiling was
- never raised falls freely.
-
- box3d asserts nothing here and clamps nothing: a negative ceiling is stored as handed and reads
- back negative. The two spring ceilings on this same joint do floor at 0, so the four ceilings are
- not one contract.
+ Sets the ceiling in newtons on the force the linear drive may apply — the drive's switch as well
+ as its bound, since box3d solves it only while this is above 0. So a ceiling of 0, which is a
+ default definition's, drives nothing at all rather than driving weakly, and a negative silences
+ it the same way. Dropping a ceiling on a channel that has already worked does not undo the
+ impulse it holds: the warm start re-applies it every substep, gated on nothing. Nothing is
+ asserted or clamped here, where this joint's two spring ceilings do floor at 0.
 *>
 extern fn void MotorJointId.set_max_velocity_force(self, float force) @cname("b3MotorJoint_SetMaxVelocityForce");
 
 <*
  The ceiling in newtons on the force the linear drive may apply, and the switch deciding whether
- the drive is solved at all — see set_max_velocity_force. 0 on a joint built from a default
- definition, and otherwise whatever was stored, negatives included.
+ the drive is solved at all — see set_max_velocity_force. 0 on a default definition, and otherwise
+ whatever was stored, negatives included.
 
- This joint type has no force getter of its own, and the shared JointId.constraint_force() is a
- sound reading for it: box3d divides the sum of the linear drive's and the linear spring's
- accumulated impulses by the sub-step, each counted once, so it reports the whole linear force the
- joint applied over the last step with neither the double count the revolute joint's shared torque
- carries nor an axis permutation. With one of the two linear channels silent it is the other
- channel's force alone, bounded by that channel's ceiling.
+ The shared JointId.constraint_force() is sound here, this type having no force getter of its own:
+ box3d divides the summed drive and spring impulses by the sub-step, each counted once, with
+ neither a double count nor a permutation. With one channel silent it is the other's alone.
 *>
 extern fn float MotorJointId.max_velocity_force(self) @cname("b3MotorJoint_GetMaxVelocityForce");
 
@@ -2925,24 +2847,19 @@ extern fn void MotorJointId.set_max_velocity_torque(self, float torque) @cname("
  whether that drive is solved at all — see set_max_velocity_torque. 0 on a joint built from a
  default definition, and otherwise whatever was stored, negatives included.
 
- This joint type has no torque getter of its own, and the shared JointId.constraint_torque() is a
- sound reading for it: box3d divides the sum of the angular drive's and the angular spring's
- accumulated impulses by the sub-step, each counted once, so it reports the whole torque the joint
- applied over the last step. With one of the two angular channels silent it is the other channel's
- torque alone, bounded by that channel's ceiling.
+ This type has no torque getter of its own, and the shared JointId.constraint_torque() is sound
+ here: box3d divides the summed angular drive and spring impulses by the sub-step, each counted
+ once. With one channel silent it is the other's alone.
 *>
 extern fn float MotorJointId.max_velocity_torque(self) @cname("b3MotorJoint_GetMaxVelocityTorque");
 
 <*
- Sets the linear spring's stiffness in hertz. The spring pulls the origin of local frame B onto the
- origin of local frame A, and box3d solves it only while this and max_spring_force() are both above
- 0 — either one at 0 silences it, and both are 0 on a joint built from a default definition. So
- this is half a switch and not only a stiffness. A negative stiffness silences the spring the same
- way 0 does.
-
- Stiffness and damping are turned into solver coefficients at the top of each step, so a change
- lands on the next step rather than the one in progress. box3d asserts nothing here and clamps
- nothing; the value is stored as handed and the spring's accumulated impulse stands.
+ Sets the linear spring's stiffness in hertz. The spring pulls local frame B's origin onto local
+ frame A's, and box3d solves it only while this and max_spring_force() are both above 0 — either
+ at 0 silences it, both are 0 on a default definition, and a negative silences it as 0 does — so
+ this is half a switch and not only a stiffness. Stiffness and damping become solver coefficients
+ at the top of each step, so a change lands on the next step, not the one in progress. Nothing is
+ asserted or clamped.
 *>
 extern fn void MotorJointId.set_linear_hertz(self, float hertz) @cname("b3MotorJoint_SetLinearHertz");
 
@@ -2967,17 +2884,11 @@ extern fn float MotorJointId.linear_damping_ratio(self) @cname("b3MotorJoint_Get
 
 <*
  Sets the ceiling in newtons on the force the linear spring may apply, and the other half of that
- spring's switch: box3d solves the linear spring only while this and linear_hertz() are both above
- 0, so a ceiling of 0 — what a default definition gives it — leaves the spring holding nothing
- however stiff it is.
-
- This ceiling floors at 0, where the two velocity ceilings on the same joint store a negative as
- handed: a negative force here reads back as exactly 0. The floor belongs to the setter alone —
- construction copies MotorJointDef's ten fields across verbatim, so a definition asking for a
- negative ceiling builds a joint reporting one, which this setter cannot produce.
-
- Silencing a working spring by dropping this to 0 leaves the impulse it holds standing, for the
- reason set_max_velocity_force gives. box3d asserts nothing here.
+ spring's switch: box3d solves it only while this and linear_hertz() are both above 0, so a
+ ceiling of 0 — a default definition's — leaves the spring holding nothing. This one floors at 0
+ where the joint's two velocity ceilings store a negative as handed, so only construction can
+ leave this joint reporting a negative. Silencing a working spring by dropping the ceiling leaves
+ the impulse it holds standing — see set_max_velocity_force.
 *>
 extern fn void MotorJointId.set_max_spring_force(self, float force) @cname("b3MotorJoint_SetMaxSpringForce");
 
@@ -3020,14 +2931,10 @@ extern fn float MotorJointId.angular_damping_ratio(self) @cname("b3MotorJoint_Ge
 
 <*
  Sets the ceiling in newton-metres on the torque the angular spring may apply, and the other half
- of that spring's switch: box3d solves the angular spring only while this and angular_hertz() are
- both above 0, so a ceiling of 0 — what a default definition gives it — leaves the spring turning
- nothing however stiff it is.
-
- Like max_spring_force and unlike the two velocity ceilings, this one floors at 0: a negative
- torque reads back as exactly 0, and only a definition can leave this joint reporting a negative
- one. Silencing a working spring by dropping the ceiling leaves the impulse it holds standing, for
- the reason set_max_velocity_force gives. box3d asserts nothing here.
+ of that spring's switch: box3d solves it only while this and angular_hertz() are both above 0, so
+ a ceiling of 0 — a default definition's — leaves the spring turning nothing. Like
+ max_spring_force it floors at 0, so only construction can leave this joint reporting a negative
+ one, and silencing a working spring by dropping the ceiling leaves the impulse it holds standing.
 *>
 extern fn void MotorJointId.set_max_spring_torque(self, float torque) @cname("b3MotorJoint_SetMaxSpringTorque");
 
@@ -3041,39 +2948,19 @@ extern fn void MotorJointId.set_max_spring_torque(self, float torque) @cname("b3
 extern fn float MotorJointId.max_spring_torque(self) @cname("b3MotorJoint_GetMaxSpringTorque");
 
 <*
- A joint known to be a spherical joint. box3d resolves every per-type accessor through a
- joint-type assertion this release build compiles out, so a spherical accessor reaching a joint of
- another type reinterprets that joint's solver union instead: a getter hands back nonsense and a
- setter writes over the other type's state. The distinct handle moves that check to the one place
- the type is genuinely in question. A SphericalJointId converts to a JointId on its own, so every
- shared joint accessor reaches it uncast; the way back is JointId.as_spherical(), which checks.
+ A joint known to be a spherical joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_spherical(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef SphericalJointId = inline JointId;
 
 <*
- A spherical joint definition. The joint pins the origin of local frame B to the origin of local
- frame A and leaves the orientation about that point free — a ball and socket. An optional cone
- limit bounds how far the two frames may swing apart, an optional twist limit bounds the rotation
- between them, an optional spring turns frame B towards target_rotation, and an optional motor
- drives their relative angular velocity, which is a whole Vec3 rather than a single speed.
-
- Both limited angles are measured from the two frames' relative ORIENTATION and never from
- position, which is the opposite of what this joint's name suggests. box3d builds each from body
- A's rotation composed with local frame A's, compared against body B's the same way, and the
- bodies' positions enter neither. So swinging a spherical joint as a pendulum leaves the cone and
- twist angles at exactly 0 however far the bodies travel, and only rotating a body moves them.
-
- Must come from default_spherical_joint_def(), which zeroes every field it adds to the base
- except target_rotation, which is the identity quaternion (0, 0, 0, 1) rather than the zero a
- reader scanning the rest of the default would expect. A default spherical joint is a bare ball
- and socket: no spring, no limit, no motor.
-
- Three fields are silently corrected on the way in. The constructor clamps cone_angle to
- [0, pi/2], half the range this type's own prose gives the field, and it swaps the two twist
- angles into order before clamping each to ±0.99 pi. box3d also asserts a cone angle within
- [0, 0.99 pi] and a valid target_rotation, both under assertions this release build compiles out,
- so an out-of-range angle is silently clamped rather than caught and a target_rotation that is
- not a unit quaternion is stored and solved against as handed.
+ A spherical joint definition: local frame B's origin pinned to local frame A's, the orientation
+ about it bounded only by an optional cone limit, twist limit, spring and motor. Both limited
+ angles measure the frames' relative orientation, never position, so a pendulum swing leaves them
+ at 0. Must come from default_spherical_joint_def(), which zeroes what it adds except
+ target_rotation, the identity quaternion. The constructor clamps cone_angle into [0, pi/2] — half
+ the range the field's prose gives — and orders the twist pair before clamping each to ±0.99 pi.
 *>
 struct SphericalJointDef {
     inline JointDef base;
@@ -3118,14 +3005,12 @@ extern fn void SphericalJointId.enable_cone_limit(self, bool enable_limit) @cnam
 extern fn bool SphericalJointId.is_cone_limit_enabled(self) @cname("b3SphericalJoint_IsConeLimitEnabled");
 
 <*
- Sets the angle in radians the cone limit holds the two frames' z axes within. box3d stores it
- exactly as handed and clamps nothing, where the constructor clamps SphericalJointDef's cone_angle
- into [0, pi/2]: an angle a definition asks for comes back narrowed and the same angle asked for
- here does not, so the two paths reach the solver with different cones. box3d asserts the value is
- finite and within [0, pi/2], an assertion this release build compiles out and the wrappers do not
- restore, so a negative angle or one past pi/2 reaches the solver through this call and through no
- other. The limit acts only while is_cone_limit_enabled() is on, and setting it leaves the impulse
- the cone had accumulated standing.
+ Sets the angle in radians the cone limit holds the two frames' z axes within. box3d stores it as
+ handed and clamps nothing, where the constructor clamps SphericalJointDef's cone_angle into [0,
+ pi/2], so the two paths reach the solver with different cones. Its assertion that the value is
+ finite and within [0, pi/2] is compiled out here, so a negative angle or one past pi/2 reaches
+ the solver through this call and no other. The limit acts only while is_cone_limit_enabled() is
+ on, and setting it leaves the cone's accumulated impulse standing.
 *>
 extern fn void SphericalJointId.set_cone_limit(self, float angle_radians) @cname("b3SphericalJoint_SetConeLimit");
 
@@ -3139,10 +3024,9 @@ extern fn float SphericalJointId.cone_limit(self) @cname("b3SphericalJoint_GetCo
 
 <*
  The current angle in radians between local frame A's z axis and local frame B's, kept in [0, pi].
- It is read from the two frames' relative orientation and never from the bodies' positions, in the
- way SphericalJointDef describes, so carrying the bodies anywhere leaves it where it was and only
- turning one moves it. It is measured whether or not the cone limit is enabled, and against the
- frames' current alignment rather than against cone_limit().
+ Read from the frames' relative orientation and never from the bodies' positions, as
+ SphericalJointDef describes. It is reported whether or not the cone limit is enabled, and against
+ the frames' current alignment rather than against cone_limit().
 *>
 extern fn float SphericalJointId.cone_angle(self) @cname("b3SphericalJoint_GetConeAngle");
 
@@ -3176,23 +3060,18 @@ extern fn float SphericalJointId.upper_twist_limit(self) @cname("b3SphericalJoin
 <*
  Sets the two angles in radians the twist limit holds the rotation about the frames' z axis
  between. box3d takes the smaller of the pair as the lower and the larger as the upper, so a
- reversed pair is quietly corrected rather than refused, and then clamps both ends into
- [-0.99 pi, 0.99 pi]. The constructor swaps and clamps the definition's pair the same way, so a
- twist limit arrives the same however it was asked for. box3d asserts only that both values are
- finite — their order and their range it corrects instead; that assertion is compiled out of this
- release build and the wrappers do not restore it. The limit acts only while
- is_twist_limit_enabled() is on, and setting it leaves the impulses the limit had accumulated
- standing.
+ reversed pair is quietly corrected rather than refused, and then clamps both into [-0.99 pi, 0.99
+ pi] — the same correction the constructor applies, so a twist limit arrives the same however it
+ was asked for. Its finiteness assertion is compiled out here. The limit acts only while
+ is_twist_limit_enabled() is on, and setting it leaves the accumulated impulses standing.
 *>
 extern fn void SphericalJointId.set_twist_limits(self, float lower_radians, float upper_radians) @cname("b3SphericalJoint_SetTwistLimits");
 
 <*
  The current rotation in radians of local frame B about the frames' shared z axis, kept in
- [-pi, pi]. It is read from the two frames' relative orientation and never from the bodies'
- positions, in the way SphericalJointDef describes, so carrying the bodies anywhere leaves it
- where it was and only turning one moves it. It is measured whether or not the twist limit is
- enabled, and against the frames' current alignment rather than against the pair
- lower_twist_limit() and upper_twist_limit() report.
+ [-pi, pi]. Read from the frames' relative orientation and never from the bodies' positions, as
+ SphericalJointDef describes. It is reported whether or not the twist limit is enabled, and against
+ the frames' current alignment rather than against the twist limit pair.
 *>
 extern fn float SphericalJointId.twist_angle(self) @cname("b3SphericalJoint_GetTwistAngle");
 
@@ -3239,15 +3118,11 @@ extern fn float SphericalJointId.spring_damping_ratio(self) @cname("b3SphericalJ
 <*
  Sets the rotation of local frame B relative to local frame A the spring turns towards while
  is_spring_enabled() is on. The spring is the only thing box3d reads it for: cone_angle() and
- twist_angle() are measured against the frames' current alignment and carry no target term, so a
- ball a spring has settled on its target still reports the angles that alignment gives.
+ twist_angle() are measured against the frames' current alignment and carry no target term.
 
- box3d stores the quaternion exactly as handed. It asserts only that the quaternion is valid — an
- assertion this release build compiles out and the wrappers do not restore — and it neither
- normalises nor corrects, so a target that is not a unit quaternion is stored and solved against as
- given. The constructor copies a definition's target_rotation under the same compiled-out
- assertion and normalises no more than this does, so unlike this type's cone angle the two paths
- agree on what they keep.
+ box3d stores the quaternion as handed and neither normalises nor corrects it — its validity
+ assertion is compiled out here — so a target that is not a unit quaternion is solved against as
+ given, through this call and through the constructor alike.
 *>
 extern fn void SphericalJointId.set_target_rotation(self, Quat target_rotation) @cname("b3SphericalJoint_SetTargetRotation");
 
@@ -3259,13 +3134,12 @@ extern fn void SphericalJointId.set_target_rotation(self, Quat target_rotation) 
 extern fn Quat SphericalJointId.target_rotation(self) @cname("b3SphericalJoint_GetTargetRotation");
 
 <*
- Enables or disables this joint's motor. This flag is the gate box3d's motor solve itself tests. A
- change to it discards the motor's accumulated impulse, so motor_torque() reads zero from the call
- onward rather than the torque the motor was applying before, and box3d's warm start — which
- re-applies that impulse every sub-step whether the motor is enabled or not — is left with nothing
- to re-apply, so a motor switched off releases body B rather than going on pushing it. A
- max_motor_torque() of 0 releases it too, by way of the clamp inside that solve rather than by
- skipping it. box3d asserts nothing here.
+ Enables or disables this joint's motor; this flag is the gate box3d's motor solve itself tests. A
+ change discards the motor's accumulated impulse, so motor_torque() reads zero from the call
+ onward and box3d's warm start — which re-applies that impulse every sub-step whether the motor is
+ enabled or not — is left with nothing to re-apply, so a motor switched off releases body B rather
+ than going on pushing it. A max_motor_torque() of 0 releases it too, by the clamp inside that
+ solve rather than by skipping it.
 *>
 extern fn void SphericalJointId.enable_motor(self, bool enable_motor) @cname("b3SphericalJoint_EnableMotor");
 
@@ -3276,17 +3150,11 @@ extern fn bool SphericalJointId.is_motor_enabled(self) @cname("b3SphericalJoint_
 
 <*
  Sets the angular velocity in radians per second the motor drives body B towards relative to body
- A, about the world axes. box3d subtracts this vector from the difference of the two bodies'
- angular velocities, rotating it into no frame and projecting it onto no axis, so a velocity of
- (0, 0, 1) turns body B about world z however the two local frames are turned — where this same
- joint's cone_angle() and twist_angle() are read from those frames. It is a target the motor
- pursues only as far as max_motor_torque() lets it, not a velocity body B is made to hold.
-
- box3d asserts only that the vector is finite, an assertion this release build compiles out and
- the wrappers do not restore. The value is stored as handed and the motor's accumulated impulse is
- left standing rather than discarded, so a motor retargeted mid-run works towards the new velocity
- from the torque it was already applying. The constructor copies a definition's motor_velocity the
- same way.
+ A, about the world axes, asserted finite under an assertion this build compiles out. box3d
+ subtracts it from the difference of the two bodies' angular velocities, rotating it into no frame
+ and projecting it onto no axis, so (0, 0, 1) turns body B about world z however the local frames
+ are turned. A target the motor pursues only as far as max_motor_torque() lets it, leaving the
+ motor's accumulated impulse standing.
 *>
 extern fn void SphericalJointId.set_motor_velocity(self, Vec3 motor_velocity) @cname("b3SphericalJoint_SetMotorVelocity");
 
@@ -3298,44 +3166,23 @@ extern fn void SphericalJointId.set_motor_velocity(self, Vec3 motor_velocity) @c
 extern fn Vec3 SphericalJointId.motor_velocity(self) @cname("b3SphericalJoint_GetMotorVelocity");
 
 <*
- The torque the motor applied over the last step, in newton-metres about the world axes. It is a
- whole vector, not the single number the revolute joint's motor_torque() reports, because this
- motor drives all three rotational degrees of freedom at once rather than one hinge axis: box3d
- divides the motor's accumulated angular impulse vector by the sub-step, and the components are
- that vector's, about world x, y and z. It is the length of the vector that max_motor_torque()
- bounds, not any single component.
+ The torque the motor applied over the last step, in newton-metres about the world axes — a whole
+ vector because this motor drives all three rotational degrees of freedom, and max_motor_torque()
+ bounds its length rather than any one component.
 
- This is the motor's own share, and it is the honest reading of the two available. The shared
- constraint_torque() sums this vector with the spring's and with the two limits' along axes it
- recomputes from the bodies' current rotations, so on a joint whose spring and limits are all
- silent the two accessors report the same vector, and on one whose spring is working the shared
- accessor is their sum with neither counted twice and no axis permuted. The two limits are what
- break it, and each breaks it in its own way. The cone's impulse enters that sum with the sign
- opposite to the one box3d applies it with, so a cone holding a motor still means the two torques
- add there instead of cancelling, and the shared accessor reports twice what the motor is applying
- rather than the nothing the two come to. The twist's impulse is laid along local frame B's z
- axis, where the solve and the warm start drive it along a jacobian box3d builds instead from
- local frame A's cone axis and the swing between the two frames. Those two are the same vector
- only while the swing angle is 0, which is why a joint that only twists reads correctly. So a ball
- that is both swung and twisted is wrong on the twist channel as well as on the cone, by no fixed
- factor: correcting the cone's sign alone would still not make the shared reading the joint's.
+ It is the honest reading of the two. The shared constraint_torque() sums it with the spring's and
+ the limits', agreeing while both limits are silent; but the cone's impulse enters that sum with
+ its sign reversed, and the twist's along the wrong axis unless the swing angle is 0.
 *>
 extern fn Vec3 SphericalJointId.motor_torque(self) @cname("b3SphericalJoint_GetMotorTorque");
 
 <*
- Sets the largest torque in newton-metres the motor may apply. It bounds the length of the motor's
- angular impulse rather than any one component of it, so it is a ceiling on the whole three-axis
- torque motor_torque() reports. 0 on a joint built from a default definition, which leaves an
- enabled motor unable to turn anything, and dropping it to 0 on a motor that has been working
- releases what that motor was holding rather than leaving it standing.
-
- box3d asserts the value is finite and non-negative, an assertion this release build compiles out
- and the wrappers do not restore, and it stores the value as handed without flooring it — the
- constructor copies a definition's max_motor_torque the same way, so a negative ceiling is
- reachable through either path. A negative one is not read as zero: box3d rescales the motor's
- impulse by the ratio of the ceiling to that impulse's own length, so the negative sign reverses
- the impulse and the motor drives body B away from motor_velocity() at the ceiling's magnitude,
- accelerating past that velocity instead of settling on it.
+ Sets the largest torque in newton-metres the motor may apply, bounding the length of the motor's
+ angular impulse rather than any one component. 0 on a default definition, which leaves an enabled
+ motor unable to turn anything, and dropping it to 0 on a working motor releases what it held. The
+ value is stored as handed and never floored — the finite, non-negative assertion is compiled out
+ — and a negative is not read as zero: the rescale reverses the impulse, driving body B away from
+ motor_velocity() at the ceiling's magnitude.
 *>
 extern fn void SphericalJointId.set_max_motor_torque(self, float torque) @cname("b3SphericalJoint_SetMaxMotorTorque");
 
@@ -3346,38 +3193,19 @@ extern fn void SphericalJointId.set_max_motor_torque(self, float torque) @cname(
 extern fn float SphericalJointId.max_motor_torque(self) @cname("b3SphericalJoint_GetMaxMotorTorque");
 
 <*
- A joint known to be a wheel joint. box3d resolves every per-type accessor through a joint-type
- assertion this release build compiles out, so a wheel accessor reaching a joint of another type
- reinterprets that joint's solver union instead: a getter hands back nonsense and a setter writes
- over the other type's state. The distinct handle moves that check to the one place the type is
- genuinely in question. A WheelJointId converts to a JointId on its own, so every shared joint
- accessor reaches it uncast; the way back is JointId.as_wheel(), which checks.
+ A joint known to be a wheel joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_wheel(), which checks — see there for what a wrong-typed accessor does.
 *>
 typedef WheelJointId = inline JointId;
 
 <*
- A wheel joint definition. Body A is the chassis and body B is the wheel: the wheel spins about
- local frame B's z axis, its suspension travels along local frame A's x axis, and its steering
- turns about that same x axis of frame A. Three channels, each with its own enable flag and its
- own optional limit — a suspension spring, a spin motor, and a steering spring.
-
- Must come from default_wheel_joint_def(), and that default is the only joint definition in this
- package that hands back an enable flag already set. enable_suspension_spring is true, with
- suspension_hertz 1 and suspension_damping_ratio 0.7, and steering_hertz 1 and
- steering_damping_ratio 0.7 sit alongside them. So a wheel arrives already sprung along its
- suspension axis where every other joint type arrives inert. The other twelve fields are zero or
- false, which leaves the spin motor, the steering and both limits off until the definition turns
- them on — the steering spring is tuned but not solved at all until enable_steering is set.
-
- spin_speed is what this definition calls the speed the spin motor drives at, while the accessors
- for the same quantity are set_spin_motor_speed() and spin_motor_speed(). box3d names the field
- and the accessors differently and each side of the binding follows its own name, so a reader
- expecting the two to agree is reading two different names for one value.
-
- The shared JointId.angular_separation() reports nothing meaningful on a joint of this type.
- box3d's switch over the joint types carries no implementation for the wheel case — only an
- assertion this release build compiles out and a bare return of 0 — so it reads 0 on every wheel
- joint because that code was never written, not because the joint is aligned.
+ A wheel joint definition. Body A is the chassis and body B the wheel: it spins about local frame
+ B's z axis, its suspension travels along local frame A's x axis, and its steering turns about
+ that same axis. Must come from default_wheel_joint_def(), the only default here arriving with an
+ enable flag set — enable_suspension_spring at hertz 1 and damping 0.7 — so a wheel is already
+ sprung, where the steering carries the same pair unsolved until enable_steering is set.
+ angular_separation() returns 0 on every wheel joint because box3d never wrote that case.
 *>
 struct WheelJointDef {
     inline JointDef base;
@@ -3484,19 +3312,11 @@ extern fn float WheelJointId.upper_suspension_limit(self) @cname("b3WheelJoint_G
 
 <*
  Sets the two travels in metres the limit holds the wheel between, along local frame A's x axis.
- box3d neither orders the pair nor bounds it: both values are stored exactly as handed, so a
- reversed pair stays reversed and a travel far outside anything the wheel can reach stays where it
- was put. That is this family's sixth contract and the first to do neither — the revolute joint's
- set_limits swaps its pair and then clamps it into [-0.99 pi, 0.99 pi], the prismatic joint's
- swaps without clamping, and the distance joint's set_length_range does both. box3d asserts the
- lower is no greater than the upper; this package links a release build where that assertion is
- compiled out, and the wrappers do not restore it. WheelJointDef's pair reaches the solver the
- same way under the same compiled-out assertion, so the two paths agree.
-
- A call that changes either value discards both of the limit's accumulated impulses; a call that
- changes neither discards nothing. Its sibling set_steering_limits discards nothing on any call.
-
- The limit acts only while is_suspension_limit_enabled() is on.
+ box3d neither orders the pair nor bounds it: both values are stored as handed, so a reversed pair
+ stays reversed and a travel far outside anything the wheel can reach stays where it was put. Its
+ assertion that the lower is no greater than the upper is compiled out here, and WheelJointDef's
+ pair reaches the solver the same way. A call that changes either value discards both of the
+ limit's accumulated impulses. The limit acts only while is_suspension_limit_enabled() is on.
 *>
 extern fn void WheelJointId.set_suspension_limits(self, float lower, float upper) @cname("b3WheelJoint_SetSuspensionLimits");
 
@@ -3516,9 +3336,8 @@ extern fn bool WheelJointId.is_spin_motor_enabled(self) @cname("b3WheelJoint_IsS
  Sets the speed the spin motor drives the wheel at, in radians per second about local frame B's z
  axis. It is a target the motor pursues only as far as max_spin_torque() lets it, not a speed the
  wheel is made to hold, and a negative speed turns it the other way. box3d asserts nothing here
- and stores the value verbatim. WheelJointDef carries this same value under the name spin_speed,
- which its own docstring describes, and the rate the wheel is actually turning at is spin_speed() —
- a third name over two quantities, and the collision is box3d's rather than the binding's.
+ and stores the value verbatim. spin_speed() is the rate the wheel is actually turning at, not this
+ target, and WheelJointDef spells the target spin_speed as well — three names over two quantities.
 *>
 extern fn void WheelJointId.set_spin_motor_speed(self, float speed) @cname("b3WheelJoint_SetSpinMotorSpeed");
 
@@ -3553,41 +3372,23 @@ extern fn float WheelJointId.max_spin_torque(self) @cname("b3WheelJoint_GetMaxSp
 extern fn float WheelJointId.spin_speed(self) @cname("b3WheelJoint_GetSpinSpeed");
 
 <*
- The spin channel's accumulated impulse divided by the last sub-step, in newton-metres,
- saturating at max_spin_torque() and signed about local frame B's z axis.
+ The spin channel's accumulated impulse divided by the last sub-step, in newton-metres, saturating
+ at max_spin_torque() and signed about local frame B's z axis.
 
- It is the torque the motor is applying only while steering is enabled. With steering off — the
- default — box3d applies the spin impulse twice: its warm start seeds the joint's angular impulse
- with that impulse along local frame A's z axis and the steering-off branch then adds the same
- impulse again along the spin axis, which is local frame B's, where the steering-on branch assigns
- over the seed instead. What the solve settles on is the correction for that over-application, and
- the reading is not a torque at all. Measured on an unloaded wheel turning at exactly two radians
- a second: it moves with a ceiling the wheel never comes near, -785.4 at a max_spin_torque() of
- 100000 against -214.6 at 500, and it doubles when the sub-step count doubles, which no torque
- does; the same motion with steering enabled reports 0.
-
- constraint_torque() carries this same impulse and nothing else — box3d leaves the steering
- channel and the constraint holding the spin axis in place out of it entirely — laid along local
- frame A's z axis rather than the spin axis, which is local frame B's; the two coincide only while
- the frames agree about that axis, and where they do the two readings are equal and carry the same
- over-application. constraint_force() is further out: its three components are a cyclic
- permutation of the channels they belong to, in the way the prismatic joint's are, and its axial
- term adds the stored lower_suspension_limit() — a travel, not an impulse — to the upper limit's
- impulse and the spring's, so a joint whose lower travel is set to anything but zero reports a
- force that moves with a number measuring no force at all.
+ It is a torque only while steering is enabled. With steering off — the default — box3d applies
+ the spin impulse twice and this reports the correction for that, a number moving with the ceiling
+ and doubling with the sub-step count. constraint_torque() lays the same impulse on frame A's z
+ axis instead, and constraint_force() is wrong twice over — see there.
 *>
 extern fn float WheelJointId.spin_torque(self) @cname("b3WheelJoint_GetSpinTorque");
 
 <*
  Enables or disables this joint's steering, which frees the wheel to turn about local frame A's x
- axis — the suspension axis — and hands that turn to the steering spring. While it is off box3d
- drives the two bodies' relative rotation about frame A's x and y axes to zero with a second
- alignment row instead, which pins the steering angle itself at zero and leaves only the spin
- free, so the wheel cannot steer at all: an angle already turned is driven back to zero over the
- following steps. A change to the flag discards the alignment rows' accumulated impulse and
- nothing else: the steering spring's impulse and the steering limit's two survive it, and because
- none of the three is solved at all while this is off, steering_torque() goes on reporting the
- last impulse the spring took rather than zero. box3d asserts nothing here.
+ axis. While it is off box3d pins the steering angle at zero with an alignment row instead, so the
+ wheel cannot steer at all and an angle already turned is driven back over the following steps. A
+ change to the flag discards the alignment rows' accumulated impulse and nothing else: the
+ spring's and the limit's two survive, and since none of the three is solved while this is off,
+ steering_torque() goes on reporting the spring's last impulse.
 *>
 extern fn void WheelJointId.enable_steering(self, bool enable_steering) @cname("b3WheelJoint_EnableSteering");
 
@@ -3643,12 +3444,11 @@ extern fn float WheelJointId.max_steering_torque(self) @cname("b3WheelJoint_GetM
 
 <*
  Enables or disables this joint's steering limit, which bounds the steering angle to
- lower_steering_limit() and upper_steering_limit(). A change to the flag discards both of the
- limit's accumulated impulses, so a limit switched back on rebuilds its hold over the following
- steps rather than resuming the one it had. box3d reaches this limit only inside the branch it
- solves the steering spring in, so it does nothing whatever while is_steering_enabled() is false —
- where the suspension limit is solved whether or not its own spring is enabled. box3d asserts
- nothing here.
+ lower_steering_limit() and upper_steering_limit(). A change discards both of the limit's
+ accumulated impulses, so a limit switched back on rebuilds its hold over the following steps.
+ box3d reaches this limit only inside the branch it solves the steering spring in, so it does
+ nothing at all while is_steering_enabled() is false — where the suspension limit is solved
+ whether or not its own spring is enabled.
 *>
 extern fn void WheelJointId.enable_steering_limit(self, bool enable_limit) @cname("b3WheelJoint_EnableSteeringLimit");
 
@@ -3675,31 +3475,21 @@ extern fn float WheelJointId.upper_steering_limit(self) @cname("b3WheelJoint_Get
 
 <*
  Sets the two angles in radians the limit holds the steering between, about local frame A's x
- axis. box3d neither orders the pair nor bounds it: both values are stored exactly as handed, so a
- reversed pair stays reversed and an angle well beyond a half turn stays where it was put. The
- revolute joint's set_limits swaps its pair and then clamps it into [-0.99 pi, 0.99 pi], the
- prismatic joint's swaps without clamping, and the distance joint's set_length_range does both.
- box3d asserts here that the lower is no greater than the upper, and this package links a release
- build where that assertion is compiled out; the constructor does not assert even that, its one
- ordering assertion covering the suspension pair alone, so a definition's steering pair is stored
- as handed with nothing checking it on any build.
-
- It discards no impulse on any call, whatever it changes. Its sibling set_suspension_limits
- discards both of the suspension limit's impulses on a call that changes either value — two
- setters on one type and one family, parting company here.
-
- The limit acts only while is_steering_limit_enabled() and is_steering_enabled() are both on.
+ axis. box3d neither orders the pair nor bounds it: both are stored as handed, so a reversed pair
+ stays reversed. Its assertion that the lower is no greater than the upper is compiled out here,
+ and the constructor does not assert even that, so a definition's steering pair is unchecked on
+ any build. This setter discards no impulse where its sibling set_suspension_limits discards both
+ of the suspension limit's. The limit acts only while steering and its own flag are both on.
 *>
 extern fn void WheelJointId.set_steering_limits(self, float lower_radians, float upper_radians) @cname("b3WheelJoint_SetSteeringLimits");
 
 <*
  Sets the angle in radians the steering spring pulls the wheel towards, about local frame A's x
- axis. box3d asserts nothing at all here — where the revolute joint's set_target_angle asserts its
- argument finite and inside [-pi, pi] — clamps nothing and discards no impulse, so a target
- several turns past anything the wheel can be held at stays where it was put, and the revolute
- joint's constructor folding the same quantity into [-pi, pi] has no counterpart on this type
- through either path. The spring pursues the target only as far as max_steering_torque() allows,
- and only while is_steering_enabled() is on.
+ axis. box3d asserts nothing here, clamps nothing and discards no impulse, so a target several
+ turns past anything the wheel can be held at stays where it was put — the revolute joint's
+ folding of the same quantity into [-pi, pi] has no counterpart on this type through either path.
+ The spring pursues the target only as far as max_steering_torque() allows, and only while
+ is_steering_enabled() is on.
 *>
 extern fn void WheelJointId.set_target_steering_angle(self, float target_radians) @cname("b3WheelJoint_SetTargetSteeringAngle");
 
@@ -3722,17 +3512,11 @@ extern fn float WheelJointId.steering_angle(self) @cname("b3WheelJoint_GetSteeri
 
 <*
  The torque the steering spring applied over the last sub-step, in newton-metres, saturating at
- max_steering_torque(). It is the spring's channel alone: the steering limit's two impulses are
- not in it, so a wheel stopped by its limit reports what its spring is doing and not the hold. It
- is signed about the steering axis, and mirroring the target does mirror the sign — but the sign
- does not tell you which way the wheel is travelling. Measured with the same target of +0.5: a
- spring still working reports -0.149966 while the angle climbs through +0.139088, and one starved
- at a ceiling of 0.05 reports +0.050000 while the angle climbs through +0.015343. The relation
- between the sign and the direction of travel inverts once the spring saturates, so read the
- magnitude against max_steering_torque() and take the direction from steering_angle().
+ max_steering_torque(). The steering limit's two impulses are not in it, so a wheel stopped by its
+ limit reports what its spring is doing and not the hold.
 
- This is the only reading of the steering channel. The shared accessors do not see it at all —
- spin_torque() sets out what constraint_torque() and constraint_force() report on this type
- instead, and steering is in neither.
+ It is signed about the steering axis, but the relation between that sign and the direction of
+ travel inverts once the spring saturates: read the magnitude against max_steering_torque() and
+ take the direction from steering_angle(). The shared accessors do not see this channel at all.
 *>
 extern fn float WheelJointId.steering_torque(self) @cname("b3WheelJoint_GetSteeringTorque");

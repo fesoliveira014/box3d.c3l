@@ -528,6 +528,18 @@ $assert CompoundDef::members[4].offset == 32 && CompoundDef::members[4].name == 
 $assert CompoundDef::members[5].offset == 40 && CompoundDef::members[5].name == "mesh_count";
 $assert CompoundDef::members[6].offset == 48 && CompoundDef::members[6].name == "spheres";
 $assert CompoundDef::members[7].offset == 56 && CompoundDef::members[7].name == "sphere_count";
+$assert TreeNodeChildren::size == 8;
+$assert TreeNodeChildren::alignment == 4;
+$assert TreeNodeChildren::members[0].offset == 0 && TreeNodeChildren::members[0].name == "child1";
+$assert TreeNodeChildren::members[1].offset == 4 && TreeNodeChildren::members[1].name == "child2";
+$assert TreeNode::size == 48;
+$assert TreeNode::alignment == 8;
+$assert TreeNode::members[0].offset == 0 && TreeNode::members[0].name == "aabb";
+$assert TreeNode::members[1].offset == 24 && TreeNode::members[1].name == "category_bits";
+$assert TreeNode::members[2].offset == 32;
+$assert TreeNode::members[3].offset == 40;
+$assert TreeNode::members[4].offset == 44 && TreeNode::members[4].name == "height";
+$assert TreeNode::members[5].offset == 46 && TreeNode::members[5].name == "flags";
 $assert DynamicTree::size == 80;
 $assert DynamicTree::alignment == 8;
 $assert DynamicTree::members[0].offset == 0 && DynamicTree::members[0].name == "version";

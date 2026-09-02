@@ -10,6 +10,7 @@ faultdef
     DEGENERATE_GEOMETRY,
     INDEX_OUT_OF_RANGE,
     CHILD_LIMIT_REACHED,
+    NOT_A_PROXY,
     NO_HIT;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
@@ -72,10 +73,9 @@ macro ContactId? ContactId.checked(self) {
 }
 
 <*
- A null pointer here is not a bad handle but a refusal to build: box3d returns one when the
- vertices and indices it was given hold no triangle with area. This is the one member of the
- family that cannot be a method, because C3 traps a method call on a null receiver before the
- body can test it.
+ A null pointer here is not a bad handle but a refusal to build: box3d returns one when the given
+ vertices and indices hold no triangle with area. A macro rather than a method because C3 traps a
+ method call on a null receiver before the body can test it.
 
  @return "the mesh, or DEGENERATE_GEOMETRY when box3d returned a null pointer"
 *>
@@ -86,12 +86,24 @@ macro MeshData*? checked_mesh(MeshData* mesh) {
 
 <*
  A null compound is box3d refusing to bake one, which it does for a single reason: a definition
- naming as many children as its own ceiling allows. A macro rather than a method for the reason
- checked_mesh() gives.
+ naming as many children as its own ceiling allows. A macro rather than a method, as checked_mesh()
+ is.
 
  @return "the compound, or CHILD_LIMIT_REACHED when box3d returned a null pointer"
 *>
 macro CompoundData*? checked_compound(CompoundData* compound) {
     if (compound == null) return CHILD_LIMIT_REACHED~;
     return compound;
+}
+
+<*
+ The range and leaf checks box3d compiles out of every call that indexes the node array on an id
+ the caller supplies. The leaf bit is exact for a live proxy but says nothing about which one: an
+ id whose slot has since been handed to a new proxy passes.
+
+ @return "INDEX_OUT_OF_RANGE when the id is outside 0 to node_capacity - 1, or NOT_A_PROXY when no live proxy holds that node"
+*>
+fn void? check_proxy(DynamicTree* tree, int proxy_id) @private {
+    if (proxy_id < 0 || proxy_id >= tree.node_capacity) return INDEX_OUT_OF_RANGE~;
+    if ((tree.nodes[proxy_id].flags & TREE_NODE_LEAF) == 0) return NOT_A_PROXY~;
 }

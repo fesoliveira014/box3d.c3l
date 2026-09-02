@@ -1,28 +1,13 @@
 module b3;
 
 <*
- Bakes the children the definition names into one compound: a tree of spheres, capsules, hulls
- and meshes that a world later populates as a single shape.
+ Bakes the definition's children — spheres, capsules, hulls and meshes — into one compound shape.
 
- The caller owns the compound: call destroy() on it, and note that byte_count() carries the
- allocation until that happens — ownership works exactly as it does for MeshData, see there.
- Nothing in the definition has to outlive the call, because box3d clones every child it reads,
- the shared hulls and meshes included.
-
- An empty definition is a request, not a mistake. box3d builds a childless compound for it and
- hands it back, and that compound is owned like any other: it must still be destroyed.
-
- Only one definition makes box3d itself refuse, and it refuses before allocating anything: one
- naming MAX_CHILD_SHAPES children or more. Every other guard below restores a check box3d does
- not make at all. It reads the four child arrays, and the hull or mesh each child names, without
- testing any of them for null; it writes one index per mesh child material into a fixed array of
- MAX_COMPOUND_MESH_MATERIALS without testing the count against it; and it turns a negative count
- into an unbounded allocation. Each of those was measured as a dead process, not a refusal.
-
- The guard above stands between the caller and box3d's own one refusal, so box3d's null is not
- reachable through it today. It is still tested for, because MAX_CHILD_SHAPES is a mirrored
- constant no layout pin can check: if box3d ever raises its ceiling, the mirror becomes the looser
- of the two and a null would otherwise be returned as a compound.
+ The caller owns the compound and must destroy() it, as with MeshData; nothing in the definition
+ has to outlive the call, because box3d clones every child. An empty definition builds a childless
+ compound, owned like any other. box3d itself refuses only a definition naming MAX_CHILD_SHAPES
+ children or more, and refuses before allocating; every other guard below restores a check it does
+ not make at all: a null array segfaults, and a negative count hangs the allocator.
 
  @param [&in] def : "the children to bake"
  @return "the compound, CHILD_LIMIT_REACHED when the definition names MAX_CHILD_SHAPES children or more or box3d refuses one for its own ceiling, or INVALID_DEFINITION when a count is negative, a named array is missing, a hull or mesh child names no geometry, or a mesh child's material count is outside 1 to MAX_COMPOUND_MESH_MATERIALS"
@@ -63,14 +48,10 @@ fn int CompoundData.child_count(&self) {
 <*
  The child at a flat index over every kind the compound holds.
 
- The order is the order box3d baked the children in — capsules, then hulls, then meshes, then
- spheres — and not the order the caller filled the definition in, so a compound whose spheres were
- assigned first still reports its capsules first.
-
- box3d bounds this index with an assertion the release build compiles out, and both directions run
- past the array behind it: an index at or above the count reaches one element past the spheres,
- and a negative one is made more negative by every kind it walks past and reaches memory before
- them. Neither reports anything; both return a child-shaped read of whatever is there.
+ The order is box3d's baking order — capsules, hulls, meshes, spheres — not the order the caller
+ filled the definition in. box3d bounds the index with an assertion the release build compiles out,
+ and both directions run past the array: an index at or above the count reaches past the spheres, a
+ negative one reaches memory before them, and neither reports anything.
 
  @return "the child, or INDEX_OUT_OF_RANGE when the index is outside 0 to child_count() - 1"
 *>
@@ -131,42 +112,25 @@ fn CompoundSphere? CompoundData.sphere(&self, int index) {
 
 <*
  The compound's materials, one entry per distinct child material, in the order the children were
- baked. A child names one of these through its material index, and so does the material index a
- cast reports against a shape built from this compound.
+ baked; a child's material index and the one a cast reports both name into this array.
 
- Distinct is byte-for-byte: box3d compares and hashes whole materials, so two children agreeing on
- friction and restitution but differing in user_material_id or custom_color get an entry each.
-
- The slice borrows the compound's own storage and lasts exactly as long as the compound. A
- compound with no children has no materials and the slice is empty; box3d hands back a non-null
- pointer even then, addressing the first byte past its allocation, so the count is the only thing
- that reports the emptiness.
-
- C hands this array back as const and C3 has no way to say so. Writing through the slice reaches
- the compound's baked materials, which every shape built from it copied at creation and no longer
- reads. Treat it as a view.
+ Distinct is byte-for-byte, so two children agreeing on friction and restitution but differing in
+ user_material_id or custom_color get an entry each. The slice borrows the compound's storage and
+ lasts as long as the compound; a childless compound gives an empty slice over a non-null pointer
+ past the allocation. C returns this array const: treat it as a view, and read the count for empty.
 *>
 fn SurfaceMaterial[] CompoundData.materials(&self) {
     return compound_materials_raw(self)[:self.material_count];
 }
 
 <*
- Attaches a baked compound to this body. The definition must come from default_shape_def() — see
- create_sphere_shape — and the null guard is the one create_mesh_shape carries for the same
- reason: box3d reads a version field through the pointer before it tests anything.
+ Attaches a baked compound to this body, under the definition and null guards create_mesh_shape
+ describes and borrowing the compound exactly as that call borrows its mesh.
 
  box3d takes a baked compound only on a static body and hands back a null identifier for a
- kinematic or a dynamic one, so INVALID_HANDLE here usually means the body was the wrong type
- rather than that anything is wrong with the compound. A body that has to move carries its
- children as separate shapes on the body instead.
-
- The shape borrows the compound rather than copying it, exactly as a mesh shape borrows its mesh
- — see create_mesh_shape for what that costs and for what destroying the geometry first does.
-
- What the shape does copy is the compound's materials, not the definition's, so what
- mesh_material_count() and mesh_surface_material() answer with is CompoundData.materials() over
- again — see there for the order and for what makes two children's materials distinct. The
- material index a cast reports indexes the same array.
+ kinematic or a dynamic one, so INVALID_HANDLE here usually means the body was the wrong type. What
+ the shape copies is the compound's materials, not the definition's, so mesh_material_count() and
+ mesh_surface_material() answer with CompoundData.materials() over again.
 
  @param [&in] def : "a definition obtained from default_shape_def()"
  @param compound : "the compound, which must outlive the shape; null is refused rather than dereferenced"

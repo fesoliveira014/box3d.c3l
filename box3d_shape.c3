@@ -3,12 +3,10 @@ module b3;
 <*
  Attaches a sphere to this body.
 
- The definition must come from default_shape_def(). box3d marks a definition with an internal
- cookie there and checks it with an assertion this release build compiles out, so an unmarked
- definition would otherwise be accepted and would produce a shape of zero density that
- contributes no mass to the body. That cookie check is the only one this guard restores; the
- assertions box3d makes on density and material coefficients are compiled out here too and
- none of them are restored.
+ The definition must come from default_shape_def(): this release build compiles box3d's cookie
+ assertion out, so an unmarked one is accepted silently and yields a shape of zero density that
+ contributes no mass. The cookie is the only compiled-out assertion this guard restores — density
+ and the material coefficients still go unchecked.
 
  @param [&in] def : "a definition obtained from default_shape_def()"
  @param [&in] sphere : "the sphere in body-local space; box3d clones it"
@@ -117,19 +115,13 @@ fn HeightFieldData*? ShapeId.height_field(self) {
 }
 
 <*
- Gives this shape a mesh, replacing whatever geometry it had and making its type MESH. There is
- no type guard here, unlike on mesh(): changing the type is what the call is for.
+ Gives this shape a mesh, replacing whatever geometry it had and making its type MESH — there is
+ no type guard, unlike on mesh(), because changing the type is what the call is for.
 
- The shape borrows the new mesh exactly as BodyId.create_mesh_shape() does, and nothing happens
- to the old one. box3d drops that pointer without freeing it — byte_count() does not move across
- the call — so a caller replacing a mesh is left holding two, and owes destroy() on both.
-
- The body's mass is not recomputed. It keeps whatever the previous geometry gave it until
- BodyId.apply_mass_from_shapes() is called, and a mesh contributes none, so that call takes a
- body carrying nothing else to zero mass.
-
- Silently does nothing while the world is locked, mid WorldId.step or inside a callback box3d
- runs during one.
+ The shape borrows the new mesh as BodyId.create_mesh_shape() does, and box3d drops the old
+ pointer without freeing it, so a caller replacing a mesh is left holding two and owes destroy()
+ on both. The body's mass is not recomputed until BodyId.apply_mass_from_shapes(), and a mesh
+ contributes none. Silently does nothing while the world is locked, mid WorldId.step.
 
  @param mesh : "the mesh, which must outlive the shape; null is refused rather than dereferenced"
  @param scale : "how far the mesh's vertices are stretched along each axis, non-uniform or mirrored; a zero component is pushed away from zero rather than refused"

@@ -4423,3 +4423,55 @@ extern fn float WheelJointId.steering_angle(self) @cname("b3WheelJoint_GetSteeri
  take the direction from steering_angle(). The shared accessors do not see this channel at all.
 *>
 extern fn float WheelJointId.steering_torque(self) @cname("b3WheelJoint_GetSteeringTorque");
+
+<*
+ A buffer of recorded world mutations: what a world writes between WorldId.start_recording() and
+ WorldId.stop_recording(), and what create_player() and validate_replay() replay from. The caller
+ owns it and must destroy() it exactly once; byte_count() carries it until then — 64 KiB at the
+ default capacity — so a recording never destroyed shifts that count as a leaked world does.
+*>
+typedef Recording = void;
+
+<*
+ Creates a recording buffer. box3d takes 64 KiB when byte_capacity is zero or below, and grows the
+ buffer on demand from wherever it starts, so the capacity is a starting size and not a bound.
+ Nothing here is fallible — box3d has no refusal path. The caller owns it, and must destroy() it.
+*>
+extern fn Recording* create_recording(int byte_capacity) @cname("b3CreateRecording");
+
+<*
+ Releases the recording and its buffer. The caller owns it and must call this exactly once — see
+ Recording. Any slice data() handed out dangles from here.
+*>
+extern fn void Recording.destroy(&self) @cname("b3DestroyRecording");
+
+extern fn char* recording_data_raw(Recording* recording) @cname("b3Recording_GetData") @private;
+extern fn int recording_size_raw(Recording* recording) @cname("b3Recording_GetSize") @private;
+extern fn void start_recording_raw(WorldId world_id, Recording* recording) @cname("b3World_StartRecording") @private;
+
+<*
+ Ends the session, writing the trailing geometry registry and backpatching the header, which is
+ what leaves the buffer self-contained. Inert on a world that is not recording, and
+ WorldId.destroy() does this itself, so a world torn down mid-session still leaves playable bytes.
+*>
+extern fn void WorldId.stop_recording(self) @cname("b3World_StopRecording");
+
+extern fn bool save_recording_raw(Recording* recording, ZString path) @cname("b3SaveRecordingToFile") @private;
+extern fn Recording* load_recording_raw(ZString path) @cname("b3LoadRecordingFromFile") @private;
+extern fn bool validate_replay_raw(void* data, int size, int worker_count) @cname("b3ValidateReplay") @private;
+
+<*
+ A recording being replayed frame by frame. box3d stands a private world up for it, so a live
+ player adds one to world_count() and a leaked player leaks that world. Opaque upstream, so it
+ could not be copied. Build one with create_player().
+*>
+typedef RecPlayer = void;
+
+<*
+ Releases the player, the replay world it stands up, its copy of the recorded bytes, and the
+ length unit it took over — see create_player(). The caller owns the player and must call this
+ exactly once.
+*>
+extern fn void RecPlayer.destroy(&self) @cname("b3DestroyPlayer");
+
+extern fn RecPlayer* create_player_raw(void* data, int size, int worker_count) @cname("b3CreatePlayer") @private;

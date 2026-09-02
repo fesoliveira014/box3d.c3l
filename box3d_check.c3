@@ -13,7 +13,9 @@ faultdef
     CHILD_LIMIT_REACHED,
     NOT_A_PROXY,
     NO_HIT,
-    BUFFER_TOO_SMALL;
+    BUFFER_TOO_SMALL,
+    FILE_UNAVAILABLE,
+    NOT_A_RECORDING;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
 macro bool BodyId.is_null(self) => self.index1 == 0;

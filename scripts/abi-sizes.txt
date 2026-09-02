@@ -98,3 +98,6 @@ b3TOIState 4 4
 b3TOIOutput 52 4 state=0 point=4 normal=16 fraction=28 distance=32 distanceIterations=36 pushBackIterations=40 rootIterations=44 usedFallback=48
 b3CollisionPlane 28 4 plane=0 pushLimit=16 push=20 clipVelocity=24
 b3PlaneSolverResult 16 4 delta=0 iterationCount=12
+b3PlaneResult 28 4 plane=0 point=16
+b3BodyPlaneResult 36 4 shapeId=0 result=8
+b3ExplosionDef 32 8 maskBits=0 position=8 radius=20 falloff=24 impulsePerArea=28

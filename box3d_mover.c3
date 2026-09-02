@@ -22,3 +22,33 @@ fn PlaneSolverResult solve_planes(Vec3 target_delta, CollisionPlane[] planes) {
 fn Vec3 clip_vector(Vec3 vector, CollisionPlane[] planes) {
     return clip_vector_raw(vector, planes.ptr, (int)planes.len);
 }
+
+<*
+ Collides a capsule mover with this body alone, under a transform the caller supplies. The mover
+ and the planes are relative to origin, and one plane at most is written per shape.
+
+ Only spheres, capsules and hulls are considered, a mesh, height field or compound on the body
+ being skipped. A short buffer is filled and the rest dropped rather than refused, every prefix
+ being a real answer, so one filled to its length may have had more. A locked world fills none.
+
+ @return "the prefix of buffer that was filled"
+*>
+fn BodyPlaneResult[] BodyId.collide_mover(
+  self,
+  BodyPlaneResult[] buffer,
+  Pos origin,
+  Capsule* mover,
+  QueryFilter filter,
+  WorldTransform body_transform,
+) {
+    int written = body_collide_mover_raw(
+      body_id: self,
+      body_planes: buffer.ptr,
+      plane_capacity: (int)buffer.len,
+      origin: origin,
+      mover: mover,
+      filter: filter,
+      body_transform: body_transform,
+    );
+    return buffer[:written];
+}

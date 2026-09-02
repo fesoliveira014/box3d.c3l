@@ -1883,6 +1883,49 @@ extern fn bool hull_overlap_raw(HullData* shape, Transform transform, ShapeProxy
 extern fn bool mesh_overlap_raw(Mesh* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapMesh") @private;
 extern fn bool height_field_overlap_raw(HeightFieldData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHeightField") @private;
 
+<*
+ Called once for each triangle a mesh or height field query finds, with the triangle's vertices
+ in the shape's own frame and the index a cast on that shape reports. Returning false ends a
+ Mesh.query; HeightFieldData.query reads nothing back and cannot be stopped.
+*>
+alias MeshQueryFn = fn bool(Vec3 a, Vec3 b, Vec3 c, int triangle_index, void* context);
+
+<*
+ Called once for each child a compound query finds, given the compound queried and the index
+ CompoundData.child() takes. Returning false ends the query.
+*>
+alias CompoundQueryFn = fn bool(CompoundData* compound, int child_index, void* context);
+
+<*
+ Reports every triangle of this mesh that meets bounds, a box in the mesh's own frame with the
+ mesh's scale already applied — the frame the vertices arrive in. Each triangle is tested against
+ the box itself rather than against the node holding it.
+
+ An inverted box is repaired into the box it spans rather than answering nothing, and a mirroring
+ scale swaps the second and third vertex so the scaled triangle keeps its winding.
+*>
+extern fn void Mesh.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryMesh");
+
+<*
+ Reports the triangles of this field whose cell meets bounds, a box in the field's own frame with
+ the field's scale applied. The test is per cell, not per triangle: a cell whose corner box meets
+ bounds reports both its triangles, and a hole cell reports neither.
+
+ What fcn returns is discarded, so nothing stops the traversal early. box3d spans the box in
+ unclamped cell indices, so a box wider than a signed int of cells reports nothing at all.
+*>
+extern fn void HeightFieldData.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryHeightField");
+
+<*
+ Reports the children of this compound whose bounds meet aabb, a box in the compound's own frame:
+ box3d applies no transform, so a placed compound wants the box carried into that frame first.
+ The test is a child's box rather than its geometry, so a reported child need not meet aabb.
+
+ The order is the compound's own tree order, which is neither the index CompoundData.child()
+ takes nor the order create_compound() was given the children in.
+*>
+extern fn void CompoundData.query(&self, Aabb aabb, CompoundQueryFn fcn, void* context) @cname("b3QueryCompound");
+
 enum JointType : int {
     PARALLEL,
     DISTANCE,

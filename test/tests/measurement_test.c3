@@ -135,7 +135,8 @@ struct RodMass {
 }
 
 fn RodMass the_mass_of_a_capsule_laid_along_two_axes() {
-    b3::Capsule along_y = { .center1 = { 0.0, -0.5, 0.0 }, .center2 = { 0.0, 0.5, 0.0 }, .radius = 0.25 };
+    // Offset off the origin so the centre of mass is a value the zero struct cannot produce.
+    b3::Capsule along_y = { .center1 = { 3.0, 1.5, -2.0 }, .center2 = { 3.0, 2.5, -2.0 }, .radius = 0.25 };
     b3::Capsule along_x = { .center1 = { -0.5, 0.0, 0.0 }, .center2 = { 0.5, 0.0, 0.0 }, .radius = 0.25 };
     return {
       .along_y = along_y.compute_mass_data(1.0),
@@ -156,8 +157,9 @@ fn void a_capsule_weighs_a_cylinder_and_two_end_caps_about_the_axis_it_lies_on()
 
     assert(math::abs(rod.along_y.mass - (float)(cylinder + caps)) < 0.0001,
         "pi r squared h of cylinder and four thirds pi r cubed of end cap");
-    assert(math::abs(rod.along_y.center.x) < 0.001 && math::abs(rod.along_y.center.y) < 0.001,
-        "with the centre of mass midway between the two centres");
+    assert(math::abs(rod.along_y.center.x - 3.0) < 0.001, "with the centre of mass midway between the two centres");
+    assert(math::abs(rod.along_y.center.y - 2.0) < 0.001);
+    assert(math::abs(rod.along_y.center.z + 2.0) < 0.001);
     assert(math::abs(rod.along_y.inertia[1].y - axial) < 0.0001, "about its own axis a capsule is a cylinder and a ball");
     assert(math::abs(rod.along_y.inertia[0].x - across) < 0.0001, "and end over end it carries its caps out along the segment");
 
@@ -277,8 +279,9 @@ fn b3::Aabb the_bounds_of_a_ball_turned_off_the_axes() {
     return ball.compute_aabb(a_turn_about(up, math::PI / 4.0, (b3::Vec3){ 4.0, 0.0, 0.0 }));
 }
 
-// An eighth turn rather than a quarter, because a right angle carries any box onto another box:
-// the widened reading a hull gets would agree with the exact one there and separate nothing.
+// An eighth turn, because a quarter turn about a coordinate axis carries a box onto a box and the
+// widened reading would agree with the exact one. The axis matters more than the angle: a quarter
+// turn about a diagonal is not exempt.
 fn void a_sphere_keeps_its_radius_through_a_rotation() @test {
     b3::Aabb ball = the_bounds_of_a_ball_turned_off_the_axes();
 
@@ -517,4 +520,33 @@ fn void a_compound_with_no_children_bounds_nothing() @test {
     assert(childless.refusal == b3::DEGENERATE_GEOMETRY, "a compound holding nothing has no bounds to report");
     assert(childless.after > childless.baseline, "and the compound it was asked of was a real one, alive at the time");
     assert(b3::byte_count() == childless.baseline, "which gave every byte back when it was destroyed");
+}
+
+fn float[2] the_x_reach_of_a_grid_mesh_flat_and_turned() {
+    b3::MeshData* grid = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: false,
+    )!!;
+    defer grid.destroy();
+
+    b3::Vec3 up = { 0.0, 1.0, 0.0 };
+    b3::Vec3 origin = { 0.0, 0.0, 0.0 };
+    b3::Aabb flat = grid.compute_aabb(an_untouched_placement(), (b3::Vec3){ 1.0, 1.0, 1.0 });
+    b3::Aabb turned = grid.compute_aabb(a_turn_about(up, math::PI / 4.0, origin), (b3::Vec3){ 1.0, 1.0, 1.0 });
+
+    return { flat.upper_bound.x, turned.upper_bound.x };
+}
+
+// The mesh, height field and compound bounds all carry a cached box through the rotation rather
+// than refitting, so an eighth turn reaches the corner of that box rather than the edge of the
+// geometry. A square of half width two reaches two root two, which is where the widening shows.
+fn void a_mesh_turned_off_the_axes_reports_wider_than_it_reaches() @test {
+    float[2] reach = the_x_reach_of_a_grid_mesh_flat_and_turned();
+
+    assert(reach[0] > 1.99 && reach[0] < 2.01, "flat, a four by four grid of unit cells reaches two");
+    assert(reach[1] > 2.827 && reach[1] < 2.83, "turned an eighth, the carried box reaches its own corner");
+    assert(reach[1] > reach[0] * 1.41, "which is wider than the mesh itself ever goes");
 }

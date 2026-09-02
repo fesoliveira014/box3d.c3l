@@ -467,8 +467,8 @@ extern fn Aabb Sphere.compute_aabb(&self, Transform transform) @cname("b3Compute
  centres plus one ball's worth of end caps. The centre is the midpoint of the two, and the tensor
  is rotated so its axial column follows the segment rather than the y axis it is built on.
 
- Two centres close enough to leave no cylinder weigh the end caps alone, which is a ball rather
- than a refusal, and box3d checks the radius and the density no more than it does for a sphere.
+ Two centres too close to leave a cylinder weigh the end caps alone — a ball, not a refusal — and
+ neither the radius nor the density is checked, so a negative one yields a negative mass.
 *>
 extern fn MassData Capsule.compute_mass_data(&self, float density) @cname("b3ComputeCapsuleMass");
 
@@ -583,19 +583,19 @@ extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform trans
 extern fn void HullData.destroy(&self) @cname("b3DestroyHull");
 
 <*
- The mass, centre of mass and inertia of the hull at this density. box3d scales the volume,
- centroid and central inertia it baked at build time rather than integrating again, so mass and
- inertia are both linear in density and the tensor is about the hull's own centroid.
- HullData.clone_and_transform() is what re-bakes all three for a placed or scaled copy.
+ The mass and inertia of the hull at this density, both linear in it, about the hull's own
+ centroid — which box3d hands back unscaled, having baked all three at build time rather than
+ integrating again. HullData.clone_and_transform() re-bakes them for a placed or scaled copy.
+
+ The density is unchecked, so a negative one yields a negative mass and tensor, not a refusal.
 *>
 extern fn MassData HullData.compute_mass_data(&self, float density) @cname("b3ComputeHullMass");
 
 <*
- The bounds of the hull placed by this transform: the box in HullData.aabb carried through the
- transform, never a refit of the points. box3d widens it by the absolute of the rotation matrix,
- so every rotation but a multiple of a right angle answers wider than the hull reaches.
- HullData.clone_and_transform() bakes a rotation into the points, and the copy's own aabb is then
- the tight one.
+ The box in HullData.aabb carried through this transform, never a refit of the points. box3d
+ widens it by the absolute of the rotation matrix, a permutation only for a quarter turn about a
+ coordinate axis, so every other rotation — a quarter turn about a diagonal included — answers
+ wider than the hull reaches. clone_and_transform() bakes the rotation in and its aabb is tight.
 *>
 extern fn Aabb HullData.compute_aabb(&self, Transform transform) @cname("b3ComputeHullAABB");
 
@@ -1251,6 +1251,11 @@ extern fn void ShapeId.set_hull(self, HullData* hull) @cname("b3Shape_SetHull");
 *>
 extern fn void set_mesh_raw(ShapeId shape_id, MeshData* mesh, Vec3 scale) @cname("b3Shape_SetMesh") @private;
 
+<*
+ The broad-phase box the world holds for this shape, which is fattened past the geometry so a
+ moving shape need not re-insert every step. It is not the tight box the compute_aabb() functions
+ answer, and the margin is box3d's to choose.
+*>
 extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
 extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");
 extern fn Vec3 ShapeId.closest_point(self, Vec3 target) @cname("b3Shape_GetClosestPoint");

@@ -112,9 +112,9 @@ fn void the_three_aabb_predicates_are_independent_of_one_another() @test {
     assert(!b3::is_sane_aabb(far_out), "so sane fails on the magnitude alone");
 }
 
-// bounded is two one-sided comparisons, lower under minus B3_HUGE and upper over it, so only an
-// outward excursion fails it. Every row below is a box that reaches far or is not a number, and
-// passes anyway, which is what the two comparisons say and what three ordered rows cannot show.
+// bounded is two one-sided comparisons, lower under minus B3_HUGE and upper over it, read off the
+// two named fields rather than off where the box lies. The rows below are the arrangements those
+// two comparisons distinguish, which is what a table of ordered boxes cannot show.
 fn void only_an_outward_bound_is_unbounded() @test {
     float infinity = (float)1.0e40;
     float not_a_number = infinity - infinity;
@@ -123,11 +123,15 @@ fn void only_an_outward_bound_is_unbounded() @test {
     b3::Aabb inward = { .lower_bound = { infinity, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } };
     b3::Aabb holding_a_nan = { .lower_bound = { not_a_number, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } };
     b3::Aabb inverted_far_out = { .lower_bound = { 1.0e9, 1.0, 1.0 }, .upper_bound = { -1.0e9, -1.0, -1.0 } };
+    b3::Aabb inverted_far_negative = { .lower_bound = { -1.0e9, 1.0, 1.0 }, .upper_bound = { -2.0e9, -1.0, -1.0 } };
 
     assert(!b3::is_bounded_aabb(outward), "a box reaching outward to infinity fails both comparisons");
-    assert(b3::is_bounded_aabb(inward), "where one reaching inward to infinity fails neither");
+    assert(b3::is_bounded_aabb(inward) && !b3::is_valid_aabb(inward),
+        "where one reaching inward to infinity fails neither comparison, valid or not");
     assert(b3::is_bounded_aabb(holding_a_nan), "and a bound that is not a number compares false either way");
-    assert(b3::is_bounded_aabb(inverted_far_out), "as does an inverted box a billion units out, being inward");
+    assert(b3::is_bounded_aabb(inverted_far_out), "as does an inverted box whose lower is far positive");
+    assert(!b3::is_bounded_aabb(inverted_far_negative),
+        "where inverting it the other way fails, the test reading the two fields and not where the box lies");
 
     assert(!b3::is_valid_aabb(holding_a_nan) && !b3::is_valid_aabb(inverted_far_out),
         "neither of those is valid, so bounded is carrying the whole difference");

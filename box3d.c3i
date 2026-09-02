@@ -131,13 +131,14 @@ extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
 <*
  Two one-sided comparisons and nothing else: false when a lower bound falls under minus B3_HUGE or
  an upper bound rises over it, 1e5 length units so the reach moves with set_length_units_per_meter.
- Only an outward excursion fails, so an inverted box passes however far out it lies, an inward
- infinity passes, and a NaN passes because every comparison against one is false.
+ It reads the two named fields and not where the box lies, so an inverted box is judged the same
+ way — one whose lower is far positive and upper far negative passes, one whose lower is far
+ negative does not — and a NaN passes because every comparison against one is false.
 *>
 extern fn bool is_bounded_aabb(Aabb a) @cname("b3IsBoundedAABB");
 <*
  Whether the box is both valid and bounded, which is the whole of the test, so it carries nothing
- the two do not: an inverted box is bounded and not valid, a box 1e9 units across is the reverse.
+ the two do not: an inverted box near the origin is bounded and not valid, a wide one the reverse.
 *>
 extern fn bool is_sane_aabb(Aabb a) @cname("b3IsSaneAABB");
 extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");

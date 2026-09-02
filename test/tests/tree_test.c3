@@ -1239,8 +1239,7 @@ struct RayCastReadings {
     b3::TreeStats diagonal_stats;
     b3::TreeStats along_x_stats;
     b3::TreeStats empty_stats;
-    bool the_empty_tree_answered;
-    bool the_strict_mask_answered;
+    b3::TreeStats strict_stats;
 }
 
 fn RayCastReadings the_ray_cast_readings_of_three_proxies() {
@@ -1292,14 +1291,14 @@ fn RayCastReadings the_ray_cast_readings_of_three_proxies() {
       fcn: &visit_ray_proxy,
       context: &read.masked,
     );
-    tree.ray_cast(
+    read.strict_stats = tree.ray_cast(
       input: &diagonal,
       mask_bits: 0b011,
       require_all_bits: true,
       fcn: &visit_ray_proxy,
       context: &read.strict,
     );
-    read.the_strict_mask_answered = true;
+    read.empty_stats = { .node_visits = -1, .leaf_visits = -1 };
     read.empty_stats = empty.ray_cast(
       input: &diagonal,
       mask_bits: ulong::max,
@@ -1307,7 +1306,6 @@ fn RayCastReadings the_ray_cast_readings_of_three_proxies() {
       fcn: &visit_ray_proxy,
       context: &read.empty_tree,
     );
-    read.the_empty_tree_answered = true;
 
     return read;
 }
@@ -1332,9 +1330,9 @@ fn void a_ray_cast_reports_every_proxy_whose_box_it_crosses() @test {
     assert(read.along_x_at_two.count == 1, "and a metre higher again, one more");
     assert(casts_carry_exactly(read.along_x_at_two, (ulong[]){ 0x33 }), "so the count says nothing about which");
 
-    assert(read.the_empty_tree_answered && read.empty_tree.count == 0,
-        "a tree holding no proxy is traversed and calls nothing");
-    assert(read.empty_stats.node_visits == 0, "visiting no node at all, where the filled tree visited five");
+    assert(read.empty_tree.count == 0, "a tree holding no proxy calls nothing");
+    assert(read.empty_stats.node_visits == 0 && read.empty_stats.leaf_visits == 0,
+        "and reports no visit at all, over stats seeded past zero so an untaken reading cannot pass");
 }
 
 // The mask flags are the ones query() states, read here through a cast: each proxy carries a
@@ -1346,8 +1344,12 @@ fn void a_ray_cast_mask_narrows_three_proxies_to_one_and_then_to_none() @test {
     assert(read.masked.count == 1, "one proxy carries the single bit the mask names");
     assert(casts_carry_exactly(read.masked, (ulong[]){ 0x11 }), "and it is the one created with that bit");
     assert(read.diagonal.count == 3, "where the same ray unmasked reaches all three");
-    assert(read.the_strict_mask_answered && read.strict.count == 0,
-        "and none of them carries both bits of a two-bit mask");
+    assert(read.strict.count == 0, "and none of them carries both bits of a two-bit mask");
+    assert(read.strict_stats.node_visits > 0
+        && read.strict_stats.node_visits <= read.diagonal_stats.node_visits,
+        "the traversal having run and walked no further than the unmasked one over the same tree");
+    assert(read.strict_stats.leaf_visits == 0,
+        "reaching no leaf, so the mask turned it back above them rather than at each proxy");
 }
 
 // Proxy ids are node indices, and internal nodes take slots from the same pool, so the ids a

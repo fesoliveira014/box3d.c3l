@@ -58,6 +58,8 @@ $assert CosSin::size == 8;
 $assert CosSin::alignment == 4;
 $assert SegmentDistanceResult::size == 32;
 $assert SegmentDistanceResult::alignment == 4;
+$assert HexColor::size == 4;
+$assert HexColor::alignment == 4;
 $assert Capacity::size == 20;
 $assert Capacity::alignment == 4;
 $assert Capacity::members[0].offset == 0 && Capacity::members[0].name == "static_shape_count";

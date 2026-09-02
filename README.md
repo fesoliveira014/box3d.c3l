@@ -6,12 +6,12 @@ library written in C17.
 Status: most of the API surface is bound. Worlds and bodies, every shape kind — sphere, capsule,
 convex hull, mesh, height field and baked compound — the world's event arrays with the pre-solve
 and custom-filter callbacks, the ray casts, shape casts, overlap queries and contact data, all nine
-joint types, the dynamic tree, the character mover and explosions, and the standalone geometry,
-distance and manifold functions that answer about shapes with no world in play. Debug draw with
-recording and replay follows, along with a tail of math and validity singles, the tree's two
-traversals, and the world's two contact callbacks. Rather than trust this paragraph, derive the
-remainder: every bound symbol is a `@cname` in `box3d.c3i`, and every available one is a `B3_API`
-in `vendor/box3d/include/box3d/*.h`.
+joint types, the dynamic tree and its two traversals, the character mover and explosions, the
+world's two contact callbacks, the math and validity singles, and the standalone geometry, distance
+and manifold functions that answer about shapes with no world in play. Debug draw with recording
+and replay follows. Rather than trust this paragraph, derive the remainder: every bound symbol is
+a `@cname` in `box3d.c3i`, and every available one is a `B3_API` in
+`vendor/box3d/include/box3d/*.h`.
 
 ## Using it
 

@@ -69,8 +69,10 @@ does not, since a release build of box3d compiles out its own check for this and
 construct silently with a garbage definition.
 
 box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
-operators and vector methods work directly on values that cross the ABI. Matrices are a plain
-array alias, `Vec3[3]`, not a standard-library matrix type.
+operators and vector methods work directly on values that cross the ABI. Matrices are not a
+standard-library matrix type: `Matrix3` is a struct of the three `Vec3` **columns** box3d
+multiplies it as, named `cx`, `cy` and `cz`, so a caller filling it from rows cannot do so by
+accident.
 
 ## License
 

@@ -1927,6 +1927,14 @@ extern fn void HeightFieldData.query(&self, Aabb bounds, MeshQueryFn fcn, void* 
 extern fn void CompoundData.query(&self, Aabb aabb, CompoundQueryFn fcn, void* context) @cname("b3QueryCompound");
 
 <*
+ Three vertices in the frame of whatever they are collided against — the collide entry points
+ that take one apply no transform. Every one of them culls the back side, so the winding decides
+ which side answers: the plane normal is the cross product of the second and third vertices taken
+ about the first, and a shape behind it reports nothing however deep the overlap.
+*>
+typedef Triangle = Vec3[3];
+
+<*
  Which feature of a triangle produced a manifold. Written only by the collide entry points that
  take a triangle, and private with the LocalManifold field that holds it.
 *>
@@ -2029,9 +2037,19 @@ struct CollisionManifold {
 }
 
 <*
+ The manifold of the one pair whose point count the caller's buffer is the only bound on, in
+ shape A's frame. The points borrow that buffer and live exactly as long as it does, and a count
+ equal to its length means box3d had more of the contact to report than there was room for.
+*>
+struct CollisionManifoldView {
+    Vec3 normal;
+    LocalManifoldPoint[] points;
+}
+
+<*
  Raw local collide entry points. Private because each writes through a manifold that borrows the
- caller's point buffer and takes a capacity below which it reports nothing rather than less. All
- four belong to box3d_collide.c3, whose wrappers are the only way in.
+ caller's point buffer and takes a capacity below which it reports nothing rather than less. They
+ belong to box3d_collide.c3, whose wrappers are the only way in.
 *>
 extern fn void collide_spheres_raw(
   LocalManifold* manifold,
@@ -2065,6 +2083,51 @@ extern fn void collide_capsules_raw(
   Capsule* capsule_b,
   Transform transform_b_to_a,
 ) @cname("b3CollideCapsules") @private;
+
+extern fn void collide_hull_and_capsule_raw(
+  LocalManifold* manifold,
+  int capacity,
+  HullData* hull_a,
+  Capsule* capsule_b,
+  Transform transform_b_to_a,
+  SimplexCache* cache,
+) @cname("b3CollideHullAndCapsule") @private;
+
+extern fn void collide_hulls_raw(
+  LocalManifold* manifold,
+  int capacity,
+  HullData* hull_a,
+  HullData* hull_b,
+  Transform transform_b_to_a,
+  SatCache* cache,
+) @cname("b3CollideHulls") @private;
+
+extern fn void collide_triangle_and_capsule_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Vec3* triangle_a,
+  Capsule* capsule_b,
+  SimplexCache* cache,
+) @cname("b3CollideTriangleAndCapsule") @private;
+
+extern fn void collide_triangle_and_hull_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Vec3 v1,
+  Vec3 v2,
+  Vec3 v3,
+  int triangle_flags,
+  HullData* hull_b,
+  SatCache* cache,
+  bool enable_speculative,
+) @cname("b3CollideTriangleAndHull") @private;
+
+extern fn void collide_triangle_and_sphere_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Vec3* triangle_a,
+  Sphere* sphere_b,
+) @cname("b3CollideTriangleAndSphere") @private;
 
 enum JointType : int {
     PARALLEL,

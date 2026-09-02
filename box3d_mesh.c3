@@ -14,13 +14,13 @@ module b3;
  @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
 *>
 fn MeshData*? create_grid_mesh(int x_count, int z_count, float cell_width, int material_count, bool identify_edges) {
-    return checked_mesh(create_grid_mesh_raw(
+    return checked_geometry(create_grid_mesh_raw(
       x_count: x_count,
       z_count: z_count,
       cell_width: cell_width,
       material_count: material_count,
       identify_edges: identify_edges,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -37,14 +37,14 @@ fn MeshData*? create_wave_mesh(
   float row_frequency,
   float column_frequency,
 ) {
-    return checked_mesh(create_wave_mesh_raw(
+    return checked_geometry(create_wave_mesh_raw(
       x_count: x_count,
       z_count: z_count,
       cell_width: cell_width,
       amplitude: amplitude,
       row_frequency: row_frequency,
       column_frequency: column_frequency,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -56,12 +56,12 @@ fn MeshData*? create_wave_mesh(
  @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
 *>
 fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, float radius, float thickness) {
-    return checked_mesh(create_torus_mesh_raw(
+    return checked_geometry(create_torus_mesh_raw(
       radial_resolution: radial_resolution,
       tubular_resolution: tubular_resolution,
       radius: radius,
       thickness: thickness,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -72,7 +72,7 @@ fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, f
  @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
 *>
 fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {
-    return checked_mesh(create_box_mesh_raw(center, extent, identify_edges));
+    return checked_geometry(create_box_mesh_raw(center, extent, identify_edges), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -82,7 +82,7 @@ fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {
  @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
 *>
 fn MeshData*? create_hollow_box_mesh(Vec3 center, Vec3 extent) {
-    return checked_mesh(create_hollow_box_mesh_raw(center, extent));
+    return checked_geometry(create_hollow_box_mesh_raw(center, extent), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -92,12 +92,12 @@ fn MeshData*? create_hollow_box_mesh(Vec3 center, Vec3 extent) {
  @return "the mesh, or DEGENERATE_GEOMETRY when the height and the two widths collapse it"
 *>
 fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, float bottom_width) {
-    return checked_mesh(create_platform_mesh_raw(
+    return checked_geometry(create_platform_mesh_raw(
       center: center,
       height: height,
       top_width: top_width,
       bottom_width: bottom_width,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -112,7 +112,10 @@ fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, f
  @return "the mesh, or DEGENERATE_GEOMETRY when the definition names fewer than three vertices, no triangles, or no triangle with area"
 *>
 fn MeshData*? create_mesh(MeshDef* def) {
-    return checked_mesh(create_mesh_raw(def: def, degenerate_triangle_indices: null, degenerate_capacity: 0));
+    return checked_geometry(
+      create_mesh_raw(def: def, degenerate_triangle_indices: null, degenerate_capacity: 0),
+      DEGENERATE_GEOMETRY,
+    );
 }
 
 <*

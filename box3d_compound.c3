@@ -34,7 +34,7 @@ fn CompoundData*? create_compound(CompoundDef* def) {
         if (mesh.material_count < 1 || mesh.material_count > MAX_COMPOUND_MESH_MATERIALS) return INVALID_DEFINITION~;
     }
 
-    return checked_compound(create_compound_raw(def));
+    return checked_geometry(create_compound_raw(def), CHILD_LIMIT_REACHED);
 }
 
 <*

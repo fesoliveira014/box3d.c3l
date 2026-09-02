@@ -444,6 +444,13 @@ struct Capsule {
     float radius;
 }
 
+<*
+ The ceiling create_hull() clamps max_vertex_count to. Mirrors B3_MAX_HULL_VERTICES in
+ constants.h, which the C API does not expose as a function and no layout pin can see. box3d
+ fixes it for performance: the hull's vertex, edge and face indices are all single bytes.
+*>
+const int MAX_HULL_VERTICES = 128;
+
 struct HullVertex {
     char edge;
 }
@@ -463,6 +470,10 @@ struct HullFace {
  A convex hull. The arrays live past the end of the struct and are reached through the byte
  offsets it carries, so a bare HullData must never be copied — only a BoxHull, which embeds
  one together with its storage, copies correctly.
+
+ create_hull() and its siblings in box3d_hull.c3 allocate one the caller owns and must destroy()
+ exactly once; byte_count() carries it until then. A BoxHull owns its storage instead, so calling
+ destroy() on its base frees a pointer box3d never allocated.
 *>
 struct HullData {
     ulong version;
@@ -507,6 +518,24 @@ extern fn BoxHull make_box_hull(float hx, float hy, float hz) @cname("b3MakeBoxH
 extern fn BoxHull make_offset_box_hull(float hx, float hy, float hz, Vec3 offset) @cname("b3MakeOffsetBoxHull");
 extern fn BoxHull make_transformed_box_hull(float hx, float hy, float hz, Transform transform) @cname("b3MakeTransformedBoxHull");
 extern fn BoxHull make_scaled_box_hull(Vec3 half_widths, Transform transform, Vec3 post_scale) @cname("b3MakeScaledBoxHull");
+
+<*
+ Raw hull constructors. Every one of them ends in b3CreateHull, so every one returns a null
+ pointer for a point set box3d will not close into a hull; the wrappers in box3d_hull.c3 turn
+ that into a fault and are the only public way in.
+*>
+extern fn HullData* create_hull_raw(Vec3* points, int point_count, int max_vertex_count) @cname("b3CreateHull") @private;
+extern fn HullData* create_cylinder_raw(float height, float radius, float y_offset, int sides) @cname("b3CreateCylinder") @private;
+extern fn HullData* create_cone_raw(float height, float radius1, float radius2, int slices) @cname("b3CreateCone") @private;
+extern fn HullData* create_rock_raw(float radius) @cname("b3CreateRock") @private;
+extern fn HullData* clone_hull_raw(HullData* hull) @cname("b3CloneHull") @private;
+extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform transform, Vec3 scale) @cname("b3CloneAndTransformHull") @private;
+
+<*
+ Releases the hull. The caller owns it and must call this exactly once — see HullData, which also
+ says why a BoxHull's base must never reach here.
+*>
+extern fn void HullData.destroy(&self) @cname("b3DestroyHull");
 
 <*
  The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it: call

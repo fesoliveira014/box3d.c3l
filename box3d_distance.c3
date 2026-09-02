@@ -19,11 +19,11 @@ fn DistanceOutput? shape_distance(DistanceInput input) {
 }
 
 <*
- Sweeps proxy B along the input's translation at a fixed proxy A, in A's frame, reporting the
- fraction at which the two first touch. The cores close to the greater of one linear slop and the
- two radii less that slop, so a pair carrying over two slops of radius between them stops a slop
- past the geometric touch and one carrying less stops up to a slop short. A pair beginning
- overlapped reports fraction zero under a zero normal, a NaN once normalised, unless can_encroach is set.
+ Sweeps proxy B along the translation at a fixed proxy A, in A's frame, reporting where they first
+ touch. The cores close to the greater of one linear slop and the two radii less that slop, so the
+ stop lands short of the geometric touch below a total radius of one slop, on it at one, and past
+ above — a full slop past once the total clears two. A pair beginning overlapped reports fraction
+ zero under a zero normal, a NaN once normalised, unless can_encroach is set.
 
  @return "where the two first touch, NO_HIT when they never do or the touch lies past max_fraction, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS"
 *>

@@ -67,43 +67,48 @@ fn CastOutput? HullData.ray_cast(&self, RayCastInput input) {
  Casts a ray at this compound in the compound's own frame, reporting the nearest child it reaches
  in child_index and the material that child names in material_index.
 
- Every child is cast at as a solid sphere, capsule, hull or mesh, so a ray starting inside one
- carries that kind's own answer back out through the child's placement.
+ The fraction is a true fraction of the translation — every child dispatches to the solid cast for
+ its kind, never the hollow one. A ray starting inside a child reports fraction 0 and a zero
+ normal, which rotating by the child's placement leaves zero, so a caller normalising it gets NaN.
 
- @return "where the ray meets the nearest child, or NO_HIT when it meets none"
+ @return "where the ray meets the nearest child, NO_HIT when it meets none, or INVALID_DEFINITION when max_fraction is above 1"
 *>
 fn CastOutput? CompoundData.ray_cast(&self, RayCastInput input) {
+    if (input.max_fraction > 1.0) return INVALID_DEFINITION~;
     CastOutput result = compound_ray_cast_raw(self, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
 
 <*
- Casts a ray at this mesh's triangles, scaled by the mesh's own scale, reporting a fraction of the
- ray's translation and the triangle struck in triangle_index.
+ Casts a ray at this mesh's triangles, scaled by the mesh's own scale. A triangle answers from one
+ side only: a ray meeting it from behind its winding reports nothing.
 
- A ray meeting a triangle from behind its winding reports nothing, so each triangle answers from
- one side only.
+ A max_fraction above 1 is refused, because box3d's triangle solver returns 1 as its no-hit value
+ and the search keeps whatever beats max_fraction — so a miss would come back as a hit at exactly
+ 1, carrying a real triangle index.
 
- @return "where the ray meets a triangle, or NO_HIT when it meets none"
+ @return "where the ray meets a triangle, NO_HIT when it meets none, or INVALID_DEFINITION when max_fraction is above 1"
 *>
 fn CastOutput? Mesh.ray_cast(&self, RayCastInput input) {
+    if (input.max_fraction > 1.0) return INVALID_DEFINITION~;
     CastOutput result = mesh_ray_cast_raw(self, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
 
 <*
- Casts a ray at this height field's triangles, reporting a fraction of the ray's translation and
- the triangle struck in triangle_index. Nothing is reported from underneath, or over a hole cell.
+ Casts a ray at this height field's triangles, reporting a fraction of the translation and the
+ triangle struck. Nothing is reported from underneath or over a hole cell, and a max_fraction
+ above 1 is refused — the same solver as Mesh.ray_cast, refused for the same reason.
 
- box3d compresses the heights into 16 bits across the global range the definition named, so the
- surface a cast meets sits under the heights it was built from by up to one of those steps, scaled
- by the field's own y scale.
+ box3d compresses the heights into 16 bits across the range the definition named, so the surface a
+ cast meets sits under the heights it was built from by up to one step, scaled by the y scale.
 
- @return "where the ray meets the field, or NO_HIT when it does not"
+ @return "where the ray meets the field, NO_HIT when it does not, or INVALID_DEFINITION when max_fraction is above 1"
 *>
 fn CastOutput? HeightFieldData.ray_cast(&self, RayCastInput input) {
+    if (input.max_fraction > 1.0) return INVALID_DEFINITION~;
     CastOutput result = height_field_ray_cast_raw(self, &input);
     if (!result.hit) return NO_HIT~;
     return result;

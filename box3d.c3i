@@ -1816,8 +1816,10 @@ struct RayCastInput {
 <*
  A convex proxy swept along translation in a shape's own frame, the shape cast's counterpart to
  RayCastInput. The proxy's points are borrowed for the duration of the call — see ShapeProxy.
- can_encroach is read only on box3d's first iteration, and only where the proxy starts clear of
- the shape by more than twice the linear slop.
+
+ can_encroach is read only on box3d's first iteration, and only inside a window that a proxy of
+ radius zero never enters: the total radius must exceed about three linear slops before the two
+ conditions gating it can hold together. BodyId.cast_shape says the same in its own words.
 *>
 struct ShapeCastInput {
     ShapeProxy proxy;

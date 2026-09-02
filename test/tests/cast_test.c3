@@ -527,3 +527,68 @@ fn void casting_rays_at_geometry_allocates_nothing() @test {
     assert(around.after == around.before, "and answering every one of them allocates nothing");
     assert(b3::byte_count() == around.baseline, "and that geometry gives back every byte it took");
 }
+
+struct PhantomGuards {
+    fault mesh;
+    fault height_field;
+    fault compound;
+    bool mesh_still_hits;
+}
+
+fn PhantomGuards the_refusals_of_a_fraction_past_one() {
+    b3::MeshData* grid = b3::create_grid_mesh(
+      x_count: 4,
+      z_count: 4,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: false,
+    )!!;
+    defer grid.destroy();
+    b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
+
+    b3::HeightFieldData* field = b3::create_height_field_grid(8, 8, (b3::Vec3){ 1.0, 1.0, 1.0 }, false)!!;
+    defer field.destroy();
+
+    b3::CompoundSphereDef sphere = {
+      .sphere = { .center = { 1.5, 0.0, 1.5 }, .radius = 0.5 },
+      .material = b3::default_surface_material(),
+    };
+    b3::CompoundDef def;
+    def.spheres = &sphere;
+    def.sphere_count = 1;
+    b3::CompoundData* compound = b3::create_compound(&def)!!;
+    defer compound.destroy();
+
+    b3::RayCastInput past_one = {
+      .origin = { 1.5, -3.0, 1.5 },
+      .translation = { 0.0, 6.0, 0.0 },
+      .max_fraction = 10.0,
+    };
+
+    PhantomGuards guards;
+    if (catch err = mesh.ray_cast(past_one)) guards.mesh = err;
+    if (catch err = field.ray_cast(past_one)) guards.height_field = err;
+    if (catch err = compound.ray_cast(past_one)) guards.compound = err;
+
+    b3::RayCastInput from_above = {
+      .origin = { 1.5, 3.0, 1.5 },
+      .translation = { 0.0, -6.0, 0.0 },
+      .max_fraction = 1.0,
+    };
+    if (try hit = mesh.ray_cast(from_above)) guards.mesh_still_hits = hit.hit;
+
+    return guards;
+}
+
+// box3d's triangle solver reports a miss by returning one and the search keeps whatever beats the
+// fraction it was given, so a fraction above one lets that miss win: a grid cast at from underneath
+// answers a hit at exactly one, three metres above itself. Refused rather than answered.
+fn void a_cast_fraction_past_one_is_refused_where_the_solver_would_invent_a_hit() @test {
+    PhantomGuards guards = the_refusals_of_a_fraction_past_one();
+    fault none;
+
+    assert(guards.mesh == b3::INVALID_DEFINITION, "a mesh will not take a fraction past one");
+    assert(guards.height_field == b3::INVALID_DEFINITION, "and neither will a height field");
+    assert(guards.compound == b3::INVALID_DEFINITION, "nor a compound, whose children may be meshes");
+    assert(guards.mesh_still_hits, "while a fraction of one still answers a real hit");
+}

@@ -1956,9 +1956,10 @@ struct SimplexCache @private {
 }
 
 <*
- box3d's separating-axis warm start for a hull pair: the axis the two last separated on, and
- whether that axis was re-used. Zero is the empty state, which box3d writes back whenever the axis
- it cached no longer separates them.
+ box3d's separating-axis warm start for a hull pair: the last axis it tested and what that test
+ gave, whether the two were separated or overlapping — the separation is negative for an overlap.
+ box3d replaces the entry rather than clearing it, so a caller never observes an empty one; hit is
+ the only field that reports re-use.
 *>
 struct SatCache @private {
     float separation;
@@ -1981,8 +1982,9 @@ struct FeaturePair {
 }
 
 <*
- One contact point of a manifold, in shape A's frame. A negative separation is an overlap and a
- positive one a point the two shapes have not reached, which only some pairs report at all.
+ One contact point of a manifold, in shape A's frame. A separation is zero where the surfaces
+ exactly meet, negative for an overlap, and positive for a point the two have not reached — which
+ only some pairs report at all.
  triangle_index names the triangle a mesh or height field contributed and is left alone by every
  pair of convex shapes.
 *>
@@ -2028,8 +2030,8 @@ struct CollisionManifold {
 
 <*
  Raw local collide entry points. Private because each writes through a manifold that borrows the
- caller's point buffer and takes a capacity below which it reports nothing rather than less. Both
- belong to box3d_collide.c3, whose wrappers are the only way in.
+ caller's point buffer and takes a capacity below which it reports nothing rather than less. All
+ four belong to box3d_collide.c3, whose wrappers are the only way in.
 *>
 extern fn void collide_spheres_raw(
   LocalManifold* manifold,

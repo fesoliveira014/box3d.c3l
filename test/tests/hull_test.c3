@@ -1,6 +1,7 @@
 module b3_test;
 
 import b3;
+import std::math;
 
 // The eight corners of a two by two by two box centred on the origin. Its hull is exact rather
 // than approximate: eight vertices, six faces, twenty-four half edges, volume 8, and bounds of
@@ -538,4 +539,231 @@ fn void a_canned_mesh_of_fewer_than_one_cell_is_refused_before_box3d_allocates()
     assert(grid == b3::DEGENERATE_GEOMETRY, "a grid of fewer than one cell names no mesh");
     assert(wave == b3::DEGENERATE_GEOMETRY, "and neither does a wave over one");
     assert(b3::byte_count() == baseline, "and neither of them moved the byte count doing it");
+}
+
+struct ScaledBoxReadings {
+    b3::ScaledBox doubled;
+    b3::ScaledBox mirrored;
+}
+
+// Three different half widths and a placement off the origin, so a scale applied to the wrong
+// component or dropped from the position is visible rather than hidden by symmetry.
+fn ScaledBoxReadings the_box_a_post_scale_resolves_to() {
+    b3::Vec3 half_widths = { 1.0, 2.0, 3.0 };
+    b3::Transform placed = a_placement_five_metres_along_x();
+
+    b3::ScaledBox doubled = b3::scale_box(
+      half_widths: half_widths,
+      transform: placed,
+      post_scale: (b3::Vec3){ 2.0, 2.0, 2.0 },
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox mirrored = b3::scale_box(
+      half_widths: half_widths,
+      transform: placed,
+      post_scale: (b3::Vec3){ -2.0, 3.0, 1.0 },
+      min_half_width: 0.01,
+    );
+
+    return { .doubled = doubled, .mirrored = mirrored };
+}
+
+fn void a_post_scale_lands_in_the_half_widths_and_in_the_position() @test {
+    ScaledBoxReadings box = the_box_a_post_scale_resolves_to();
+
+    assert(1.99 < box.doubled.half_widths.x && box.doubled.half_widths.x < 2.01,
+        "a scale of two doubles all three half widths");
+    assert(3.99 < box.doubled.half_widths.y && box.doubled.half_widths.y < 4.01);
+    assert(5.99 < box.doubled.half_widths.z && box.doubled.half_widths.z < 6.01);
+    assert(9.99 < box.doubled.transform.p.x && box.doubled.transform.p.x < 10.01,
+        "and carries the position out with them rather than leaving the box where it stood");
+
+    assert(1.99 < box.mirrored.half_widths.x && box.mirrored.half_widths.x < 2.01,
+        "a negative component widens by its magnitude, so no half width comes back negative");
+    assert(5.99 < box.mirrored.half_widths.y && box.mirrored.half_widths.y < 6.01);
+    assert(2.99 < box.mirrored.half_widths.z && box.mirrored.half_widths.z < 3.01);
+    assert(-10.01 < box.mirrored.transform.p.x && box.mirrored.transform.p.x < -9.99,
+        "and the reflection lands in the position instead");
+}
+
+struct FlooredBoxReadings {
+    b3::ScaledBox collapsed;
+    b3::ScaledBox left_alone;
+    b3::ScaledBox widened;
+}
+
+// The unscaled pair is the control: without it a minimum that fires on every call would look
+// exactly like one that only catches a box the scale flattened.
+fn FlooredBoxReadings the_box_a_minimum_half_width_holds_open() {
+    b3::Vec3 half_widths = { 1.0, 2.0, 3.0 };
+    b3::Transform placed = a_placement_five_metres_along_x();
+    b3::Vec3 unscaled = { 1.0, 1.0, 1.0 };
+
+    b3::ScaledBox collapsed = b3::scale_box(
+      half_widths: half_widths,
+      transform: placed,
+      post_scale: (b3::Vec3){ 0.0, 0.0, 0.0 },
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox left_alone = b3::scale_box(
+      half_widths: half_widths,
+      transform: placed,
+      post_scale: unscaled,
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox widened = b3::scale_box(
+      half_widths: half_widths,
+      transform: placed,
+      post_scale: unscaled,
+      min_half_width: 10.0,
+    );
+
+    return { .collapsed = collapsed, .left_alone = left_alone, .widened = widened };
+}
+
+fn void a_minimum_half_width_is_a_floor_under_every_axis_rather_than_a_refusal() @test {
+    FlooredBoxReadings box = the_box_a_minimum_half_width_holds_open();
+
+    assert(0.009 < box.collapsed.half_widths.x && box.collapsed.half_widths.x < 0.011,
+        "a scale of zero flattens the box onto the minimum and is accepted");
+    assert(0.009 < box.collapsed.half_widths.y && box.collapsed.half_widths.y < 0.011);
+    assert(0.009 < box.collapsed.half_widths.z && box.collapsed.half_widths.z < 0.011);
+
+    assert(0.99 < box.left_alone.half_widths.x && box.left_alone.half_widths.x < 1.01,
+        "a minimum under all three half widths leaves every one of them where it was");
+    assert(1.99 < box.left_alone.half_widths.y && box.left_alone.half_widths.y < 2.01);
+    assert(2.99 < box.left_alone.half_widths.z && box.left_alone.half_widths.z < 3.01);
+
+    assert(9.99 < box.widened.half_widths.x && box.widened.half_widths.x < 10.01,
+        "and one above them widens a box the scale never narrowed");
+    assert(9.99 < box.widened.half_widths.y && box.widened.half_widths.y < 10.01);
+    assert(9.99 < box.widened.half_widths.z && box.widened.half_widths.z < 10.01);
+}
+
+struct TurnedBoxReadings {
+    b3::ScaledBox upright;
+    b3::ScaledBox quarter_turn;
+    b3::ScaledBox eighth_turn;
+    b3::ScaledBox eighth_turn_scaled_evenly;
+}
+
+// The upright reading is what says which half width a turned box hands to the stretching
+// component. An eighth turn is what separates a box3d that refits the box from one that carries
+// a single corner through: at a quarter turn the box lands square to the axes and the two agree.
+fn TurnedBoxReadings the_box_a_post_scale_resolves_to_under_a_rotation() {
+    b3::Vec3 half_widths = { 1.0, 2.0, 3.0 };
+    b3::Vec3 forward = { 0.0, 0.0, 1.0 };
+    b3::Vec3 origin = { 0.0, 0.0, 0.0 };
+    b3::Vec3 along_x = { 2.0, 1.0, 1.0 };
+
+    b3::Transform quarter = a_turn_about(forward, math::PI / 2.0, origin);
+    b3::Transform eighth = a_turn_about(forward, math::PI / 4.0, origin);
+
+    b3::ScaledBox upright = b3::scale_box(
+      half_widths: half_widths,
+      transform: an_untouched_placement(),
+      post_scale: along_x,
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox quarter_turn = b3::scale_box(
+      half_widths: half_widths,
+      transform: quarter,
+      post_scale: along_x,
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox eighth_turn = b3::scale_box(
+      half_widths: half_widths,
+      transform: eighth,
+      post_scale: along_x,
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox eighth_turn_scaled_evenly = b3::scale_box(
+      half_widths: half_widths,
+      transform: eighth,
+      post_scale: (b3::Vec3){ 2.0, 2.0, 2.0 },
+      min_half_width: 0.01,
+    );
+
+    return {
+      .upright = upright,
+      .quarter_turn = quarter_turn,
+      .eighth_turn = eighth_turn,
+      .eighth_turn_scaled_evenly = eighth_turn_scaled_evenly,
+    };
+}
+
+fn void a_rotation_decides_which_half_width_a_post_scale_stretches() @test {
+    TurnedBoxReadings box = the_box_a_post_scale_resolves_to_under_a_rotation();
+
+    assert(1.99 < box.upright.half_widths.x && box.upright.half_widths.x < 2.01,
+        "upright, a scale of two along x doubles the box's own x");
+    assert(1.99 < box.upright.half_widths.y && box.upright.half_widths.y < 2.01);
+    assert(2.99 < box.upright.half_widths.z && box.upright.half_widths.z < 3.01);
+
+    assert(3.99 < box.quarter_turn.half_widths.y && box.quarter_turn.half_widths.y < 4.01,
+        "a quarter turn lays the box's y along world x, so that is the half width the same scale doubles");
+    assert(0.99 < box.quarter_turn.half_widths.x && box.quarter_turn.half_widths.x < 1.01);
+    assert(2.99 < box.quarter_turn.half_widths.z && box.quarter_turn.half_widths.z < 3.01,
+        "leaving the axis the turn does not move alone");
+}
+
+fn void a_rotation_with_an_uneven_scale_answers_narrower_than_the_box_it_was_given() @test {
+    TurnedBoxReadings box = the_box_a_post_scale_resolves_to_under_a_rotation();
+
+    assert(0.49 < box.eighth_turn.half_widths.x && box.eighth_turn.half_widths.x < 0.51,
+        "an eighth turn shears the box, and box3d carries one corner through rather than refitting");
+    assert(2.49 < box.eighth_turn.half_widths.y && box.eighth_turn.half_widths.y < 2.51);
+    assert(box.eighth_turn.half_widths.x < 1.0,
+        "so the answer is approximate, and here narrower on x than the box it started from");
+
+    assert(1.99 < box.eighth_turn_scaled_evenly.half_widths.x && box.eighth_turn_scaled_evenly.half_widths.x < 2.01,
+        "a scale that is even across the three axes is exact under the same turn");
+    assert(3.99 < box.eighth_turn_scaled_evenly.half_widths.y && box.eighth_turn_scaled_evenly.half_widths.y < 4.01);
+    assert(5.99 < box.eighth_turn_scaled_evenly.half_widths.z && box.eighth_turn_scaled_evenly.half_widths.z < 6.01);
+}
+
+struct MirroredTurnReadings {
+    b3::ScaledBox turned;
+    b3::ScaledBox turned_and_mirrored;
+}
+
+// A rotation is what shows that a negative component rebuilds the quaternion: with the box
+// upright the reflection has nothing to turn and the rotation comes back untouched.
+fn MirroredTurnReadings the_box_a_mirroring_scale_resolves_to_under_a_rotation() {
+    b3::Vec3 half_widths = { 1.0, 2.0, 3.0 };
+    b3::Vec3 forward = { 0.0, 0.0, 1.0 };
+    b3::Transform quarter = a_turn_about(forward, math::PI / 2.0, (b3::Vec3){ 5.0, 0.0, 0.0 });
+
+    b3::ScaledBox turned = b3::scale_box(
+      half_widths: half_widths,
+      transform: quarter,
+      post_scale: (b3::Vec3){ 2.0, 3.0, 1.0 },
+      min_half_width: 0.01,
+    );
+    b3::ScaledBox turned_and_mirrored = b3::scale_box(
+      half_widths: half_widths,
+      transform: quarter,
+      post_scale: (b3::Vec3){ -2.0, 3.0, 1.0 },
+      min_half_width: 0.01,
+    );
+
+    return { .turned = turned, .turned_and_mirrored = turned_and_mirrored };
+}
+
+fn void a_mirroring_scale_turns_the_box_the_other_way_instead_of_flipping_a_half_width() @test {
+    MirroredTurnReadings box = the_box_a_mirroring_scale_resolves_to_under_a_rotation();
+
+    assert(0.706 < box.turned.transform.q.k && box.turned.transform.q.k < 0.708,
+        "a positive scale leaves the quarter turn exactly as it found it");
+    assert(9.99 < box.turned.transform.p.x && box.turned.transform.p.x < 10.01);
+
+    assert(-0.708 < box.turned_and_mirrored.transform.q.k && box.turned_and_mirrored.transform.q.k < -0.706,
+        "and mirroring one axis turns the box the other way rather than reflecting it");
+    assert(0.706 < box.turned_and_mirrored.transform.q.l && box.turned_and_mirrored.transform.q.l < 0.708);
+    assert(-10.01 < box.turned_and_mirrored.transform.p.x && box.turned_and_mirrored.transform.p.x < -9.99);
+
+    assert(2.99 < box.turned_and_mirrored.half_widths.x && box.turned_and_mirrored.half_widths.x < 3.01,
+        "leaving the same three half widths the unmirrored scale gives");
+    assert(3.99 < box.turned_and_mirrored.half_widths.y && box.turned_and_mirrored.half_widths.y < 4.01);
+    assert(2.99 < box.turned_and_mirrored.half_widths.z && box.turned_and_mirrored.half_widths.z < 3.01);
 }

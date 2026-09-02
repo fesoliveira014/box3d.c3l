@@ -103,3 +103,24 @@ fn HullData*? HullData.clone(&self) {
 fn HullData*? HullData.clone_and_transform(&self, Transform transform, Vec3 scale) {
     return checked_geometry(clone_and_transform_hull_raw(self, transform, scale), DEGENERATE_GEOMETRY);
 }
+
+<*
+ Resolves a post scale applied after the box's placement back into half widths and a placement. A
+ negative component mirrors the position and rebuilds the rotation, keeping the widths positive.
+
+ The scale runs along the world axes, so the rotation decides which half width each component
+ stretches, and box3d carries one corner through rather than refitting: under a rotation with a
+ non-uniform scale the answer is approximate, and can be narrower than the box it started from.
+
+ @param min_half_width : "a floor under every half width once the scale is in, so it widens a box the scale never narrowed; box3d asserts it finite and positive and compiles that out, so a non-positive one clamps nothing"
+ @return "the half widths and the placement with the post scale resolved into them"
+*>
+fn ScaledBox scale_box(Vec3 half_widths, Transform transform, Vec3 post_scale, float min_half_width) {
+    scale_box_raw(
+      half_widths: &half_widths,
+      transform: &transform,
+      post_scale: post_scale,
+      min_half_width: min_half_width,
+    );
+    return { .half_widths = half_widths, .transform = transform };
+}

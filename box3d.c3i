@@ -563,6 +563,22 @@ extern fn BoxHull make_transformed_box_hull(float hx, float hy, float hz, Transf
 extern fn BoxHull make_scaled_box_hull(Vec3 half_widths, Transform transform, Vec3 post_scale) @cname("b3MakeScaledBoxHull");
 
 <*
+ A box with a post scale resolved into it, as scale_box() reports one. A C3 type with no C
+ counterpart: box3d rewrites the half widths and the placement it was handed, through two in-out
+ pointers.
+*>
+struct ScaledBox {
+    Vec3 half_widths;
+    Transform transform;
+}
+
+<*
+ Raw box scaler. Rewrites both of the arguments it is handed, so box3d_hull.c3's scale_box is the
+ only public way in.
+*>
+extern fn void scale_box_raw(Vec3* half_widths, Transform* transform, Vec3 post_scale, float min_half_width) @cname("b3ScaleBox") @private;
+
+<*
  Raw hull constructors. Every one of them ends in b3CreateHull, so every one returns a null
  pointer for a point set box3d will not close into a hull; the wrappers in box3d_hull.c3 turn
  that into a fault and are the only public way in.

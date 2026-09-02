@@ -45,8 +45,10 @@ b3BodyEvents moveEvents,moveCount
 b3JointEvent jointId,userData
 b3JointEvents jointEvents,count
 b3QueryFilter categoryBits,maskBits,id,name
+b3RayCastInput origin,translation,maxFraction
 b3RayResult shapeId,point,normal,userMaterialId,fraction,triangleIndex,childIndex,nodeVisits,leafVisits,hit
 b3ShapeProxy points,count,radius
+b3ShapeCastInput proxy,translation,maxFraction,canEncroach
 b3CastOutput normal,point,fraction,iterations,triangleIndex,childIndex,materialIndex,hit
 b3WorldCastOutput
 b3BodyCastResult shapeId,point,normal,fraction,triangleIndex,userMaterialId,iterations,hit

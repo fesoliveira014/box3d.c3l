@@ -47,8 +47,11 @@ fn WorldCastOutput? ShapeId.ray_cast(self, Pos origin, Vec3 translation) {
  Fires a ray at this body alone using a transform the caller supplies, which need not be the
  body's current one — passing a future transform is how a cast against a predicted pose is done.
 
- @param max_fraction : "the portion of translation to consider, normally 1"
- @return "the closest hit on this body, or NO_HIT when the ray missed it"
+ A max_fraction above 1 is refused: a mesh or height field shape on this body would answer a miss
+ as a hit at exactly 1 — see Mesh.ray_cast.
+
+ @param max_fraction : "the portion of translation to consider, which must not exceed 1"
+ @return "the closest hit on this body, NO_HIT when the ray missed it, or INVALID_DEFINITION when max_fraction is above 1"
 *>
 fn BodyCastResult? BodyId.cast_ray(
   self,
@@ -58,6 +61,7 @@ fn BodyCastResult? BodyId.cast_ray(
   float max_fraction,
   WorldTransform body_transform,
 ) {
+    if (max_fraction > 1.0f) return INVALID_DEFINITION~;
     BodyCastResult result = body_cast_ray_raw(
       body_id: self,
       origin: origin,
@@ -73,12 +77,12 @@ fn BodyCastResult? BodyId.cast_ray(
 <*
  Sweeps a convex proxy at this body alone using a transform the caller supplies. The proxy's
  points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. The reported fraction sits one linear slop either side of true contact —
- see ShapeCastInput for which side — so an
- exact geometric expectation will not match.
+ MAX_SHAPE_CAST_POINTS. The reported fraction sits one linear slop from true contact, on the side
+ WorldId.cast_shape names, so an exact geometric expectation will not match. A max_fraction above
+ 1 is refused for the reason cast_ray gives.
 
  @param can_encroach : "allows the cast to start touching; meaningful only where the proxy and the shape carry about three linear slops of radius between them"
- @return "the closest hit on this body, or NO_HIT when the sweep missed it"
+ @return "the closest hit on this body, NO_HIT when the sweep missed it, or INVALID_DEFINITION when max_fraction is above 1"
 *>
 fn BodyCastResult? BodyId.cast_shape(
   self,
@@ -90,6 +94,7 @@ fn BodyCastResult? BodyId.cast_shape(
   bool can_encroach,
   WorldTransform body_transform,
 ) {
+    if (max_fraction > 1.0f) return INVALID_DEFINITION~;
     BodyCastResult result = body_cast_shape_raw(
       body_id: self,
       origin: origin,
@@ -151,7 +156,7 @@ fn CastHit[] WorldId.cast_ray_all(
  Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
  buffer. The proxy's points are borrowed for the call and its count must not exceed
  MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions stop one linear
- slop from true contact, on the side ShapeCastInput names.
+ slop from true contact, on the side WorldId.cast_shape names.
 
  @return "the prefix of buffer that was filled"
 *>

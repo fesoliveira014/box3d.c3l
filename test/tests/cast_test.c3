@@ -600,9 +600,9 @@ fn void a_cast_fraction_past_one_is_refused_where_the_solver_would_invent_a_hit(
     assert(guards.mesh_still_hits, "while a fraction of one still answers a real hit");
 }
 
-// box3d closes a shape cast on the two radii less one linear slop, so a swept fraction lands short
-// of the geometric touch by that slop spread over the translation. The slop is defined in terms of
-// the ambient length unit, so it is written out rather than quoted as a number.
+// box3d closes a shape cast on the two radii less one linear slop, so a pair carrying radius
+// between them lands that slop past the geometric touch and a pair carrying none lands short of it.
+// The slop follows the ambient length unit, so it is written out rather than quoted as a number.
 fn float a_linear_slop() {
     return 0.005f * b3::length_units_per_meter();
 }
@@ -652,7 +652,7 @@ fn void a_swept_probe_touches_a_sphere_before_a_ray_reaches_it() @test {
 
     assert(both.ray.hit && both.swept.hit, "the ray and the probe both find the sphere");
     assert(math::abs(both.ray.fraction - (3.0f - 0.5f) / 6.0f) < 0.00001, "the ray runs to the surface itself");
-    assert(both.swept.fraction > touch, "the probe stops a radius earlier");
+    assert(both.swept.fraction > touch, "the probe stops where its own surface meets the shape, not where its centre would");
     assert(both.swept.fraction < touch + 2.0f * a_linear_slop() / 6.0f, "and past it by no more than a linear slop");
     assert(math::abs(both.swept.point.y - 0.5f) < 0.00001, "touching the top of the sphere");
     assert(math::abs(both.swept.normal.y - 1.0f) < 0.00001, "along the normal there");

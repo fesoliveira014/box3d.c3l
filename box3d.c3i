@@ -1907,12 +1907,12 @@ alias CompoundQueryFn = fn bool(CompoundData* compound, int child_index, void* c
 extern fn void Mesh.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryMesh");
 
 <*
- Reports the triangles of this field whose cell meets bounds, a box in the field's own frame with
- the field's scale applied. The test is per cell, not per triangle: a cell whose corner box meets
- bounds reports both its triangles, and a hole cell reports neither.
+ Reports the triangles whose cell meets bounds, a box in the field's own frame and scale. The test
+ is per cell — a cell meeting bounds reports both its triangles, a hole cell neither — and what fcn
+ returns is discarded, so nothing stops the traversal.
 
- What fcn returns is discarded, so nothing stops the traversal early. box3d spans the box in
- unclamped cell indices, so a box wider than a signed int of cells reports nothing at all.
+ The work follows the box, not the field: box3d spans it in unclamped cell indices, so a billion
+ cells costs seconds and a span past a signed int reports nothing. Intersect with compute_aabb().
 *>
 extern fn void HeightFieldData.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryHeightField");
 

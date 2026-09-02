@@ -81,7 +81,7 @@ fn b3::HeightFieldData*? an_eight_by_eight_field(bool make_holes) {
 struct MeshQueryReadings {
     QueryLog everything;
     QueryLog far_corner_cell;
-    QueryLog above_the_plane;
+    QueryLog half_a_cell;
     QueryLog fifty_metres_out;
     QueryLog stopped_early;
 }
@@ -97,8 +97,8 @@ fn MeshQueryReadings the_triangles_a_grid_mesh_reports() {
     QueryLog far_corner_cell;
     mesh.query(a_box_from({ 1.1, -1.0, 1.1 }, { 1.9, 1.0, 1.9 }), &log_triangle, &far_corner_cell);
 
-    QueryLog above_the_plane;
-    mesh.query(a_box_from({ -1.9, 0.5, -1.9 }, { -1.1, 1.0, -1.1 }), &log_triangle, &above_the_plane);
+    QueryLog half_a_cell;
+    mesh.query(a_box_from({ 1.7, -0.1, 1.05 }, { 1.95, 0.1, 1.3 }), &log_triangle, &half_a_cell);
 
     QueryLog fifty_metres_out;
     mesh.query(a_box_from({ 50.0, -1.0, 50.0 }, { 51.0, 1.0, 51.0 }), &log_triangle, &fifty_metres_out);
@@ -109,7 +109,7 @@ fn MeshQueryReadings the_triangles_a_grid_mesh_reports() {
     return {
       .everything = everything,
       .far_corner_cell = far_corner_cell,
-      .above_the_plane = above_the_plane,
+      .half_a_cell = half_a_cell,
       .fifty_metres_out = fifty_metres_out,
       .stopped_early = stopped_early,
     };
@@ -134,9 +134,9 @@ fn void a_mesh_reports_the_triangles_a_box_meets() @test {
 fn void a_mesh_tests_each_triangle_rather_than_the_node_holding_it() @test {
     MeshQueryReadings reported = the_triangles_a_grid_mesh_reports();
 
-    assert(reported.everything.count == 32, "the grid answers at all, so the empty answer below means something");
-    assert(reported.above_the_plane.count == 0,
-        "a box half a metre over the grid reaches no triangle, though the node holding them spans it");
+    assert(reported.half_a_cell.count == 1,
+        "a box over half a cell reaches one of its two triangles, where the node holding both spans it");
+    assert(reported.half_a_cell.first_index == 31, "the half the box actually covers");
 }
 
 fn void a_mesh_query_ends_when_its_callback_says_so() @test {

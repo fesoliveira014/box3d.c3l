@@ -2277,9 +2277,11 @@ struct ToiOutput {
 extern fn ToiOutput time_of_impact_raw(ToiInput* input) @cname("b3TimeOfImpact") @private;
 
 <*
- The plane between a mover and one shape it touches. The normal points out of the shape towards the
- mover, and offset is how far the mover's surface reaches past the shape's. point is the closest
- point on the shape, which need not be unique.
+ The plane between a mover and one shape it touches. offset is how far the mover's surface reaches
+ past the shape's, and point sits on the shape's core rather than its surface — the sphere's centre,
+ the capsule's segment, the hull's own face. The normal points out of the shape towards the mover,
+ except where the mover's core has closed within a linear slop of a sphere or capsule: box3d then
+ substitutes a perpendicular of the mover's axis, and the direction means nothing.
 *>
 struct PlaneResult {
     Plane plane;
@@ -2321,8 +2323,8 @@ struct BodyPlaneResult {
 }
 
 <*
- Called once per shape a mover touches, handed every plane that one shape produced. The array points
- at box3d's own stack and dies with the call, so a plane kept is copied out. Returning false ends
+ Called once per shape a mover touches, handed that shape's planes up to box3d's own 64. The
+ array points at box3d's stack and dies with the call, so a plane kept is copied out. Returning false ends
  the traversal of the tree that shape sits in and leaves the other two reporting. The query runs
  synchronously on the calling thread, and the world must not be modified from inside it.
 *>
@@ -2336,11 +2338,11 @@ alias PlaneResultFn = fn bool(ShapeId shape_id, PlaneResult* planes, int plane_c
 alias MoverFilterFn = fn bool(ShapeId shape_id, void* context);
 
 <*
- Collides a capsule mover with the world, calling fcn once per shape it touches. The mover and the
- planes are both relative to origin, and static, kinematic and dynamic shapes all report. A sphere,
- capsule or hull produces one plane; a mesh, height field or compound may produce up to 64, past
- which it is cut in silence. A locked world reports none, as does an origin past an assertion this
- build compiles out.
+ Collides a capsule mover with the world, calling fcn once per shape it touches; fcn is required and
+ the planes are relative to origin. Static, kinematic and dynamic shapes all report. A sphere,
+ capsule or hull gives one plane, a mesh or compound up to 64, past which it is cut in silence. A
+ hull or triangle stops reporting once the mover's core reaches its surface, deep overlap being
+ unhandled there, so a mover sunk past its own radius has nothing to solve on. A locked world: none.
 *>
 extern fn void WorldId.collide_mover(
   self,
@@ -2359,7 +2361,7 @@ extern fn void WorldId.collide_mover(
  answers 1, as does an origin or translation past the assertion this build compiles out.
 
  @param fcn : "an optional per-shape filter; null accepts every shape the query filter passed"
- @return "the fraction of translation the mover may take, above zero because a shape it starts deeply overlapping is skipped, and at most 1"
+ @return "the fraction of translation the mover may take, above zero because a shape whose surface the mover's core starts within one slop or the two radii less a slop of is dropped from the sweep — which for a mover thinner than about a slop reaches past its own surface — and at most 1"
 *>
 extern fn float WorldId.cast_mover(
   self,

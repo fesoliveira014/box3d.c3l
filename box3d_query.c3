@@ -73,10 +73,10 @@ fn BodyCastResult? BodyId.cast_ray(
 <*
  Sweeps a convex proxy at this body alone using a transform the caller supplies. The proxy's
  points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. The reported fraction stops short of true contact by box3d's speculative
- margin, so an exact geometric expectation will not match.
+ MAX_SHAPE_CAST_POINTS. The reported fraction stops one linear slop short of true contact, so an
+ exact geometric expectation will not match.
 
- @param can_encroach : "allows the cast to start touching; only meaningful when the proxy radius is above zero"
+ @param can_encroach : "allows the cast to start touching; meaningful only where the proxy and the shape carry about three linear slops of radius between them"
  @return "the closest hit on this body, or NO_HIT when the sweep missed it"
 *>
 fn BodyCastResult? BodyId.cast_shape(
@@ -149,8 +149,8 @@ fn CastHit[] WorldId.cast_ray_all(
 <*
  Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
  buffer. The proxy's points are borrowed for the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions stop short of
- true contact by box3d's speculative margin.
+ MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions stop one linear
+ slop short of true contact.
 
  @return "the prefix of buffer that was filled"
 *>

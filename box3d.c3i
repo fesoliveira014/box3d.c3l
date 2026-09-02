@@ -1680,8 +1680,7 @@ extern fn TreeStats WorldId.cast_ray(
 <*
  Sweeps a convex proxy instead of a point, calling fcn once per shape it reaches. The proxy's
  points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. Reported fractions stop short of true contact by box3d's speculative
- margin.
+ MAX_SHAPE_CAST_POINTS. Reported fractions stop one linear slop short of true contact.
 *>
 extern fn TreeStats WorldId.cast_shape(
   self,
@@ -1817,9 +1816,9 @@ struct RayCastInput {
  A convex proxy swept along translation in a shape's own frame, the shape cast's counterpart to
  RayCastInput. The proxy's points are borrowed for the duration of the call — see ShapeProxy.
 
- can_encroach is read only on box3d's first iteration, and only inside a window that a proxy of
- radius zero never enters: the total radius must exceed about three linear slops before the two
- conditions gating it can hold together. BodyId.cast_shape says the same in its own words.
+ can_encroach is read only on box3d's first iteration, and only while the radius the proxy and the
+ shape carry between them exceeds about three linear slops. A sphere and a capsule lend their own
+ radius to that sum where a hull, a mesh and a height field lend none.
 *>
 struct ShapeCastInput {
     ShapeProxy proxy;
@@ -1848,6 +1847,30 @@ extern fn CastOutput compound_ray_cast_raw(CompoundData* shape, RayCastInput* in
 extern fn CastOutput hull_ray_cast_raw(HullData* shape, RayCastInput* input) @cname("b3RayCastHull") @private;
 extern fn CastOutput mesh_ray_cast_raw(Mesh* shape, RayCastInput* input) @cname("b3RayCastMesh") @private;
 extern fn CastOutput height_field_ray_cast_raw(HeightFieldData* shape, RayCastInput* input) @cname("b3RayCastHeightField") @private;
+
+<*
+ Raw local-space shape casts. Private for the reason the raw ray casts are, and for one more: a
+ proxy holding no points is answered with a hit at fraction 0 rather than refused, and a null
+ point array is read without a test, so the wrappers in box3d_cast.c3 check the proxy first.
+*>
+extern fn CastOutput sphere_shape_cast_raw(Sphere* shape, ShapeCastInput* input) @cname("b3ShapeCastSphere") @private;
+extern fn CastOutput capsule_shape_cast_raw(Capsule* shape, ShapeCastInput* input) @cname("b3ShapeCastCapsule") @private;
+extern fn CastOutput compound_shape_cast_raw(CompoundData* shape, ShapeCastInput* input) @cname("b3ShapeCastCompound") @private;
+extern fn CastOutput hull_shape_cast_raw(HullData* shape, ShapeCastInput* input) @cname("b3ShapeCastHull") @private;
+extern fn CastOutput mesh_shape_cast_raw(Mesh* shape, ShapeCastInput* input) @cname("b3ShapeCastMesh") @private;
+extern fn CastOutput height_field_shape_cast_raw(HeightFieldData* shape, ShapeCastInput* input) @cname("b3ShapeCastHeightField") @private;
+
+<*
+ Raw overlap predicates. Private because a proxy holding no points is answered true by the mesh
+ and the height field where the other four answer false, and because every one of them reads the
+ point array without testing it; the wrappers in box3d_cast.c3 refuse both.
+*>
+extern fn bool sphere_overlap_raw(Sphere* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapSphere") @private;
+extern fn bool capsule_overlap_raw(Capsule* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCapsule") @private;
+extern fn bool compound_overlap_raw(CompoundData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCompound") @private;
+extern fn bool hull_overlap_raw(HullData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHull") @private;
+extern fn bool mesh_overlap_raw(Mesh* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapMesh") @private;
+extern fn bool height_field_overlap_raw(HeightFieldData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHeightField") @private;
 
 enum JointType : int {
     PARALLEL,

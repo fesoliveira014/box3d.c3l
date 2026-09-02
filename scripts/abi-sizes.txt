@@ -84,3 +84,8 @@ b3CompoundHull 40 8 hull=0 transform=8 materialIndex=36
 b3CompoundMesh 64 8 meshData=0 transform=8 scale=36 materialIndices=48
 b3CompoundSphere 20 4 sphere=0 materialIndex=16
 b3ChildShape 80 8 @capsule=0 transform=32 materialIndices=60 type=76
+b3SimplexCache 16 4 metric=0 count=4 indexA=6 indexB=10
+b3SATCache 8 4 separation=0 type=4 indexA=5 indexB=6 hit=7
+b3FeaturePair 4 1 owner1=0 index1=1 owner2=2 index2=3
+b3LocalManifoldPoint 24 4 point=0 separation=12 pair=16 triangleIndex=20
+b3LocalManifold 64 8 normal=0 triangleNormal=12 points=24 pointCount=32 triangleIndex=36 i1=40 i2=44 i3=48 squaredDistance=52 feature=56 triangleFlags=60

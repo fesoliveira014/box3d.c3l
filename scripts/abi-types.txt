@@ -84,3 +84,8 @@ b3CompoundHull hull,transform,materialIndex
 b3CompoundMesh meshData,transform,scale,materialIndices
 b3CompoundSphere sphere,materialIndex
 b3ChildShape @capsule,transform,materialIndices,type
+b3SimplexCache metric,count,indexA,indexB
+b3SATCache separation,type,indexA,indexB,hit
+b3FeaturePair owner1,index1,owner2,index2
+b3LocalManifoldPoint point,separation,pair,triangleIndex
+b3LocalManifold normal,triangleNormal,points,pointCount,triangleIndex,i1,i2,i3,squaredDistance,feature,triangleFlags

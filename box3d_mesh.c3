@@ -4,16 +4,18 @@ module b3;
  Builds a flat grid of triangles in the x-z plane, x_count by z_count cells around the origin.
 
  The caller owns the mesh and must destroy() it; byte_count() carries it until then, as for every
- mesh constructor below. A refusal leaks: box3d clones the vertices before rejecting geometry with
- no triangle of area or a hierarchy too deep to traverse, and frees back only part. Only its
- refusals on the counts alone — fewer than three vertices or no triangles — are allocation-free,
- and nothing else about the arguments predicts which.
+ mesh constructor below. A refusal leaks — box3d frees back only part of what it cloned — so a
+ test must not reach one.
+
+ The count guard covers something worse: box3d turns a large negative count into a large positive
+ vertex count and charges the allocation without giving it back, measured 36 MB at -1000.
 
  @param material_count : "how many distinct material indices to spread over the triangles"
  @param identify_edges : "compute the shared-edge adjacency the solver uses to hide inner edges"
- @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
+ @return "the mesh, or DEGENERATE_GEOMETRY when a count is below one or the arguments describe no triangle with area"
 *>
 fn MeshData*? create_grid_mesh(int x_count, int z_count, float cell_width, int material_count, bool identify_edges) {
+    if (x_count < 1 || z_count < 1) return DEGENERATE_GEOMETRY~;
     return checked_geometry(create_grid_mesh_raw(
       x_count: x_count,
       z_count: z_count,
@@ -27,7 +29,7 @@ fn MeshData*? create_grid_mesh(int x_count, int z_count, float cell_width, int m
  Builds a grid of triangles in the x-z plane with a sine wave raised over it. Ownership and the
  fault work as they do for create_grid_mesh.
 
- @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
+ @return "the mesh, or DEGENERATE_GEOMETRY when a count is below one or the arguments describe no triangle with area"
 *>
 fn MeshData*? create_wave_mesh(
   int x_count,
@@ -37,6 +39,7 @@ fn MeshData*? create_wave_mesh(
   float row_frequency,
   float column_frequency,
 ) {
+    if (x_count < 1 || z_count < 1) return DEGENERATE_GEOMETRY~;
     return checked_geometry(create_wave_mesh_raw(
       x_count: x_count,
       z_count: z_count,

@@ -82,8 +82,10 @@ fn Capsule? ShapeId.capsule(self) {
 }
 
 <*
- The hull belongs to the world and stays valid until the shape is destroyed or given other
- geometry.
+ The hull belongs to the world, which reference-counts a clone of whatever built the shape, and
+ stays valid until the shape is destroyed or given other geometry. Calling destroy() on it takes
+ the world's copy out from under every shape sharing it, and the next step or world teardown reads
+ freed memory.
 
  @return "the hull, or WRONG_SHAPE_TYPE when this shape is not a hull"
 *>

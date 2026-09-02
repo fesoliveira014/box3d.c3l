@@ -443,8 +443,28 @@ fn void a_ring_of_fewer_than_three_sides_is_refused() @test {
       y_offset: 0.0,
       sides: 2,
     ));
-    assert(two.refusal == b3::DEGENERATE_GEOMETRY, "two sides put four points in one plane");
+    assert(two.refusal == b3::DEGENERATE_GEOMETRY, "the guard refuses two sides before box3d sees them");
     assert(two.after == two.baseline);
+
+    // Past the guard, box3d refuses on its own edge ceiling rather than on the count, which is the
+    // path the guard does not cover and the only one that reaches the library.
+    HullRefusal past_the_ceiling = @the_refusal_of(b3::create_cylinder(
+      height: 2.0,
+      radius: 0.5,
+      y_offset: 0.0,
+      sides: 43,
+    ));
+    assert(past_the_ceiling.refusal == b3::DEGENERATE_GEOMETRY, "and box3d refuses the ring above its edge ceiling");
+    assert(past_the_ceiling.after == past_the_ceiling.baseline, "giving back every byte it took to find out");
+
+    HullRefusal cone_past_the_ceiling = @the_refusal_of(b3::create_cone(
+      height: 2.0,
+      radius1: 0.5,
+      radius2: 0.25,
+      slices: 43,
+    ));
+    assert(cone_past_the_ceiling.refusal == b3::DEGENERATE_GEOMETRY, "a cone the same way");
+    assert(cone_past_the_ceiling.after == cone_past_the_ceiling.baseline);
 
     HullRefusal negative = @the_refusal_of(b3::create_cylinder(
       height: 2.0,
@@ -487,4 +507,35 @@ fn void a_rock_too_small_to_separate_its_points_is_refused() @test {
     assert(tiny.refusal == b3::DEGENERATE_GEOMETRY,
         "and a radius inside box3d's build tolerance draws them back together");
     assert(tiny.after == tiny.baseline);
+}
+
+// A count below one is not a refusal box3d makes cheaply: it squares into a large positive vertex
+// count, charges the allocation and never gives it back, so the guard stands between the suite and
+// a permanently shifted baseline rather than merely between a caller and a null.
+fn void a_canned_mesh_of_fewer_than_one_cell_is_refused_before_box3d_allocates() @test {
+    int baseline = b3::byte_count();
+    fault none;
+
+    fault grid = none;
+    if (catch err = b3::create_grid_mesh(
+      x_count: -1000,
+      z_count: -1000,
+      cell_width: 1.0,
+      material_count: 1,
+      identify_edges: false,
+    )) grid = err;
+
+    fault wave = none;
+    if (catch err = b3::create_wave_mesh(
+      x_count: -1000,
+      z_count: -1000,
+      cell_width: 1.0,
+      amplitude: 0.5,
+      row_frequency: 1.0,
+      column_frequency: 1.0,
+    )) wave = err;
+
+    assert(grid == b3::DEGENERATE_GEOMETRY, "a grid of fewer than one cell names no mesh");
+    assert(wave == b3::DEGENERATE_GEOMETRY, "and neither does a wave over one");
+    assert(b3::byte_count() == baseline, "and neither of them moved the byte count doing it");
 }

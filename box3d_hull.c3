@@ -24,19 +24,19 @@ fn HullData*? create_hull(Vec3[] points, int max_vertex_count) {
 }
 
 <*
- Builds a tessellated cylinder on the y axis. The caller owns it and must destroy() it — see
- HullData.
+ Builds a tessellated cylinder on the y axis, owned by the caller — see HullData.
 
- box3d asserts a positive height and radius and at most 32 sides and compiles all three out here:
- a negative height or radius still builds, and the sides run past 32 until the hull's own edge
- ceiling refuses one. The count guard covers what no assertion does — a negative side count
- allocates through a negative size box3d never gives back, shifting byte_count() permanently.
+ box3d asserts a positive height and radius and at most 32 sides, compiling all three out: a
+ negative height or radius builds, and the sides run past 32 until its own edge ceiling refuses at
+ 43. Neither end of the count is box3d's to refuse — below three it charges an allocation it never
+ returns, far above it writes through one that failed — so both are bounded here, and no side
+ count this refuses is one box3d would have built.
 
  @param y_offset : "where one ring sits on the y axis; the other sits height above it"
- @return "the hull, or DEGENERATE_GEOMETRY when fewer than three sides are asked for or box3d refuses the points they describe"
+ @return "the hull, or DEGENERATE_GEOMETRY when the side count is outside 3 to MAX_HULL_RING_STEPS or box3d refuses the points it describes"
 *>
 fn HullData*? create_cylinder(float height, float radius, float y_offset, int sides) {
-    if (sides < 3) return DEGENERATE_GEOMETRY~;
+    if (sides < 3 || sides > MAX_HULL_RING_STEPS) return DEGENERATE_GEOMETRY~;
     return checked_geometry(create_cylinder_raw(
       height: height,
       radius: radius,
@@ -49,15 +49,15 @@ fn HullData*? create_cylinder(float height, float radius, float y_offset, int si
  Builds a tessellated cone on the y axis, radius1 at y 0 and radius2 at y height. The caller owns
  it and must destroy() it — see HullData.
 
- box3d asserts a positive height and both radii and at least four slices and compiles every one
- out here: three slices builds, and one radius of zero builds a true apex. The count guard covers
- what none of them does — a negative slice count allocates through a negative size box3d never
- gives back, shifting byte_count() permanently.
+ box3d asserts a positive height, both radii, and between four and 32 slices, and compiles every
+ one out here: three slices builds, and one radius of zero builds a true apex which reaches 64
+ slices where a full cone stops at 42. The count is bounded at both ends for the reason
+ create_cylinder gives, and no slice count this refuses is one box3d would have built.
 
- @return "the hull, or DEGENERATE_GEOMETRY when fewer than three slices are asked for or box3d refuses the points they describe"
+ @return "the hull, or DEGENERATE_GEOMETRY when the slice count is outside 3 to MAX_HULL_RING_STEPS or box3d refuses the points it describes"
 *>
 fn HullData*? create_cone(float height, float radius1, float radius2, int slices) {
-    if (slices < 3) return DEGENERATE_GEOMETRY~;
+    if (slices < 3 || slices > MAX_HULL_RING_STEPS) return DEGENERATE_GEOMETRY~;
     return checked_geometry(create_cone_raw(
       height: height,
       radius1: radius1,
@@ -84,7 +84,7 @@ fn HullData*? create_rock(float radius) {
  Copies the hull into a second allocation the caller owns and must destroy() separately. The
  original is untouched and byte_count() carries both.
 
- @return "the copy, or DEGENERATE_GEOMETRY when box3d returns a null pointer, which it does only for a hull that is not there"
+ @return "the copy, or DEGENERATE_GEOMETRY when box3d returns a null pointer, which a safe build cannot reach: C3 traps the null receiver first"
 *>
 fn HullData*? HullData.clone(&self) {
     return checked_geometry(clone_hull_raw(self), DEGENERATE_GEOMETRY);
@@ -98,7 +98,7 @@ fn HullData*? HullData.clone(&self) {
  refused, so a zero scale yields a very small hull instead of nothing; a negative one mirrors the
  hull, and box3d reverses the face winding to keep it wound outwards.
 
- @return "the copy, or DEGENERATE_GEOMETRY when box3d returns a null pointer, which it does only for a hull that is not there"
+ @return "the copy, or DEGENERATE_GEOMETRY when the scaled hull's volume underflows to nothing, which repeated shrinking reaches"
 *>
 fn HullData*? HullData.clone_and_transform(&self, Transform transform, Vec3 scale) {
     return checked_geometry(clone_and_transform_hull_raw(self, transform, scale), DEGENERATE_GEOMETRY);

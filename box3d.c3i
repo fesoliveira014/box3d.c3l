@@ -451,6 +451,14 @@ struct Capsule {
 *>
 const int MAX_HULL_VERTICES = 128;
 
+<*
+ The most ring steps create_cylinder() and create_cone() accept. Not box3d's number: the widest
+ either builds is a cone with one radius at zero, at 64, and both refuse below that on their own
+ edge and face ceilings. The bound exists because far above it box3d writes through an allocation
+ that failed rather than refusing.
+*>
+const int MAX_HULL_RING_STEPS = 64;
+
 struct HullVertex {
     char edge;
 }
@@ -532,8 +540,10 @@ extern fn HullData* clone_hull_raw(HullData* hull) @cname("b3CloneHull") @privat
 extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform transform, Vec3 scale) @cname("b3CloneAndTransformHull") @private;
 
 <*
- Releases the hull. The caller owns it and must call this exactly once — see HullData, which also
- says why a BoxHull's base must never reach here.
+ Releases a hull box3d_hull.c3 returned, exactly once.
+
+ Only those. A BoxHull's base, a compound's hull child and the hull a shape reports are all owned
+ by something else and abort the process or corrupt it here — see HullData.
 *>
 extern fn void HullData.destroy(&self) @cname("b3DestroyHull");
 

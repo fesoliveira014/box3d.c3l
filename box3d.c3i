@@ -2208,6 +2208,13 @@ struct Sweep {
     Quat q2;
 }
 
+<*
+ Raw sweep evaluation. Private because box3d asserts the time lies inside the interval and this
+ build compiles that out, extrapolating both the centre and the rotation past either end instead.
+ Sweep.transform_at() restores the range.
+*>
+extern fn Transform sweep_transform_raw(Sweep* sweep, float time) @cname("b3GetSweepTransform") @private;
+
 struct ToiInput {
     ShapeProxy proxy_a;
     ShapeProxy proxy_b;
@@ -2216,6 +2223,13 @@ struct ToiInput {
     float max_fraction;
 }
 
+<*
+ How a time-of-impact query ended. HIT reports the fraction at which the two first touch under a
+ measured point and normal; OVERLAPPED means the two cores began together and answers fraction zero
+ under a point and normal of exactly zero; SEPARATED never reached the other and answers
+ max_fraction over the last witness pair; FAILED gave up after twenty-five distance passes. UNKNOWN
+ is the query's own starting value and is overwritten before it returns.
+*>
 enum ToiState : int {
     UNKNOWN,
     FAILED,
@@ -2242,6 +2256,13 @@ struct ToiOutput {
 }
 
 <*
+ Raw swept-pair time of impact. Private because a proxy of no points is read as though it held its
+ first, and because a max_fraction outside the interval is extrapolated or answered with a negative
+ fraction rather than refused. time_of_impact() checks both.
+*>
+extern fn ToiOutput time_of_impact_raw(ToiInput* input) @cname("b3TimeOfImpact") @private;
+
+<*
  One plane a mover is solved against. push_limit caps how far this plane may move the mover, and
  push is the solve's own output, zeroed on entry rather than read. A velocity clip passes over a
  plane whose clip_velocity is false, and over one whose push is zero whatever that flag says, so a
@@ -2258,6 +2279,14 @@ struct PlaneSolverResult {
     Vec3 delta;
     int iteration_count;
 }
+
+<*
+ Raw plane solve and velocity clip. Private because each takes a pointer and a count where
+ box3d_mover.c3's wrappers take a slice, and because the solve writes push back through its array
+ while the clip only reads it.
+*>
+extern fn PlaneSolverResult solve_planes_raw(Vec3 target_delta, CollisionPlane* planes, int count) @cname("b3SolvePlanes") @private;
+extern fn Vec3 clip_vector_raw(Vec3 vector, CollisionPlane* planes, int count) @cname("b3ClipVector") @private;
 
 enum JointType : int {
     PARALLEL,

@@ -536,3 +536,401 @@ fn void the_proxy_pair_queries_allocate_nothing() @test {
     assert(b3::byte_count() == before,
         "and neither query allocates: both answer from the caller's own proxies and stack");
 }
+
+// A quarter turn, which every sweep fixture below runs through. Written out rather than quoted so
+// the closed forms the assertions compare against are the same expression box3d is handed.
+const float A_QUARTER_TURN = (float)math::PI * 0.5f;
+const float HALF_ROOT_TWO = 0.70710678f;
+
+fn b3::Quat a_turn_about_z(float radians) {
+    return { .i = 0.0, .j = 0.0, .k = math::sin(0.5f * radians), .l = math::cos(0.5f * radians) };
+}
+
+fn float the_turn_of(b3::Quat q) {
+    return 2.0f * math::atan2(math::sqrt(q.i * q.i + q.j * q.j + q.k * q.k), q.l);
+}
+
+fn float the_magnitude_of(b3::Quat q) {
+    return math::sqrt(q.i * q.i + q.j * q.j + q.k * q.k + q.l * q.l);
+}
+
+// The normalised lerp's own closed form for a turn about z: the two quaternions are summed in the
+// ratio the fraction names and the sum renormalised, which leaves the angle of the raw sum.
+fn float the_normalised_lerp_turn_at(float fraction, float total_turn) {
+    float k = fraction * math::sin(0.5f * total_turn);
+    float l = (1.0f - fraction) + fraction * math::cos(0.5f * total_turn);
+    return 2.0f * math::atan2(k, l);
+}
+
+// What one sweep evaluation answered. answered is whether the wrapper returned a value rather than
+// a fault, and magnitude is the quaternion's own length, which an identity rotation still has to
+// carry and a reading left at its container's zero cannot.
+struct SweepReading {
+    bool answered;
+    b3::Vec3 position;
+    float turn;
+    float magnitude;
+}
+
+// An expression macro for the reason @the_distance_of is one: C3 forbids an optional parameter, so
+// the call has to arrive unevaluated to keep a refusal from propagating out of the fixture.
+macro SweepReading @the_pose_at(#call) {
+    if (try xf = #call) {
+        return {
+          .answered = true,
+          .position = xf.p,
+          .turn = the_turn_of(xf.q),
+          .magnitude = the_magnitude_of(xf.q),
+        };
+    }
+    return {};
+}
+
+struct SweptPoses {
+    SweepReading at_the_start;
+    SweepReading at_a_quarter;
+    SweepReading at_the_midpoint;
+    SweepReading at_the_end;
+}
+
+// A quarter turn about z while the centre of mass runs ten metres along x, with the shape's own
+// origin a metre out from that centre along its local x. The two therefore never coincide, so a
+// reading that mistook the centre for the origin lands a metre from every expectation below.
+fn b3::Sweep a_turning_sweep() {
+    return {
+      .local_center = { 1.0, 0.0, 0.0 },
+      .c1 = { 0.0, 0.0, 0.0 },
+      .c2 = { 10.0, 0.0, 0.0 },
+      .q1 = a_turn_about_z(0.0),
+      .q2 = a_turn_about_z(A_QUARTER_TURN),
+    };
+}
+
+fn SweptPoses the_poses_along_a_turning_sweep() {
+    b3::Sweep sweep = a_turning_sweep();
+
+    return {
+      .at_the_start = @the_pose_at(sweep.transform_at(0.0)),
+      .at_a_quarter = @the_pose_at(sweep.transform_at(0.25)),
+      .at_the_midpoint = @the_pose_at(sweep.transform_at(0.5)),
+      .at_the_end = @the_pose_at(sweep.transform_at(1.0)),
+    };
+}
+
+fn void a_sweep_places_the_shape_origin_at_both_ends_of_its_interval() @test {
+    SweptPoses poses = the_poses_along_a_turning_sweep();
+
+    assert(poses.at_the_start.answered && poses.at_the_end.answered,
+        "both ends of the interval are inside it and answer");
+
+    assert(the_length_of(poses.at_the_start.position - (b3::Vec3){ -1.0, 0.0, 0.0 }) < 0.0001,
+        "at the start the origin sits a metre behind the centre, which is where local_center puts it");
+    assert(math::abs(poses.at_the_start.turn) < 0.0001
+        && math::abs(poses.at_the_start.magnitude - 1.0f) < 0.0001,
+        "under q1 itself, a unit quaternion turned through nothing");
+
+    assert(the_length_of(poses.at_the_end.position - (b3::Vec3){ 10.0, -1.0, 0.0 }) < 0.0001,
+        "at the end the centre has run ten metres and the turn has swung that metre onto y");
+    assert(math::abs(poses.at_the_end.turn - A_QUARTER_TURN) < 0.0001
+        && math::abs(poses.at_the_end.magnitude - 1.0f) < 0.0001,
+        "under q2, the whole quarter turn");
+}
+
+fn void a_sweep_turns_on_a_normalised_lerp_that_only_its_midpoint_hides() @test {
+    SweptPoses poses = the_poses_along_a_turning_sweep();
+    float lerped = the_normalised_lerp_turn_at(0.25, A_QUARTER_TURN);
+    float slerped = 0.25f * A_QUARTER_TURN;
+
+    assert(poses.at_a_quarter.answered && poses.at_the_midpoint.answered,
+        "both fractions are inside the interval and answer");
+
+    assert(math::abs(poses.at_a_quarter.turn - lerped) < 0.0001
+        && math::abs(poses.at_a_quarter.magnitude - 1.0f) < 0.0001,
+        "a quarter of the way through, the rotation is the normalised lerp of the two quaternions");
+    assert(poses.at_a_quarter.turn < slerped - 0.01 && poses.at_a_quarter.turn > slerped - 0.03,
+        "which lags the slerp of the same arc, the lerp turning slowest at the two ends");
+
+    assert(math::abs(poses.at_the_midpoint.turn - 0.5f * A_QUARTER_TURN) < 0.0001,
+        "while at the midpoint the two agree exactly, so a fixture that sampled only there could not tell them apart");
+    assert(the_length_of(poses.at_the_midpoint.position
+        - (b3::Vec3){ 5.0f - HALF_ROOT_TWO, -HALF_ROOT_TWO, 0.0 }) < 0.0001,
+        "with the origin swung half the turn out from a centre halfway along");
+}
+
+struct SweepRefusals {
+    fault before_the_start;
+    fault past_the_end;
+    fault at_no_number;
+    bool inside_still_answers;
+}
+
+// box3d asserts the fraction and this build compiles that out, so each of these is answered rather
+// than refused underneath: a negative one runs the sweep backwards, one past the end runs it on
+// past c2, and one that is not a number reaches the interpolation whole.
+fn SweepRefusals the_fractions_a_sweep_refuses() {
+    b3::Sweep sweep = a_turning_sweep();
+    float not_a_number = 0.0f / 0.0f;
+
+    SweepRefusals refusals;
+    if (catch err = sweep.transform_at(-1.0)) refusals.before_the_start = err;
+    if (catch err = sweep.transform_at(2.0)) refusals.past_the_end = err;
+    if (catch err = sweep.transform_at(not_a_number)) refusals.at_no_number = err;
+
+    if (try xf = sweep.transform_at(0.5)) refusals.inside_still_answers = xf.p.x > 4.0;
+    return refusals;
+}
+
+fn void a_sweep_refuses_a_fraction_outside_its_own_interval() @test {
+    SweepRefusals refused = the_fractions_a_sweep_refuses();
+
+    assert(refused.before_the_start == b3::INVALID_DEFINITION,
+        "a negative fraction is refused rather than run backwards out of the interval");
+    assert(refused.past_the_end == b3::INVALID_DEFINITION,
+        "as is one past the end, which box3d would carry on past c2");
+    assert(refused.at_no_number == b3::INVALID_DEFINITION,
+        "and so is one that is not a number, which a pair of bare comparisons would let through");
+
+    assert(refused.inside_still_answers, "while a fraction inside the interval is answered");
+}
+
+// What one time-of-impact query answered. answered is whether the wrapper returned a value rather
+// than a fault; the state is box3d's own and no reachable one of them is the enum's zero, so a
+// reading left at its container's zero fails every assertion that names a state.
+struct ImpactReading {
+    bool answered;
+    b3::ToiState state;
+    float fraction;
+    b3::Vec3 point;
+    b3::Vec3 normal;
+    float distance;
+}
+
+macro ImpactReading @the_impact_of(#call) {
+    if (try out = #call) {
+        return {
+          .answered = true,
+          .state = out.state,
+          .fraction = out.fraction,
+          .point = out.point,
+          .normal = out.normal,
+          .distance = out.distance,
+        };
+    }
+    return {};
+}
+
+// Both proxies keep their points at their own origin and the sweeps carry them, so a pair whose
+// cores start gap apart and close by travel has its cores meet at gap / travel. The points are
+// borrowed for the length of the call, so each fixture holds its own arrays across it.
+fn b3::ToiInput a_swept_proxy_pair(
+  b3::Vec3[] a,
+  float radius_a,
+  b3::Vec3[] b,
+  float radius_b,
+  float gap,
+  float travel,
+  float max_fraction,
+) {
+    b3::Quat unturned = a_turn_about_z(0.0);
+    return {
+      .proxy_a = { .points = a.ptr, .count = (int)a.len, .radius = radius_a },
+      .proxy_b = { .points = b.ptr, .count = (int)b.len, .radius = radius_b },
+      .sweep_a = {
+        .local_center = { 0.0, 0.0, 0.0 },
+        .c1 = { 0.0, 0.0, 0.0 },
+        .c2 = { 0.0, 0.0, 0.0 },
+        .q1 = unturned,
+        .q2 = unturned,
+      },
+      .sweep_b = {
+        .local_center = { 0.0, 0.0, 0.0 },
+        .c1 = { gap, 0.0, 0.0 },
+        .c2 = { gap - travel, 0.0, 0.0 },
+        .q1 = unturned,
+        .q2 = unturned,
+      },
+      .max_fraction = max_fraction,
+    };
+}
+
+struct SweptImpacts {
+    ImpactReading meeting;
+    ImpactReading radii_crossed;
+    ImpactReading cores_together;
+    ImpactReading receding;
+    ImpactReading bounded_short;
+}
+
+// Half a metre of radius apiece with the cores six metres apart and closing six, so the surfaces
+// meet at five sixths. The next two begin already inside that — one by its radii alone, one with
+// the two cores in the same place — and the last two never meet, one receding and one bounded.
+fn SweptImpacts the_impacts_of_a_pair_swept_six_metres() {
+    b3::Vec3[1] a = { { 0.0, 0.0, 0.0 } };
+    b3::Vec3[1] b = { { 0.0, 0.0, 0.0 } };
+
+    b3::ToiInput meeting = a_swept_proxy_pair(
+      a: a[..],
+      radius_a: 0.5,
+      b: b[..],
+      radius_b: 0.5,
+      gap: 6.0,
+      travel: 6.0,
+      max_fraction: 1.0,
+    );
+    b3::ToiInput radii_crossed = meeting;
+    radii_crossed.sweep_b.c1 = { 0.5, 0.0, 0.0 };
+    radii_crossed.sweep_b.c2 = { -5.5, 0.0, 0.0 };
+    b3::ToiInput cores_together = meeting;
+    cores_together.sweep_b.c1 = { 0.0, 0.0, 0.0 };
+    cores_together.sweep_b.c2 = { -6.0, 0.0, 0.0 };
+    b3::ToiInput receding = meeting;
+    receding.sweep_b.c2 = { 12.0, 0.0, 0.0 };
+    b3::ToiInput bounded_short = meeting;
+    bounded_short.max_fraction = 0.5;
+
+    return {
+      .meeting = @the_impact_of(b3::time_of_impact(meeting)),
+      .radii_crossed = @the_impact_of(b3::time_of_impact(radii_crossed)),
+      .cores_together = @the_impact_of(b3::time_of_impact(cores_together)),
+      .receding = @the_impact_of(b3::time_of_impact(receding)),
+      .bounded_short = @the_impact_of(b3::time_of_impact(bounded_short)),
+    };
+}
+
+fn void a_swept_pair_reports_the_time_at_which_it_first_touches() @test {
+    SweptImpacts swept = the_impacts_of_a_pair_swept_six_metres();
+    float touch = 5.0f / 6.0f;
+    float slop_of_travel = a_linear_slop() / 6.0f;
+
+    assert(swept.meeting.answered && swept.meeting.state == b3::ToiState.HIT,
+        "a pair that reaches the other inside the interval reports a hit");
+    assert(swept.meeting.fraction > touch + 0.5f * slop_of_travel
+        && swept.meeting.fraction < touch + 2.0f * slop_of_travel,
+        "five sixths of the way along, a linear slop of travel past where the surfaces meet");
+
+    assert(math::abs(swept.meeting.distance - (1.0f - a_linear_slop())) < 0.25f * a_linear_slop(),
+        "the cores having closed to the two radii less a slop, which is where box3d stops them");
+    assert(math::abs(swept.meeting.point.x - (0.5f - 0.5f * a_linear_slop())) < 0.25f * a_linear_slop(),
+        "the point averaging two surface points that have crossed by that slop");
+    assert(math::abs(swept.meeting.normal.x - 1.0f) < 0.0001
+        && math::abs(the_length_of(swept.meeting.normal) - 1.0f) < 0.0001,
+        "under a unit normal running from A towards B");
+}
+
+fn void a_pair_that_begins_inside_the_other_answers_by_what_of_it_overlaps() @test {
+    SweptImpacts swept = the_impacts_of_a_pair_swept_six_metres();
+
+    assert(swept.radii_crossed.state == b3::ToiState.HIT
+        && math::abs(swept.radii_crossed.fraction) < 0.0000001,
+        "a pair overlapping by its radii alone is a hit that has gone nowhere");
+    assert(swept.radii_crossed.state == b3::ToiState.HIT
+        && math::abs(swept.radii_crossed.normal.x - 1.0f) < 0.0001
+        && math::abs(swept.radii_crossed.point.x - 0.25f) < 0.0001,
+        "reported over a measured direction and a point between the two crossed surfaces");
+    assert(0.4999 < swept.radii_crossed.distance && swept.radii_crossed.distance < 0.5001,
+        "its cores still half a metre apart, which is what box3d could measure between");
+
+    assert(swept.cores_together.state == b3::ToiState.OVERLAPPED
+        && math::abs(swept.cores_together.fraction) < 0.0000001,
+        "where two cores in one place are overlapped rather than hit, also at fraction zero");
+    assert(swept.cores_together.state == b3::ToiState.OVERLAPPED
+        && the_length_of(swept.cores_together.normal) < 0.0001
+        && the_length_of(swept.cores_together.point) < 0.0001,
+        "box3d giving up on the pair and reporting neither a direction nor a place");
+}
+
+fn void a_swept_pair_that_never_reaches_the_other_is_separated_rather_than_refused() @test {
+    SweptImpacts swept = the_impacts_of_a_pair_swept_six_metres();
+
+    assert(swept.receding.state == b3::ToiState.SEPARATED
+        && math::abs(swept.receding.fraction - 1.0f) < 0.0001,
+        "a pair travelling apart is separated at the end of the interval rather than at a touch");
+    assert(5.9999 < swept.receding.distance && swept.receding.distance < 6.0001,
+        "over the witness pair the last distance query left, six metres apart where the two started");
+    assert(math::abs(swept.receding.point.x - 3.0f) < 0.0001,
+        "whose midpoint is halfway between them, not a place either surface ever reached");
+
+    assert(swept.bounded_short.state == b3::ToiState.SEPARATED
+        && math::abs(swept.bounded_short.fraction - 0.5f) < 0.0001,
+        "and a touch past max_fraction is separated at that bound, not a hit clamped back to it");
+}
+
+struct SweptPairRefusals {
+    fault without_a_first_proxy;
+    fault without_a_second_proxy;
+    fault below_the_interval;
+    fault past_the_interval;
+    fault at_no_number;
+    bool still_answers;
+}
+
+// A negative max_fraction is answered underneath at a negative fraction, one past the end runs
+// both sweeps past c2, and one that is not a number burns every iteration box3d has. Each proxy
+// refusal leaves the other whole, so a check dropped from one is not covered by the other.
+fn SweptPairRefusals the_swept_pairs_the_time_of_impact_refuses() {
+    b3::Vec3[1] a = { { 0.0, 0.0, 0.0 } };
+    b3::Vec3[1] b = { { 0.0, 0.0, 0.0 } };
+    float not_a_number = 0.0f / 0.0f;
+
+    b3::ToiInput swept = a_swept_proxy_pair(
+      a: a[..],
+      radius_a: 0.5,
+      b: b[..],
+      radius_b: 0.5,
+      gap: 6.0,
+      travel: 6.0,
+      max_fraction: 1.0,
+    );
+    b3::ToiInput no_first = swept;
+    no_first.proxy_a.count = 0;
+    b3::ToiInput no_second = swept;
+    no_second.proxy_b.count = 0;
+    b3::ToiInput below = swept;
+    below.max_fraction = -1.0;
+    b3::ToiInput past = swept;
+    past.max_fraction = 3.0;
+    b3::ToiInput no_number = swept;
+    no_number.max_fraction = not_a_number;
+
+    SweptPairRefusals refusals;
+    if (catch err = b3::time_of_impact(no_first)) refusals.without_a_first_proxy = err;
+    if (catch err = b3::time_of_impact(no_second)) refusals.without_a_second_proxy = err;
+    if (catch err = b3::time_of_impact(below)) refusals.below_the_interval = err;
+    if (catch err = b3::time_of_impact(past)) refusals.past_the_interval = err;
+    if (catch err = b3::time_of_impact(no_number)) refusals.at_no_number = err;
+
+    if (try out = b3::time_of_impact(swept)) refusals.still_answers = out.fraction > 0.8;
+    return refusals;
+}
+
+fn void the_time_of_impact_refuses_what_box3d_would_answer_out_of_its_own_interval() @test {
+    SweptPairRefusals refused = the_swept_pairs_the_time_of_impact_refuses();
+
+    assert(refused.without_a_first_proxy == b3::INVALID_DEFINITION,
+        "a swept pair will not take a first proxy of no points");
+    assert(refused.without_a_second_proxy == b3::INVALID_DEFINITION, "nor a second");
+
+    assert(refused.below_the_interval == b3::INVALID_DEFINITION,
+        "a negative max_fraction is refused rather than answered at a negative fraction");
+    assert(refused.past_the_interval == b3::INVALID_DEFINITION,
+        "as is one past the end, which would run both sweeps beyond c2");
+    assert(refused.at_no_number == b3::INVALID_DEFINITION,
+        "and so is one that is not a number, which a pair of bare comparisons would let through");
+
+    assert(refused.still_answers, "while an ordinary pair over the whole interval is answered");
+}
+
+fn void the_sweep_and_the_time_of_impact_allocate_nothing() @test {
+    int before = b3::byte_count();
+
+    SweptPoses poses = the_poses_along_a_turning_sweep();
+    SweptImpacts impacts = the_impacts_of_a_pair_swept_six_metres();
+    the_fractions_a_sweep_refuses();
+    the_swept_pairs_the_time_of_impact_refuses();
+
+    assert(poses.at_the_start.answered && poses.at_the_end.answered, "every pose was evaluated");
+    assert(impacts.meeting.state == b3::ToiState.HIT
+        && impacts.cores_together.state == b3::ToiState.OVERLAPPED, "and every sweep was run");
+    assert(b3::byte_count() == before,
+        "and neither answers from anything but the caller's own proxies and stack");
+}

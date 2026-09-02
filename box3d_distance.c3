@@ -35,3 +35,35 @@ fn CastOutput? shape_cast(ShapeCastPairInput input) {
     if (!result.hit) return NO_HIT~;
     return result;
 }
+
+<*
+ Where this sweep places the shape's own origin at the given fraction of its interval.
+
+ The rotation is a normalised lerp, not a slerp: slowest at the two ends, and equal to a slerp only
+ there and at the midpoint. A fraction outside the interval extrapolates the centre linearly and
+ the rotation at a falling rate, past an assertion this build compiles out, so it is refused here.
+
+ @return "the transform at that fraction, or INVALID_DEFINITION when time is outside 0 to 1 or is not a number"
+*>
+fn Transform? Sweep.transform_at(&self, float time) {
+    if (!(time >= 0.0f && time <= 1.0f)) return INVALID_DEFINITION~;
+    return sweep_transform_raw(self, time);
+}
+
+<*
+ Sweeps each proxy along its own sweep and reports where the two first touch, in the sweeps' frame.
+
+ The cores close to the greater of one linear slop and the two radii less that slop, so the stop
+ lands short of the geometric touch below a total radius of one slop, on it at one, and past above.
+ A max_fraction outside the interval extrapolates both sweeps past c2 or answers a negative
+ fraction, past an assertion this build compiles out, so it is refused here.
+
+ @return "what the sweep found, under one of the four ToiState outcomes, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS, or max_fraction is outside 0 to 1"
+*>
+fn ToiOutput? time_of_impact(ToiInput input) {
+    check_shape_proxy(input.proxy_a)!;
+    check_shape_proxy(input.proxy_b)!;
+    if (!(input.max_fraction >= 0.0f && input.max_fraction <= 1.0f)) return INVALID_DEFINITION~;
+
+    return time_of_impact_raw(&input);
+}

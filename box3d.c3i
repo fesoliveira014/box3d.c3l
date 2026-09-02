@@ -280,8 +280,8 @@ extern fn void world_explode_raw(WorldId world_id, ExplosionDef* def) @cname("b3
 
 <*
  An explosion definition that moves nothing: every mask bit set, the position at the origin, and
- radius, falloff and impulse_per_area all zero. Unlike the package's other defaults it is a
- starting point rather than a usable definition, so every field but the mask has to be filled in.
+ radius, falloff and impulse_per_area all zero. Every field but the mask has to be filled in, and
+ an unfilled one is accepted and silently does nothing where an incomplete joint def is refused.
 *>
 extern fn ExplosionDef default_explosion_def() @cname("b3DefaultExplosionDef");
 

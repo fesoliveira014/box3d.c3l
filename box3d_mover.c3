@@ -54,12 +54,11 @@ fn BodyPlaneResult[] BodyId.collide_mover(
 }
 
 <*
- Applies the definition's radial impulse to every dynamic body with a shape in reach of the blast.
-
- Static and kinematic bodies are never reached, only the dynamic tree being queried, and a locked
- world is answered by doing nothing. A mesh shape on a dynamic body is worse than passed over:
- box3d builds it a proxy of no points and reads the first one anyway, so a blast reaching one takes
- the process down unless that shape's explosion_scale is zero.
+ Applies the definition's radial impulse to every dynamic body with a shape in reach; static and
+ kinematic never move, and a locked world does nothing. A mesh shape on a dynamic body is worse
+ than passed over: box3d builds it a proxy of no points and reads the first anyway before culling
+ by distance, so one whose broad-phase box meets an axis-aligned box of radius plus falloff — wider
+ than the impulse's reach — crashes unless mask_bits excludes it or its explosion_scale is zero.
 
  @return "INVALID_DEFINITION when the position is not finite, when radius or falloff is negative or not finite, or when impulse_per_area is not finite — box3d asserts all four and this release build compiles those assertions out"
 *>

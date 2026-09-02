@@ -961,8 +961,8 @@ struct BlastGuards {
     fault impulse_not_a_number;
     fault infinite_position;
     fault position_not_a_number;
-    fault negative_impulse;
-    fault the_default_definition;
+    bool negative_impulse_passed;
+    bool the_default_definition_passed;
 }
 
 fn float the_speed_of(b3::Vec3 velocity) {
@@ -1157,8 +1157,8 @@ fn BlastGuards the_definitions_an_explosion_is_refused_for() {
     def.position = { 0.0, nan, 0.0 };
     if (catch err = world.explode(def)) guards.position_not_a_number = err;
 
-    if (catch err = world.explode(a_blast_of(-AN_IMPULSE_PER_AREA))) guards.negative_impulse = err;
-    if (catch err = world.explode(b3::default_explosion_def())) guards.the_default_definition = err;
+    if (try world.explode(a_blast_of(-AN_IMPULSE_PER_AREA))) guards.negative_impulse_passed = true;
+    if (try world.explode(b3::default_explosion_def())) guards.the_default_definition_passed = true;
 
     return guards;
 }
@@ -1168,7 +1168,6 @@ fn BlastGuards the_definitions_an_explosion_is_refused_for() {
 // and each reading below is what the unguarded call did to a sphere two metres from the blast.
 fn void an_explosion_definition_box3d_would_assert_against_is_refused() @test {
     BlastGuards guards = the_definitions_an_explosion_is_refused_for();
-    fault none;
 
     assert(guards.negative_radius == b3::INVALID_DEFINITION,
         "a negative radius explodes smaller rather than not at all");
@@ -1191,9 +1190,9 @@ fn void an_explosion_definition_box3d_would_assert_against_is_refused() @test {
     assert(guards.position_not_a_number == b3::INVALID_DEFINITION,
         "and a NaN position throws every dynamic body in the world at full strength, aimed at nothing");
 
-    assert(guards.negative_impulse == none,
+    assert(guards.negative_impulse_passed,
         "a negative impulse per area is the implosion box3d documents and stays accepted");
-    assert(guards.the_default_definition == none,
+    assert(guards.the_default_definition_passed,
         "and the default definition, whose zeroes are all valid, is accepted and moves nothing");
 }
 

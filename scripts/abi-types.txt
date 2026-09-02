@@ -98,3 +98,6 @@ b3TOIState
 b3TOIOutput state,point,normal,fraction,distance,distanceIterations,pushBackIterations,rootIterations,usedFallback
 b3CollisionPlane plane,pushLimit,push,clipVelocity
 b3PlaneSolverResult delta,iterationCount
+b3PlaneResult plane,point
+b3BodyPlaneResult shapeId,result
+b3ExplosionDef maskBits,position,radius,falloff,impulsePerArea

@@ -77,7 +77,9 @@ struct SegmentDistanceResult {
 extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
 extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
 extern fn SegmentDistanceResult segment_distance(Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2) @cname("b3SegmentDistance");
+extern fn bool is_valid_float(float a) @cname("b3IsValidFloat");
 extern fn bool is_valid_vec3(Vec3 a) @cname("b3IsValidVec3");
+extern fn bool is_valid_position(Pos p) @cname("b3IsValidPosition");
 extern fn bool is_valid_quat(Quat q) @cname("b3IsValidQuat");
 extern fn bool is_valid_transform(Transform a) @cname("b3IsValidTransform");
 extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
@@ -256,6 +258,32 @@ extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
 extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
 extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
 extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");
+
+<*
+ An explosion definition. The impulse fades to nothing across falloff, which reaches beyond radius,
+ and impulse_per_area scales with the area of each shape facing the blast; it may be negative,
+ which pulls inward instead of pushing out.
+*>
+struct ExplosionDef {
+    ulong mask_bits;
+    Pos position;
+    float radius;
+    float falloff;
+    float impulse_per_area;
+}
+
+<*
+ Raw explosion. Private because WorldId.explode() refuses the definitions box3d does no more than
+ assert against, this release build compiling those assertions out.
+*>
+extern fn void world_explode_raw(WorldId world_id, ExplosionDef* def) @cname("b3World_Explode") @private;
+
+<*
+ An explosion definition that moves nothing: every mask bit set, the position at the origin, and
+ radius, falloff and impulse_per_area all zero. Every field but the mask has to be filled in, and
+ an unfilled one is accepted and silently does nothing where an incomplete joint def is refused.
+*>
+extern fn ExplosionDef default_explosion_def() @cname("b3DefaultExplosionDef");
 
 enum BodyType : int {
     STATIC,
@@ -2264,6 +2292,18 @@ struct ToiOutput {
 extern fn ToiOutput time_of_impact_raw(ToiInput* input) @cname("b3TimeOfImpact") @private;
 
 <*
+ The plane between a mover and one shape it touches. offset is how far the mover's surface reaches
+ past the shape's, and point sits on the shape's core rather than its surface — the sphere's centre,
+ the capsule's segment, the hull's own face. The normal points out of the shape towards the mover
+ unless the mover's core has closed within a linear slop of that same core, when box3d substitutes
+ a perpendicular of the mover's axis and the direction means nothing.
+*>
+struct PlaneResult {
+    Plane plane;
+    Vec3 point;
+}
+
+<*
  One plane a mover is solved against. push_limit caps how far this plane may move the mover, and
  push is the solve's own output, zeroed on entry rather than read. A velocity clip passes over a
  plane whose clip_velocity is false, and over one whose push is zero whatever that flag says, so a
@@ -2288,6 +2328,79 @@ struct PlaneSolverResult {
 *>
 extern fn PlaneSolverResult solve_planes_raw(Vec3 target_delta, CollisionPlane* planes, int count) @cname("b3SolvePlanes") @private;
 extern fn Vec3 clip_vector_raw(Vec3 vector, CollisionPlane* planes, int count) @cname("b3ClipVector") @private;
+
+<*
+ One plane a body-local mover collide produced, naming the shape on that body it came from.
+*>
+struct BodyPlaneResult {
+    ShapeId shape_id;
+    PlaneResult result;
+}
+
+<*
+ Called once per shape a mover touches, handed that shape's planes up to box3d's own 64. The
+ array points at box3d's stack and dies with the call, so a plane kept is copied out. Returning false ends
+ the traversal of the tree that shape sits in and leaves the other two reporting. The query runs
+ synchronously on the calling thread, and the world must not be modified from inside it.
+*>
+alias PlaneResultFn = fn bool(ShapeId shape_id, PlaneResult* planes, int plane_count, void* context);
+
+<*
+ Called once per shape a mover cast reaches, before the sweep against that shape runs. Returning
+ false drops the shape from the cast. The query runs synchronously on the calling thread, and the
+ world must not be modified from inside it.
+*>
+alias MoverFilterFn = fn bool(ShapeId shape_id, void* context);
+
+<*
+ Collides a capsule mover with the world, calling fcn once per shape it touches, static through
+ dynamic; fcn is required and the planes are relative to origin. A sphere, capsule or hull gives
+ one plane, a mesh, height field or compound up to 64, cut silently past that. A hull or triangle
+ stops reporting once the mover's core reaches its surface, so a mover sunk past its own radius has
+ nothing to solve on. A locked world, or an origin past a compiled-out assertion, gives none.
+*>
+extern fn void WorldId.collide_mover(
+  self,
+  Pos origin,
+  Capsule* mover,
+  QueryFilter filter,
+  PlaneResultFn fcn,
+  void* context,
+) @cname("b3World_CollideMover");
+
+<*
+ Sweeps a capsule mover through the world and reports what fraction of translation it may take, the
+ mover being relative to origin. The closing band is one linear slop or the mover and shape radii
+ less that slop, whichever is greater, so the stop lands short of the geometric touch below a total
+ radius of one slop, on it at one, and past above — a full slop past from two. A locked world
+ answers 1, as does an origin or translation past the assertion this build compiles out.
+
+ @param fcn : "an optional per-shape filter; null accepts every shape the query filter passed"
+ @return "the fraction of translation the mover may take, above zero because a shape whose surface the mover's core starts within one slop or the two radii less a slop of is dropped from the sweep — which for a mover thinner than about a slop reaches past its own surface — and at most 1"
+*>
+extern fn float WorldId.cast_mover(
+  self,
+  Pos origin,
+  Capsule* mover,
+  Vec3 translation,
+  QueryFilter filter,
+  MoverFilterFn fcn,
+  void* context,
+) @cname("b3World_CastMover");
+
+<*
+ Raw body-local mover collide. Private because it takes a pointer and a capacity where
+ BodyId.collide_mover() hands back the filled prefix of the caller's buffer as a slice.
+*>
+extern fn int body_collide_mover_raw(
+  BodyId body_id,
+  BodyPlaneResult* body_planes,
+  int plane_capacity,
+  Pos origin,
+  Capsule* mover,
+  QueryFilter filter,
+  WorldTransform body_transform,
+) @cname("b3Body_CollideMover") @private;
 
 enum JointType : int {
     PARALLEL,

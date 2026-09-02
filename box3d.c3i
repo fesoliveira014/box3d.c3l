@@ -129,14 +129,15 @@ extern fn bool is_valid_world_transform(WorldTransform t) @cname("b3IsValidWorld
 extern fn bool is_valid_matrix3(Matrix3 a) @cname("b3IsValidMatrix3");
 extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
 <*
- Whether the box lies within 1e5 length units of the origin on every axis, box3d's B3_HUGE, so the
- bound moves with set_length_units_per_meter. It says nothing about ordering or finiteness: an
- inverted box is bounded, and so is one holding a NaN.
+ Two one-sided comparisons and nothing else: false when a lower bound falls under minus B3_HUGE or
+ an upper bound rises over it, 1e5 length units so the reach moves with set_length_units_per_meter.
+ Only an outward excursion fails, so an inverted box passes however far out it lies, an inward
+ infinity passes, and a NaN passes because every comparison against one is false.
 *>
 extern fn bool is_bounded_aabb(Aabb a) @cname("b3IsBoundedAABB");
 <*
- Whether the box is both valid and bounded, which is the whole of the test. Neither implies the
- other: an inverted box is bounded and not valid, a box 1e9 units across is valid and not bounded.
+ Whether the box is both valid and bounded, which is the whole of the test, so it carries nothing
+ the two do not: an inverted box is bounded and not valid, a box 1e9 units across is the reverse.
 *>
 extern fn bool is_sane_aabb(Aabb a) @cname("b3IsSaneAABB");
 extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");
@@ -181,7 +182,7 @@ extern fn uint hash_raw(uint seed, char* data, int count) @cname("b3Hash") @priv
  a renderer is handed are not confined to them, box3d passing a shape's custom colour through
  unexamined and packing a debug material preset into the unused high byte.
 *>
-typedef HexColor = inline int;
+typedef HexColor = inline uint;
 
 <*
  The number of constraint graph colours, mirroring B3_GRAPH_COLOR_COUNT in constants.h, which the

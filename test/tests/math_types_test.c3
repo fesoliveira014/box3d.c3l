@@ -112,6 +112,29 @@ fn void the_three_aabb_predicates_are_independent_of_one_another() @test {
     assert(!b3::is_sane_aabb(far_out), "so sane fails on the magnitude alone");
 }
 
+// bounded is two one-sided comparisons, lower under minus B3_HUGE and upper over it, so only an
+// outward excursion fails it. Every row below is a box that reaches far or is not a number, and
+// passes anyway, which is what the two comparisons say and what three ordered rows cannot show.
+fn void only_an_outward_bound_is_unbounded() @test {
+    float infinity = (float)1.0e40;
+    float not_a_number = infinity - infinity;
+
+    b3::Aabb outward = { .lower_bound = { -infinity, -1.0, -1.0 }, .upper_bound = { infinity, 1.0, 1.0 } };
+    b3::Aabb inward = { .lower_bound = { infinity, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } };
+    b3::Aabb holding_a_nan = { .lower_bound = { not_a_number, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } };
+    b3::Aabb inverted_far_out = { .lower_bound = { 1.0e9, 1.0, 1.0 }, .upper_bound = { -1.0e9, -1.0, -1.0 } };
+
+    assert(!b3::is_bounded_aabb(outward), "a box reaching outward to infinity fails both comparisons");
+    assert(b3::is_bounded_aabb(inward), "where one reaching inward to infinity fails neither");
+    assert(b3::is_bounded_aabb(holding_a_nan), "and a bound that is not a number compares false either way");
+    assert(b3::is_bounded_aabb(inverted_far_out), "as does an inverted box a billion units out, being inward");
+
+    assert(!b3::is_valid_aabb(holding_a_nan) && !b3::is_valid_aabb(inverted_far_out),
+        "neither of those is valid, so bounded is carrying the whole difference");
+    assert(!b3::is_sane_aabb(holding_a_nan) && !b3::is_sane_aabb(inverted_far_out),
+        "and a NaN box reads the same as an inverted one through all three, which cannot tell them apart");
+}
+
 fn void a_valid_matrix_is_only_a_finite_one() @test {
     b3::Matrix3 identity = {
       .cx = { 1.0, 0.0, 0.0 },
@@ -138,7 +161,12 @@ fn void a_world_transform_bounds_its_rotation_and_not_its_position() @test {
       .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 2.0 },
     };
 
+    b3::WorldTransform infinite_position = far_out;
+    infinite_position.p = { (float)1.0e40, 0.0, 0.0 };
+
     assert(b3::is_valid_world_transform(far_out), "nothing bounds how far out a world position is");
+    assert(!b3::is_valid_world_transform(infinite_position),
+        "though it must still be a number, which is the bound there is");
     assert(!b3::is_valid_world_transform(slack_rotation), "but the rotation must be a unit quaternion");
 }
 
@@ -219,12 +247,16 @@ fn void a_rotation_between_vectors_refuses_a_pair_that_is_not_unit() @test {
     b3::Vec3 three_along_y = { 0.0, 3.0, 0.0 };
     b3::Vec3 unit_y = { 0.0, 1.0, 0.0 };
 
-    fault refusal;
-    if (catch err = b3::compute_quat_between_unit_vectors(unit_x, three_along_y)) refusal = err;
+    fault second_refused;
+    fault first_refused;
+    if (catch err = b3::compute_quat_between_unit_vectors(unit_x, three_along_y)) second_refused = err;
+    if (catch err = b3::compute_quat_between_unit_vectors(three_along_y, unit_x)) first_refused = err;
     b3::Quat between_unit_vectors = b3::compute_quat_between_unit_vectors(unit_x, unit_y)!!;
 
-    assert(refusal == b3::NOT_A_UNIT_VECTOR,
+    assert(second_refused == b3::NOT_A_UNIT_VECTOR,
         "a vector three units long reads as a 143 degree turn where these two are a quarter apart");
+    assert(first_refused == b3::NOT_A_UNIT_VECTOR,
+        "and it is refused in the first argument too, which is the one box3d reads componentwise");
     assert(between_unit_vectors.k > 0.706 && between_unit_vectors.k < 0.708,
         "and the unit pair the guard admits answers that quarter turn");
 }

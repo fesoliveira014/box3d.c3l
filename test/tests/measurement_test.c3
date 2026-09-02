@@ -85,6 +85,11 @@ fn b3::MassData the_mass_of_a_box_hull_five_metres_along_x() {
     return placed.base.compute_mass_data(1.0);
 }
 
+fn b3::MassData the_mass_of_that_same_hull_at_three_times_the_density() {
+    b3::BoxHull placed = b3::make_offset_box_hull(1.0, 1.0, 1.0, (b3::Vec3){ 5.0, 0.0, 0.0 });
+    return placed.base.compute_mass_data(3.0);
+}
+
 fn void a_hull_measures_its_inertia_about_its_own_centre_of_mass() @test {
     b3::MassData placed = the_mass_of_a_box_hull_five_metres_along_x();
     b3::MassData at_the_origin = the_mass_of_a_two_metre_box_hull();
@@ -94,6 +99,12 @@ fn void a_hull_measures_its_inertia_about_its_own_centre_of_mass() @test {
     assert(math::abs(placed.inertia[0].x - at_the_origin.inertia[0].x) < 0.01,
         "and carries the tensor of the same box at the origin, not the one a parallel axis shift would give");
     assert(math::abs(placed.inertia[2].z - at_the_origin.inertia[2].z) < 0.01);
+
+    // The centroid is the one term density does not touch, and only an off-origin hull can show
+    // it: at the origin a scaled centroid and an unscaled one are the same zero.
+    b3::MassData denser = the_mass_of_that_same_hull_at_three_times_the_density();
+    assert(math::abs(denser.mass - placed.mass * 3.0) < 0.01, "three times the density weighs three times as much");
+    assert(math::abs(denser.center.x - 5.0) < 0.001, "and leaves the centre of mass where the hull is");
 }
 
 struct BallMass {
@@ -385,7 +396,7 @@ fn void a_mesh_scales_its_bounds_before_it_places_them() @test {
     assert(math::abs(mesh.grid_stretched.lower_bound.x + 4.0) < 0.001, "a scale of two in x and z doubles both");
     assert(math::abs(mesh.grid_stretched.upper_bound.x - 4.0) < 0.001);
     assert(math::abs(mesh.grid_stretched.upper_bound.z - 4.0) < 0.001);
-    assert(math::abs(mesh.grid_stretched.upper_bound.y) < 0.001, "leaving the axis scaled by one where it was");
+    assert(math::abs(mesh.grid_stretched.upper_bound.y) < 0.001, "the grid being flat, its y extent is zero at any scale");
 
     assert(math::abs(mesh.grid_stretched_and_carried.lower_bound.x - 6.0) < 0.001,
         "the scale runs in mesh space, so ten metres along x carries the stretched box ten and not twenty");

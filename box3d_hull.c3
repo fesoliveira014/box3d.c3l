@@ -28,9 +28,9 @@ fn HullData*? create_hull(Vec3[] points, int max_vertex_count) {
 
  box3d asserts a positive height and radius and at most 32 sides, compiling all three out: a
  negative height or radius builds, and the sides run past 32 until its own edge ceiling refuses at
- 43. Neither end of the count is box3d's to refuse — below three it charges an allocation it never
- returns, far above it writes through one that failed — so both are bounded here, and no side
- count this refuses is one box3d would have built.
+ 43. Neither end of the count is box3d's to refuse — a negative one charges an allocation it never
+ returns, and far above the ceiling it writes through one that failed — so both are bounded here.
+ See MAX_HULL_RING_STEPS for why the upper bound costs nothing.
 
  @param y_offset : "where one ring sits on the y axis; the other sits height above it"
  @return "the hull, or DEGENERATE_GEOMETRY when the side count is outside 3 to MAX_HULL_RING_STEPS or box3d refuses the points it describes"
@@ -51,8 +51,8 @@ fn HullData*? create_cylinder(float height, float radius, float y_offset, int si
 
  box3d asserts a positive height, both radii, and between four and 32 slices, and compiles every
  one out here: three slices builds, and one radius of zero builds a true apex which reaches 64
- slices where a full cone stops at 42. The count is bounded at both ends for the reason
- create_cylinder gives, and no slice count this refuses is one box3d would have built.
+ slices where a full cone stops at 42. The count is bounded at both ends for the reasons
+ create_cylinder and MAX_HULL_RING_STEPS give.
 
  @return "the hull, or DEGENERATE_GEOMETRY when the slice count is outside 3 to MAX_HULL_RING_STEPS or box3d refuses the points it describes"
 *>
@@ -70,9 +70,9 @@ fn HullData*? create_cone(float height, float radius1, float radius2, int slices
  Builds a ten-point hull scattered over a sphere of the given radius. The caller owns it and must
  destroy() it — see HullData.
 
- box3d asserts nothing here at all: a negative radius builds the same hull its positive twin does,
- and only a radius small enough to draw the ten points together inside box3d's own build tolerance
- is refused.
+ box3d asserts nothing here at all. A negative radius negates every lattice point, so it builds
+ the point reflection of the positive one — the same count, volume and area, with mirrored bounds.
+ Only a radius small enough to draw the ten points inside box3d's build tolerance is refused.
 
  @return "the hull, or DEGENERATE_GEOMETRY when the radius collapses the ten points"
 *>

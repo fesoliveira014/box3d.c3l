@@ -194,9 +194,8 @@ struct MirroredCloneReadings {
 }
 
 // A cone rather than the box: a box mirrors onto itself and would report the same bounds either
-// way. Mirroring also leaves every face wound inwards until box3d reverses the winding, and a
-// hull wound inwards measures a negative volume, which box3d refuses outright — so the mirrored
-// clone existing at all, with the volume of its upright twin, is the evidence of the rewinding.
+// way. Mirroring winds every face inwards, so the volume assertion below is what shows box3d
+// reversed the winding rather than refusing the hull.
 fn MirroredCloneReadings the_readings_of_an_upright_and_a_mirrored_cone() {
     b3::HullData* cone = b3::create_cone(
       height: 2.0,

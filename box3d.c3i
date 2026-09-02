@@ -579,9 +579,10 @@ struct ScaledBox {
 extern fn void scale_box_raw(Vec3* half_widths, Transform* transform, Vec3 post_scale, float min_half_width) @cname("b3ScaleBox") @private;
 
 <*
- Raw hull constructors. Every one of them ends in b3CreateHull, so every one returns a null
- pointer for a point set box3d will not close into a hull; the wrappers in box3d_hull.c3 turn
- that into a fault and are the only public way in.
+ Raw hull constructors, whose null returns the wrappers in box3d_hull.c3 turn into faults; those
+ wrappers are the only public way in. The cylinder, cone and rock end in b3CreateHull and answer
+ null for a point set it will not close. The two clones do not: they allocate and copy, and answer
+ null for an absent hull or, when transformed, for a volume the rebake underflows.
 *>
 extern fn HullData* create_hull_raw(Vec3* points, int point_count, int max_vertex_count) @cname("b3CreateHull") @private;
 extern fn HullData* create_cylinder_raw(float height, float radius, float y_offset, int sides) @cname("b3CreateCylinder") @private;
@@ -609,9 +610,10 @@ extern fn MassData HullData.compute_mass_data(&self, float density) @cname("b3Co
 
 <*
  The box in HullData.aabb carried through this transform, never a refit of the points. box3d
- widens it by the absolute of the rotation matrix, a permutation only for a quarter turn about a
- coordinate axis, so every other rotation — a quarter turn about a diagonal included — answers
- wider than the hull reaches. clone_and_transform() bakes the rotation in and its aabb is tight.
+ widens it by the absolute of the rotation matrix, which is exact only where the rotation carries
+ the coordinate axes onto coordinate axes — a quarter turn about one of them, but a half turn
+ about a face diagonal and a third turn about a body diagonal too. Anything else, an eighth turn
+ included, answers wider. clone_and_transform() bakes the rotation in and its aabb is tight.
 *>
 extern fn Aabb HullData.compute_aabb(&self, Transform transform) @cname("b3ComputeHullAABB");
 
@@ -1268,9 +1270,9 @@ extern fn void ShapeId.set_hull(self, HullData* hull) @cname("b3Shape_SetHull");
 extern fn void set_mesh_raw(ShapeId shape_id, MeshData* mesh, Vec3 scale) @cname("b3Shape_SetMesh") @private;
 
 <*
- The broad-phase box the world holds for this shape, which is fattened past the geometry so a
- moving shape need not re-insert every step. It is not the tight box the compute_aabb() functions
- answer, and the margin is box3d's to choose.
+ The geometry box widened by box3d's fixed speculative distance — neither the tight box the
+ compute_aabb() functions answer nor the larger, body-type-dependent box the broad phase indexes
+ and tests before moving a proxy.
 *>
 extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
 extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");

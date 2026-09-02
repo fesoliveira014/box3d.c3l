@@ -2224,11 +2224,11 @@ struct ToiInput {
 }
 
 <*
- How a time-of-impact query ended. HIT reports the fraction at which the two first touch under a
- measured point and normal; OVERLAPPED means the two cores began together and answers fraction zero
- under a point and normal of exactly zero; SEPARATED never reached the other and answers
- max_fraction over the last witness pair; FAILED gave up after twenty-five distance passes. UNKNOWN
- is the query's own starting value and is overwritten before it returns.
+ How a time-of-impact query ended. HIT reports where the two first touch under a measured point and
+ normal; OVERLAPPED means the cores were found overlapping and answers fraction zero under a point
+ and normal of exactly zero; SEPARATED never reached the other and answers max_fraction over the
+ last witness pair; FAILED gave up — after twenty-five distance passes, or with the root finder's
+ bracket lost — and answers the last time it advanced to. UNKNOWN is overwritten before it returns.
 *>
 enum ToiState : int {
     UNKNOWN,

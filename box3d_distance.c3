@@ -54,9 +54,9 @@ fn Transform? Sweep.transform_at(&self, float time) {
  Sweeps each proxy along its own sweep and reports where the two first touch, in the sweeps' frame.
 
  The cores close to the greater of one linear slop and the two radii less that slop, so the stop
- lands short of the geometric touch below a total radius of one slop, on it at one, and past above.
- A max_fraction outside the interval extrapolates both sweeps past c2 or answers a negative
- fraction, past an assertion this build compiles out, so it is refused here.
+ lands short of the geometric touch below a total radius of one slop, on it at one, and past above
+ — a full slop past from two. A max_fraction outside the interval extrapolates both sweeps or a
+ negative fraction, past an assertion this build compiles out, so it is refused here.
 
  @return "what the sweep found, under one of the four ToiState outcomes, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS, or max_fraction is outside 0 to 1"
 *>

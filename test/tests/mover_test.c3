@@ -13,11 +13,11 @@ const float AN_OPPOSING_OFFSET = 0.5;
 
 // What one plane solve left behind: its own result, and the pushes it wrote back through the
 // caller's array. plane_count is carried so a test can assert it before naming either push, and
-// converged_before_a_pass so that a pass count of none does not read as a reading left at its zero.
+// converged_on_the_first_pass so a converging first pass does not read as a reading left at zero.
 struct PlaneSolve {
     b3::Vec3 delta;
     int iteration_count;
-    bool converged_before_a_pass;
+    bool converged_on_the_first_pass;
     int plane_count;
     float first_push;
     float second_push;
@@ -39,7 +39,7 @@ fn PlaneSolve the_solve_of(b3::PlaneSolverResult result, b3::CollisionPlane[] pl
     return {
       .delta = result.delta,
       .iteration_count = result.iteration_count,
-      .converged_before_a_pass = result.iteration_count == 0,
+      .converged_on_the_first_pass = result.iteration_count == 0,
       .plane_count = (int)planes.len,
       .first_push = planes.len > 0 ? planes[0].push : 0.0f,
       .second_push = planes.len > 1 ? planes[1].push : 0.0f,
@@ -137,15 +137,15 @@ fn void a_delta_no_plane_opposes_is_returned_whole() @test {
 
     assert(0.9999 < solves.already_clear.delta.y && solves.already_clear.delta.y < 1.0001,
         "a metre straight up off the plane is left exactly as it arrived");
-    assert(solves.already_clear.converged_before_a_pass
+    assert(solves.already_clear.converged_on_the_first_pass
         && math::abs(solves.already_clear.first_push) < 0.0001,
-        "converging before the first pass has moved anything, so the plane is left pushing nothing");
+        "the first pass converging without moving anything, so the plane is left pushing nothing");
 
     assert(-1.0001 < solves.against_no_planes.delta.y && solves.against_no_planes.delta.y < -0.9999,
         "and a metre down against no planes at all is answered rather than refused");
-    assert(solves.against_no_planes.converged_before_a_pass
+    assert(solves.against_no_planes.converged_on_the_first_pass
         && solves.against_no_planes.plane_count == 0,
-        "on an empty slice, which converges before the first pass for the same reason");
+        "on an empty slice, which converges on that same first pass for the same reason");
 }
 
 fn void a_push_limit_stops_the_solve_short_of_the_plane() @test {
@@ -175,13 +175,17 @@ struct GroundClips {
     b3::Vec3 into_the_plane;
     b3::Vec3 away_from_the_plane;
     b3::Vec3 across_an_unsolved_plane;
+    b3::Vec3 beside_a_wall_the_solve_never_leaned_on;
+    float the_push_the_ground_took;
+    float the_push_the_wall_took;
     b3::Vec3 across_a_plane_that_does_not_clip;
     b3::Vec3 across_no_planes;
+    float the_push_behind_the_plane_that_will_not_clip;
 }
 
 // The same metre down and out along x against a plane a solve has already leaned on, then the same
-// vector reversed, then against the two planes a clip skips — one no solve ever pushed and one that
-// refuses to clip — and finally against none at all.
+// vector reversed, then the planes a clip skips: one no solve ever pushed, the wall of a corner a
+// downward solve had no reason to push, and one that refuses to clip — then against none at all.
 fn GroundClips the_clips_against_a_ground_plane() {
     b3::Vec3 up = { 0.0, 1.0, 0.0 };
     b3::Vec3 down_and_out = { 1.0, -1.0, 0.0 };
@@ -189,6 +193,11 @@ fn GroundClips the_clips_against_a_ground_plane() {
     b3::CollisionPlane[1] solved = { a_rigid_plane_facing(up) };
     b3::solve_planes({ 0.0, -1.0, 0.0 }, solved[..]);
     b3::CollisionPlane[1] unsolved = { a_rigid_plane_facing(up) };
+    b3::CollisionPlane[2] ground_and_wall = {
+        a_rigid_plane_facing(up),
+        a_rigid_plane_facing({ 1.0, 0.0, 0.0 }),
+    };
+    b3::solve_planes({ 0.0, -1.0, 0.0 }, ground_and_wall[..]);
     b3::CollisionPlane[1] not_clipping = solved;
     not_clipping[0].clip_velocity = false;
     b3::CollisionPlane[] no_planes = {};
@@ -197,8 +206,12 @@ fn GroundClips the_clips_against_a_ground_plane() {
       .into_the_plane = b3::clip_vector(down_and_out, solved[..]),
       .away_from_the_plane = b3::clip_vector({ 1.0, 1.0, 0.0 }, solved[..]),
       .across_an_unsolved_plane = b3::clip_vector(down_and_out, unsolved[..]),
+      .beside_a_wall_the_solve_never_leaned_on = b3::clip_vector({ -1.0, -1.0, 0.0 }, ground_and_wall[..]),
+      .the_push_the_ground_took = ground_and_wall[0].push,
+      .the_push_the_wall_took = ground_and_wall[1].push,
       .across_a_plane_that_does_not_clip = b3::clip_vector(down_and_out, not_clipping[..]),
       .across_no_planes = b3::clip_vector(down_and_out, no_planes),
+      .the_push_behind_the_plane_that_will_not_clip = not_clipping[0].push,
     };
 }
 
@@ -221,9 +234,19 @@ fn void a_velocity_clip_passes_over_every_plane_no_solve_leaned_on() @test {
     assert(0.9999 < clips.across_an_unsolved_plane.x && clips.across_an_unsolved_plane.x < 1.0001
         && -1.0001 < clips.across_an_unsolved_plane.y && clips.across_an_unsolved_plane.y < -0.9999,
         "a plane pushing nothing is skipped, so a slice never solved leaves the vector as it arrived");
+    assert(clips.the_push_the_ground_took > 0.5
+        && math::abs(clips.the_push_the_wall_took) < 0.0001,
+        "a solve driven straight down leans on the ground and leaves the wall beside it pushing nothing");
+    assert(math::abs(clips.beside_a_wall_the_solve_never_leaned_on.y) < 0.0001
+        && -1.0001 < clips.beside_a_wall_the_solve_never_leaned_on.x
+        && clips.beside_a_wall_the_solve_never_leaned_on.x < -0.9999,
+        "so one clip takes the fall off against the ground and leaves the run straight into that wall");
+
+    assert(clips.the_push_behind_the_plane_that_will_not_clip > 0.5,
+        "the last plane carries a real push of its own, so only its flag can be what skips it");
     assert(-1.0001 < clips.across_a_plane_that_does_not_clip.y
         && clips.across_a_plane_that_does_not_clip.y < -0.9999,
-        "as is a plane whose clip_velocity is off, whatever the solve left in its push");
+        "as it is, a plane whose clip_velocity is off being passed over whatever it pushes");
     assert(-1.0001 < clips.across_no_planes.y && clips.across_no_planes.y < -0.9999,
         "and an empty slice is answered with the vector itself rather than refused");
 }

@@ -755,6 +755,7 @@ fn b3::ToiInput a_swept_proxy_pair(
 
 struct SweptImpacts {
     ImpactReading meeting;
+    ImpactReading uneven;
     ImpactReading radii_crossed;
     ImpactReading cores_together;
     ImpactReading receding;
@@ -762,8 +763,8 @@ struct SweptImpacts {
 }
 
 // Half a metre of radius apiece with the cores six metres apart and closing six, so the surfaces
-// meet at five sixths. The next two begin already inside that — one by its radii alone, one with
-// the two cores in the same place — and the last two never meet, one receding and one bounded.
+// meet at five sixths, then that same total split unevenly, which moves the point onto A's surface
+// alone. Two then begin inside — by radii, and cores together — and two never meet at all.
 fn SweptImpacts the_impacts_of_a_pair_swept_six_metres() {
     b3::Vec3[1] a = { { 0.0, 0.0, 0.0 } };
     b3::Vec3[1] b = { { 0.0, 0.0, 0.0 } };
@@ -777,6 +778,9 @@ fn SweptImpacts the_impacts_of_a_pair_swept_six_metres() {
       travel: 6.0,
       max_fraction: 1.0,
     );
+    b3::ToiInput uneven = meeting;
+    uneven.proxy_a.radius = 0.25;
+    uneven.proxy_b.radius = 0.75;
     b3::ToiInput radii_crossed = meeting;
     radii_crossed.sweep_b.c1 = { 0.5, 0.0, 0.0 };
     radii_crossed.sweep_b.c2 = { -5.5, 0.0, 0.0 };
@@ -790,6 +794,7 @@ fn SweptImpacts the_impacts_of_a_pair_swept_six_metres() {
 
     return {
       .meeting = @the_impact_of(b3::time_of_impact(meeting)),
+      .uneven = @the_impact_of(b3::time_of_impact(uneven)),
       .radii_crossed = @the_impact_of(b3::time_of_impact(radii_crossed)),
       .cores_together = @the_impact_of(b3::time_of_impact(cores_together)),
       .receding = @the_impact_of(b3::time_of_impact(receding)),
@@ -815,6 +820,12 @@ fn void a_swept_pair_reports_the_time_at_which_it_first_touches() @test {
     assert(math::abs(swept.meeting.normal.x - 1.0f) < 0.0001
         && math::abs(the_length_of(swept.meeting.normal) - 1.0f) < 0.0001,
         "under a unit normal running from A towards B");
+
+    assert(swept.uneven.state == b3::ToiState.HIT
+        && math::abs(swept.uneven.fraction - swept.meeting.fraction) < 0.0000001,
+        "the same total radius split unevenly meets at the very same fraction");
+    assert(math::abs(swept.uneven.point.x - (0.25f - 0.5f * a_linear_slop())) < 0.25f * a_linear_slop(),
+        "with the point moved onto A's own surface, which that split alone places");
 }
 
 fn void a_pair_that_begins_inside_the_other_answers_by_what_of_it_overlaps() @test {

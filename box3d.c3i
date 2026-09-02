@@ -1966,10 +1966,10 @@ struct SimplexCache @private {
 }
 
 <*
- box3d's separating-axis warm start for a hull pair: the last axis it tested and what that test
- gave, whether the two were separated or overlapping — the separation is negative for an overlap.
- box3d replaces the entry rather than clearing it, so a caller never observes an empty one; hit is
- the only field that reports re-use.
+ box3d's separating-axis warm start: the last axis it tested and what that test gave, whether the
+ two were separated or overlapping — the separation is negative for an overlap, and hit is the only
+ field reporting re-use. The hull pair always replaces the entry; the triangle and hull pair zeroes
+ it instead on its fallback path, so an empty one is observable there.
 *>
 struct SatCache @private {
     float separation;

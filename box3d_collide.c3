@@ -1,5 +1,21 @@
 module b3;
 
+// box3d's own degeneracy threshold, 1000 * FLT_MIN, which C3 0.8.3 cannot spell. Mirrored rather
+// than approximated because below it box3d hands back a zero plane normal, and a triangle with no
+// plane culls nothing and can answer with a NaN point.
+const float TRIANGLE_AREA_FLOOR @private = 1.17549435e-35f;
+
+fn bool triangle_has_area(Triangle* triangle) @private {
+    Vec3 edge1 = (*triangle)[1] - (*triangle)[0];
+    Vec3 edge2 = (*triangle)[2] - (*triangle)[0];
+    Vec3 cross = {
+      edge1[1] * edge2[2] - edge1[2] * edge2[1],
+      edge1[2] * edge2[0] - edge1[0] * edge2[2],
+      edge1[0] * edge2[1] - edge1[1] * edge2[0],
+    };
+    return cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2] > TRIANGLE_AREA_FLOOR;
+}
+
 <*
  The contact between this sphere and another placed by transform_b_to_a, in this sphere's frame,
  the normal pointing from this sphere towards the other.
@@ -148,28 +164,14 @@ fn CollisionManifold? HullData.collide_hull(&self, HullData* other, Transform tr
 
 <*
  The contact between this triangle and a sphere in the same frame, the normal pointing from the
- triangle towards the sphere. One point at most, and a sphere behind the plane normal reports
- nothing — see Triangle. A four-slop speculative window, so the separation is positive for a
- sphere the triangle has not reached and exactly zero where the two surfaces meet.
+ triangle towards the sphere. One point at most, and the cull reads the sphere's own centre, so a
+ sphere reaching past the plane still meets nothing while its centre is behind. A four-slop window,
+ so the separation is positive for a sphere not yet reached and zero where the surfaces meet.
+
+ @return "the contact, or DEGENERATE_GEOMETRY when the triangle has no area"
 *>
-// box3d's own degeneracy threshold, 1000 * FLT_MIN, which C3 0.8.3 cannot spell. Mirrored rather
-// than approximated because below it box3d hands back a zero plane normal, and a triangle with no
-// plane culls nothing and can answer with a NaN point.
-const float TRIANGLE_AREA_FLOOR = 1.17549435e-35f;
-
-fn bool Triangle.has_area(&self) @private {
-    Vec3 edge1 = (*self)[1] - (*self)[0];
-    Vec3 edge2 = (*self)[2] - (*self)[0];
-    Vec3 cross = {
-      edge1[1] * edge2[2] - edge1[2] * edge2[1],
-      edge1[2] * edge2[0] - edge1[0] * edge2[2],
-      edge1[0] * edge2[1] - edge1[1] * edge2[0],
-    };
-    return cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2] > TRIANGLE_AREA_FLOOR;
-}
-
 fn CollisionManifold? Triangle.collide_sphere(&self, Sphere sphere) {
-    if (!self.has_area()) return DEGENERATE_GEOMETRY~;
+    if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
     CollisionManifold contact;
     LocalManifold manifold = { .points = &contact.points[0] };
     collide_triangle_and_sphere_raw(
@@ -185,13 +187,14 @@ fn CollisionManifold? Triangle.collide_sphere(&self, Sphere sphere) {
 
 <*
  The contact between this triangle and a capsule in the same frame, the normal pointing from the
- triangle towards the capsule. Two points at most, from clipping the capsule's segment onto the
- face; box3d admits that pair on either end alone and reports both, so one point can be far from
- contact. A four-slop speculative window, and the back-side cull reads the midpoint of the two
- centres, so a capsule with one end well in front of the plane but its midpoint behind meets none.
+ triangle towards the capsule. Two points at most, from clipping the segment onto the face, and one
+ of them can be far from contact. The cull reads the midpoint of the two centres, so a capsule with
+ one end well in front of the plane but its midpoint behind meets nothing.
+
+ @return "the contact, or DEGENERATE_GEOMETRY when the triangle has no area"
 *>
 fn CollisionManifold? Triangle.collide_capsule(&self, Capsule capsule) {
-    if (!self.has_area()) return DEGENERATE_GEOMETRY~;
+    if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
     CollisionManifold contact;
     LocalManifold manifold = { .points = &contact.points[0] };
     SimplexCache warm_start;
@@ -208,11 +211,11 @@ fn CollisionManifold? Triangle.collide_capsule(&self, Capsule capsule) {
 }
 
 <*
- The contact between this triangle and a hull in the same frame, points written into buffer. Alone
- among the collide pairs its count is bounded by that buffer: box3d truncates the clipped polygon
- instead of reducing it, so four slots keep a clip-order prefix of a contact reaching seven points
- against a box. The cull reads the hull's centroid against a linear slop, so a hull a slop behind
- the plane still answers where one further back does not.
+ The contact between this triangle and a hull in the same frame, the normal running from triangle
+ to hull and the points written into buffer. Alone among the collide pairs its count is bounded by
+ that buffer: box3d truncates the clipped polygon rather than reducing it, so four slots keep a
+ clip-order prefix of a contact reaching seven. The cull reads the hull's centroid against a linear
+ slop, so a hull a slop behind still answers where one further back does not.
 
  @param enable_speculative : "whether to report points the two have not reached, out to four linear slops"
  @param buffer : "where the points go; under MAX_MANIFOLD_POINTS box3d reports no contact at all, which is why that is refused"
@@ -224,7 +227,7 @@ fn CollisionManifoldView? Triangle.collide_hull(
   bool enable_speculative,
   LocalManifoldPoint[] buffer,
 ) {
-    if (!self.has_area()) return DEGENERATE_GEOMETRY~;
+    if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
     if (hull == null) return INVALID_DEFINITION~;
     if (buffer.len < (usz)MAX_MANIFOLD_POINTS) return BUFFER_TOO_SMALL~;
 

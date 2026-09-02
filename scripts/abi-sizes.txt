@@ -45,8 +45,10 @@ b3BodyEvents 16 8 moveEvents=0 moveCount=8
 b3JointEvent 16 8 jointId=0 userData=8
 b3JointEvents 16 8 jointEvents=0 count=8
 b3QueryFilter 32 8 categoryBits=0 maskBits=8 id=16 name=24
+b3RayCastInput 28 4 origin=0 translation=12 maxFraction=24
 b3RayResult 64 8 shapeId=0 point=8 normal=20 userMaterialId=32 fraction=40 triangleIndex=44 childIndex=48 nodeVisits=52 leafVisits=56 hit=60
 b3ShapeProxy 16 8 points=0 count=8 radius=12
+b3ShapeCastInput 40 8 proxy=0 translation=16 maxFraction=28 canEncroach=32
 b3CastOutput 48 4 normal=0 point=12 fraction=24 iterations=28 triangleIndex=32 childIndex=36 materialIndex=40 hit=44
 b3WorldCastOutput 48 4
 b3BodyCastResult 56 8 shapeId=0 point=8 normal=20 fraction=32 triangleIndex=36 userMaterialId=40 iterations=48 hit=52

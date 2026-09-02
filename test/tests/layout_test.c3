@@ -24,6 +24,10 @@ fn void the_query_types_match_the_c_layout() @test {
     assert(b3::RayResult::size == 64);
     assert(b3::RayResult::alignment == 8);
     assert(b3::ShapeProxy::size == 16);
+    assert(b3::RayCastInput::size == 28);
+    assert(b3::RayCastInput::alignment == 4);
+    assert(b3::ShapeCastInput::size == 40);
+    assert(b3::ShapeCastInput::alignment == 8);
     assert(b3::CastOutput::size == 48);
     assert(b3::WorldCastOutput::size == b3::CastOutput::size);
     assert(b3::BodyCastResult::size == 56);

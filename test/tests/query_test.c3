@@ -143,7 +143,7 @@ fn void a_cast_at_one_body_reports_the_hit() @test {
       body_transform: transform,
     )!!;
     assert(swept.fraction > 0.4055f && swept.fraction < 0.4075f,
-        "a sphere of radius 0.25 stops a quarter unit sooner, less box3d's speculative margin");
+        "a sphere of radius 0.25 stops a quarter unit sooner, plus the linear slop box3d closes past contact");
 
     bool at_the_centre = body.overlap_shape(
       origin: {0.0, 0.0, 0.0},
@@ -420,7 +420,7 @@ fn void collecting_a_shape_cast_reports_the_swept_fraction() @test {
     );
     assert(hits.len == 1, "the swept sphere reaches the resting one");
     assert(hits[0].fraction > 0.4055f && hits[0].fraction < 0.4075f,
-        "stopping a quarter unit early, less box3d's speculative margin");
+        "stopping a quarter unit early, plus the linear slop box3d closes past contact");
     assert(hits[0].shape_id.index1 == sphere_shape.index1, "and names the shape it reached");
     assert(hits[0].point.y > 0.49f && hits[0].point.y < 0.51f, "the hit point is on the resting sphere's surface");
     assert(hits[0].normal.y > 0.99f && hits[0].normal.y < 1.01f, "and the surface normal points back along the sweep");

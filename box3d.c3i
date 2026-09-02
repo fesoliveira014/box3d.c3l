@@ -1475,8 +1475,9 @@ struct ShapeProxy {
 }
 
 <*
- The result of a single-shape ray or shape cast. When hit is false every other field is
- undefined. material_index is -1 when the shape carries no material.
+ The result of a ray or shape cast. When hit is false every other field is undefined. A cast
+ against one shape leaves material_index at -1 where that shape carries no material, while the
+ proxy pair shape_cast() sweeps writes neither child_index nor material_index, so both read zero.
 *>
 struct CastOutput {
     Vec3 normal;
@@ -1685,9 +1686,9 @@ extern fn TreeStats WorldId.cast_ray(
  Sweeps a convex proxy instead of a point, calling fcn once per shape it reaches. The proxy's
  points are borrowed for the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
 
- box3d closes when the core separation reaches the two radii less one linear slop, or one slop
- where they sum to less than two — so a pair carrying radius between them reports contact a slop
- past the geometric touch, and a pair carrying none reports it a slop short.
+ box3d closes at a core separation of one linear slop or the two radii less that slop, whichever
+ is greater, so the stop lands short of the geometric touch below a total radius of one slop, on
+ it at one, and past above — a full slop past from two.
 *>
 extern fn TreeStats WorldId.cast_shape(
   self,
@@ -1826,9 +1827,9 @@ struct RayCastInput {
  A convex proxy swept along translation in a shape's own frame, the shape cast's counterpart to
  RayCastInput. The proxy's points are borrowed for the duration of the call — see ShapeProxy.
 
- can_encroach is read only on box3d's first iteration, and only while the radius the proxy and the
- shape carry between them exceeds about three linear slops. A sphere and a capsule lend their own
- radius to that sum where a hull, a mesh and a height field lend none.
+ can_encroach is read only on box3d's first iteration, and takes effect only past two and three
+ quarter linear slops of total radius. A sphere and a capsule lend their own radius to that sum
+ where a hull, a mesh and a height field lend none.
 *>
 struct ShapeCastInput {
     ShapeProxy proxy;
@@ -2147,9 +2148,9 @@ struct DistanceInput {
 
 <*
  The closest points between two proxies, in shape A's frame, with distance clamped at zero. normal
- runs from A to B and is zero exactly when the two cores overlap, which a caller normalising it
- turns into a NaN. Where use_radii alone drove the distance to zero the normal is real and the two
- points have crossed, point_b sitting behind point_a along it.
+ runs from A to B and is zero where the cores overlap or box3d's search degenerates, which a
+ caller normalising it turns into a NaN. Where use_radii alone drove the distance to zero the
+ normal is real and the two points have crossed, point_b sitting behind point_a along it.
 *>
 struct DistanceOutput {
     Vec3 point_a;
@@ -2163,8 +2164,8 @@ struct DistanceOutput {
 <*
  Two convex proxies, the pose of B in A's frame and B's translation in that frame — what
  shape_cast() sweeps, each proxy keeping its points in its own shape's frame. can_encroach is read
- only on box3d's first pass and only while the two radii sum past about three linear slops, where
- it lets a pair that begins overlapped close a further slop rather than answer at fraction zero.
+ only on box3d's first pass and takes effect only past two and three quarter linear slops of total
+ radius, where it lets a pair that begins overlapped close a further slop rather than answer zero.
 *>
 struct ShapeCastPairInput {
     ShapeProxy proxy_a;

@@ -13,7 +13,7 @@ struct DistanceReading {
     b3::Vec3 point_a;
     b3::Vec3 point_b;
     int iterations;
-    int simplex_count;
+    bool reported_no_simplexes;
 }
 
 // An expression macro for the reason @the_reading_of is one: C3 forbids an optional parameter, so
@@ -27,15 +27,15 @@ macro DistanceReading @the_distance_of(#call) {
           .point_a = out.point_a,
           .point_b = out.point_b,
           .iterations = out.iterations,
-          .simplex_count = out.simplex_count,
+          .reported_no_simplexes = out.simplex_count == 0,
         };
     }
     return {};
 }
 
-// Every pair below is two single-point proxies offset along x, so the core distance is the offset
-// itself and the surface distance is that offset less the two radii. The points are borrowed for
-// the length of the call, so each fixture holds its own arrays across it.
+// The proxies are placed by an offset along x, so a pair of single points has a core distance of
+// that offset and a surface distance of it less the two radii. The points are borrowed for the
+// length of the call, so each fixture holds its own arrays across it.
 fn b3::DistanceInput a_point_pair(
   b3::Vec3[] a,
   float radius_a,
@@ -139,14 +139,67 @@ fn void a_distance_query_subtracts_both_radii_only_when_it_is_asked_to() @test {
         "the normal runs from A towards B and is a unit vector");
 }
 
+struct BoxPairDiagnostics {
+    DistanceReading clear;
+    DistanceReading overlapping;
+}
+
+// The eight corners of a box a quarter metre out on every axis, small enough to sit wholly inside
+// the two metre box the suite builds its hulls from.
+fn b3::Vec3[8] the_corners_of_a_half_metre_box() {
+    return {
+        { -0.25, -0.25, -0.25 }, { 0.25, -0.25, -0.25 },
+        { 0.25, 0.25, -0.25 }, { -0.25, 0.25, -0.25 },
+        { -0.25, -0.25, 0.25 }, { 0.25, -0.25, 0.25 },
+        { 0.25, 0.25, 0.25 }, { -0.25, 0.25, 0.25 },
+    };
+}
+
+// Eight corners apiece at two different sizes, so each witness point lands somewhere its own box
+// alone puts it and a query reading the two proxies the wrong way round answers differently. The
+// second offset buries the smaller box in the larger, which box3d answers before counting at all.
+fn BoxPairDiagnostics the_diagnostics_of_two_boxes() {
+    b3::Vec3[8] a = the_corners_of_a_two_metre_box();
+    b3::Vec3[8] b = the_corners_of_a_half_metre_box();
+
+    b3::DistanceInput clear = a_point_pair(
+      a: a[..],
+      radius_a: 0.0,
+      b: b[..],
+      radius_b: 0.0,
+      offset: 3.0,
+      use_radii: false,
+    );
+    b3::DistanceInput overlapping = clear;
+    overlapping.transform = a_placement_at({ 0.5, 0.0, 0.0 });
+
+    return {
+      .clear = @the_distance_of(b3::shape_distance(clear)),
+      .overlapping = @the_distance_of(b3::shape_distance(overlapping)),
+    };
+}
+
 fn void a_distance_query_asks_box3d_for_no_diagnostic_simplexes() @test {
     PointPairDistances points = the_distances_between_two_points_three_apart();
+    BoxPairDiagnostics boxes = the_diagnostics_of_two_boxes();
 
-    assert(points.surfaces.answered, "the pair answered, so its counters are box3d's own");
-    assert(points.surfaces.simplex_count == 0,
+    assert(points.surfaces.answered && boxes.clear.answered && boxes.overlapping.answered,
+        "every pair answered, so the counters they carry are box3d's own");
+    assert(points.surfaces.reported_no_simplexes && boxes.clear.reported_no_simplexes,
         "the wrapper passes no simplex array, so none is ever reported back");
+
+    assert(1.7499 < boxes.clear.distance && boxes.clear.distance < 1.7501,
+        "the two boxes stand a metre and three quarters apart");
+    assert(math::abs(boxes.clear.point_a.x - 1.0f) < 0.00001
+        && math::abs(boxes.clear.point_b.x - 2.75f) < 0.00001,
+        "each witness point on its own box's face, which the two sizes place differently");
+
+    assert(boxes.clear.iterations > 0,
+        "a pair GJK has to walk towards counts the support points it added past the first");
     assert(points.surfaces.iterations == 0,
-        "and a pair of single points is answered by the first simplex, with no support point added past it");
+        "where a pair of single points is answered by that first simplex alone");
+    assert(boxes.overlapping.iterations == 0,
+        "and a core overlap reports none at all, box3d returning before the count is written");
 }
 
 struct ClosingDistances {
@@ -474,9 +527,11 @@ fn void the_proxy_pair_queries_allocate_nothing() @test {
     SweptPairFractions fractions = the_fractions_of_three_swept_pairs();
     SweptPairOutcomes outcomes = the_outcomes_of_a_pair_swept_six_metres();
     OverlappedSweep overlapped = the_sweep_of_a_pair_that_begins_overlapped();
+    BoxPairDiagnostics boxes = the_diagnostics_of_two_boxes();
     the_proxy_pairs_the_two_queries_refuse();
 
-    assert(points.cores.answered && closing.clear.answered, "the distance queries all ran");
+    assert(points.cores.answered && closing.clear.answered && boxes.clear.answered,
+        "the distance queries all ran");
     assert(fractions.no_radius.hit && outcomes.meeting.hit && overlapped.plain.hit, "as did the sweeps");
     assert(b3::byte_count() == before,
         "and neither query allocates: both answer from the caller's own proxies and stack");

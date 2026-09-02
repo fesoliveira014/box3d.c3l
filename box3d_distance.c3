@@ -5,8 +5,8 @@ module b3;
 
  Every call starts GJK cold: box3d's warm-start cache belongs to one pair alone, so the wrapper
  keeps its own and zeroes it, and the diagnostic simplex array is never asked for — simplex_count
- comes back zero, and iterations counts the support points added past the first, none for a pair
- the first simplex already answers.
+ comes back zero, and iterations counts the support points added past the first only where the
+ cores stay apart, reading zero on any overlap whatever work the search did.
 
  @return "the closest points, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS"
 *>
@@ -22,8 +22,8 @@ fn DistanceOutput? shape_distance(DistanceInput input) {
  Sweeps proxy B along the translation at a fixed proxy A, in A's frame, reporting where they first
  touch. The cores close to the greater of one linear slop and the two radii less that slop, so the
  stop lands short of the geometric touch below a total radius of one slop, on it at one, and past
- above — a full slop past once the total clears two. A pair beginning overlapped reports fraction
- zero under a zero normal, a NaN once normalised, unless can_encroach is set.
+ above — a full slop past from two. A pair that begins overlapped reports fraction zero under a
+ zero normal, a NaN once normalised, unless can_encroach is set.
 
  @return "where the two first touch, NO_HIT when they never do or the touch lies past max_fraction, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS"
 *>

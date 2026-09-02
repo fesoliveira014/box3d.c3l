@@ -4,7 +4,15 @@ import std::math::quaternion;
 
 alias Vec3 = float[<3>];
 alias Quat = Quaternionf;
-alias Matrix3 = Vec3[3];
+<*
+ A three by three matrix held as its three columns, which is how box3d multiplies it: b3MulMV
+ reads cx * a.x + cy * a.y + cz * a.z. A caller filling it from rows transposes it silently.
+*>
+struct Matrix3 {
+    Vec3 cx;
+    Vec3 cy;
+    Vec3 cz;
+}
 
 <*
  A world position. Distinct from Vec3 so a position is never silently used as a direction.
@@ -117,10 +125,10 @@ extern fn uint hash_raw(uint seed, char* data, int count) @cname("b3Hash") @priv
 
 <*
  Mixes two touching surfaces' frictions into the one the solver uses, in place of box3d's own
- sqrt(a * b). box3d runs it on a worker thread and hands it no context of the caller's, so it must
- modify neither box3d's state nor the caller's. It runs again every step the pair's narrow phase
- does, which contact recycling and sleeping each suppress — so the call count is neither one per
- pair nor one per step.
+ sqrt(a * b). box3d may call it from a worker thread and hands it no context of the caller's, so it
+ must not touch the world. It runs every step the pair's narrow phase finds them touching, and once
+ per manifold point against a mesh or height field, where the answers are averaged — recycling,
+ sleeping and mere nearness each suppress it, so the count is neither one per pair nor per step.
 *>
 alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float friction_b, ulong user_material_id_b);
 

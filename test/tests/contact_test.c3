@@ -272,24 +272,41 @@ fn void the_mixing_callbacks_are_handed_both_surfaces_own_values() @test {
     assert(restitution_pair, "and that one the two restitutions, which are not the two frictions");
 }
 
-fn Drop the_drop_after_a_callback_is_replaced_by_null() {
+struct ReplacedDrop {
+    Drop drop;
+    int calls_while_installed;
+    int calls_after_the_null;
+}
+
+// The callback is installed and stepped until box3d has actually asked it, so the null that follows
+// undoes a live callback rather than an unused one. Without those first steps the install could be
+// deleted outright and nothing would notice.
+fn ReplacedDrop the_drop_after_a_callback_is_replaced_by_null() {
     b3::BodyId ball;
     b3::WorldId world = a_world_of_two_distinct_surfaces(&ball);
     defer world.destroy();
 
     world.set_restitution_callback(&answer_restitution);
+    for (int i = 0; i < 120; i++) world.step(1.0f / 60.0f, 4);
+    int installed = restitution_record.calls;
+
     world.set_restitution_callback(null);
+    restitution_record = (MixingRecord){};
 
     float late_peak = -1000.0f;
-    for (int i = 0; i < 240; i++) {
+    for (int i = 0; i < 360; i++) {
         world.step(1.0f / 60.0f, 4);
-        if (i >= 180 && ball.position().y > late_peak) late_peak = ball.position().y;
+        if (i >= 300 && ball.position().y > late_peak) late_peak = ball.position().y;
     }
 
     return {
-        .final_y = ball.position().y,
-        .final_vy = ball.linear_velocity().y,
-        .late_peak = late_peak,
+        .drop = {
+            .final_y = ball.position().y,
+            .final_vy = ball.linear_velocity().y,
+            .late_peak = late_peak,
+        },
+        .calls_while_installed = installed,
+        .calls_after_the_null = restitution_record.calls,
     };
 }
 
@@ -300,13 +317,16 @@ fn void a_null_callback_restores_the_mixing_box3d_ships() @test {
     restitution_record = (MixingRecord){};
     restitution_answer = 1.0f;
 
-    Drop replaced = the_drop_after_a_callback_is_replaced_by_null();
-    int calls = restitution_record.calls;
+    ReplacedDrop replaced = the_drop_after_a_callback_is_replaced_by_null();
 
-    assert(calls == 0, "the callback the null replaced is never asked");
-    assert(replaced.final_y > 0.49f && replaced.final_y < 0.51f, "and the ball rests, as it does with no callback at all");
-    assert(replaced.late_peak > 0.49f && replaced.late_peak < 0.51f, "never leaving it over the last second");
-    assert(replaced.final_vy > -0.01f && replaced.final_vy < 0.01f, "with nothing left of the fall a 1.0 mixing would have kept");
+    assert(replaced.calls_while_installed > 0, "box3d asked the callback while it was installed");
+    assert(replaced.calls_after_the_null == 0, "and never again once a null replaced it");
+    assert(replaced.drop.final_y > 0.49f && replaced.drop.final_y < 0.51f,
+        "so the ball rests, as it does with no callback at all");
+    assert(replaced.drop.late_peak > 0.49f && replaced.drop.late_peak < 0.51f,
+        "never leaving that rest over the last second");
+    assert(replaced.drop.final_vy > -0.01f && replaced.drop.final_vy < 0.01f,
+        "with nothing left of the fall a 1.0 mixing would have kept");
 }
 
 struct Slide {

@@ -179,25 +179,6 @@ extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
 extern fn uint hash_raw(uint seed, char* data, int count) @cname("b3Hash") @private;
 
 <*
- A colour packed as 0xRRGGBB. Not an enum: box3d's b3HexColor names 145 constants, but the values
- a renderer is handed are not confined to them, box3d passing a shape's custom colour through
- unexamined and packing a debug material preset into the unused high byte.
-*>
-typedef HexColor = inline uint;
-
-<*
- The number of constraint graph colours, mirroring B3_GRAPH_COLOR_COUNT in constants.h, which the
- C API does not expose as a function. The last of them is the overflow slot.
-*>
-const int GRAPH_COLOR_COUNT = 24;
-
-<*
- Raw graph colour. Private because graph_color() refuses the out-of-range index box3d does no more
- than assert against before reading past its table.
-*>
-extern fn HexColor graph_color_raw(int index) @cname("b3GetGraphColor") @private;
-
-<*
  Mixes two touching surfaces' frictions into the one the solver uses, in place of box3d's own
  sqrt(a * b). box3d may call it from a worker thread and hands it no context of the caller's, so it
  must not touch the world. It runs every step the pair's narrow phase finds them touching, and once
@@ -215,7 +196,12 @@ alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, fl
 alias TaskFn = fn void(void* task_context);
 alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, ZString task_name);
 alias FinishTaskFn = fn void(void* user_task, void* user_context);
-alias CreateDebugShapeFn = fn void*(void* debug_shape, void* user_context);
+alias CreateDebugShapeFn = fn void*(DebugShape* debug_shape, void* user_context);
+<*
+ Releases whatever create_debug_shape answered for a shape, when that shape or its world is
+ destroyed. box3d does not test this one for null on the shape's own destroy path, so a world
+ that answers for its shapes and leaves this out crashes there rather than skipping it.
+*>
 alias DestroyDebugShapeFn = fn void(void* user_shape, void* user_context);
 
 <*
@@ -359,6 +345,13 @@ extern fn Capacity WorldId.max_capacity(self) @cname("b3World_GetMaxCapacity");
 extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
 extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
 extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
+
+<*
+ Writes a breakdown of everything the world holds to the handler set_log_fn() installed: a line
+ for each pool, array, database and allocator it keeps, and the total in kilobytes last. The
+ lines are one per store and never one per body or shape. A locked world writes nothing at all.
+*>
+extern fn void WorldId.dump_memory_stats(self) @cname("b3World_DumpMemoryStats");
 
 <*
  Replaces the world's friction mixing with fcn, and restores box3d's own when fcn is null. A
@@ -875,6 +868,15 @@ extern fn HeightFieldData* create_grid_raw(int row_count, int column_count, Vec3
 extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3 scale, float row_frequency, float column_frequency, bool make_holes) @cname("b3CreateWave") @private;
 
 <*
+ Raw height field file calls. The first reads both of the definition's arrays without testing
+ either for null, where create_height_field_raw() reads only the heights, and the second answers
+ every refusal with a null pointer. The wrappers in box3d_mesh.c3 carry both guards and are the
+ only public way in.
+*>
+extern fn void dump_height_data_raw(HeightFieldDef* def, ZString path) @cname("b3DumpHeightData") @private;
+extern fn HeightFieldData* load_height_field_raw(ZString path) @cname("b3LoadHeightField") @private;
+
+<*
  Releases the height field. The caller owns it and must call this exactly once — see MeshData.
 *>
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
@@ -973,6 +975,19 @@ extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Crea
  safe on it: the rest test the node count, which the zeroing sets to 0.
 *>
 extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
+
+<*
+ Writes the tree to the path: the struct with its pointers and rebuild scratch zeroed, then the
+ whole node pool including the free list. A path box3d cannot open is a silent no-op — it returns
+ nothing a caller could read, which is why this takes no fault where load_tree() does.
+*>
+extern fn void DynamicTree.save(&self, ZString path) @cname("b3DynamicTree_Save");
+
+<*
+ Raw tree load. Private because load_tree() reads the zeroed tree box3d answers every refusal
+ with as the fault it is.
+*>
+extern fn DynamicTree load_tree_raw(ZString path, float scale) @cname("b3DynamicTree_Load") @private;
 
 extern fn int create_proxy_raw(
   DynamicTree* tree,
@@ -1321,6 +1336,15 @@ extern fn CompoundData* create_compound_raw(CompoundDef* def) @cname("b3CreateCo
  Releases the compound. The caller owns it and must call this exactly once — see MeshData.
 *>
 extern fn void CompoundData.destroy(&self) @cname("b3DestroyCompound");
+
+<*
+ Raw byte conversions. Neither allocates nor copies: both hand back the address they were given,
+ the first having nulled the compound's tree pointer and the second having pointed it back into
+ the bytes. box3d reads the header through the pointer before it checks any length, so the
+ wrappers in box3d_compound.c3 carry the size guard and are the only public way in.
+*>
+extern fn char* compound_to_bytes_raw(CompoundData* compound) @cname("b3ConvertCompoundToBytes") @private;
+extern fn CompoundData* compound_from_bytes_raw(char* bytes, int byte_count) @cname("b3ConvertBytesToCompound") @private;
 
 <*
  Raw child accessors. Every one of them asserts its index and this release build compiles the
@@ -4662,3 +4686,124 @@ extern fn RecQueryHit frame_query_hit_raw(
   int query_index,
   int hit_index,
 ) @cname("b3RecPlayer_GetFrameQueryHit") @private;
+
+<*
+ A colour packed as 0xRRGGBB. Not an enum: box3d's b3HexColor names 145 constants, but the values
+ a renderer is handed are not confined to them, box3d passing a shape's custom colour through
+ unexamined and packing a debug material preset into the unused high byte.
+*>
+typedef HexColor = inline uint;
+
+<*
+ The number of constraint graph colours, mirroring B3_GRAPH_COLOR_COUNT in constants.h, which the
+ C API does not expose as a function. The last of them is the overflow slot.
+*>
+const int GRAPH_COLOR_COUNT = 24;
+
+<*
+ Raw graph colour. Private because graph_color() refuses the out-of-range index box3d does no more
+ than assert against before reading past its table.
+*>
+extern fn HexColor graph_color_raw(int index) @cname("b3GetGraphColor") @private;
+
+<*
+ One shape offered to a renderer so it can build whatever it draws that shape with. The arm the
+ type names points into box3d's own storage and lives as long as the shape does; the other five
+ are the same address read as geometry it is not.
+*>
+struct DebugShape {
+    ShapeId shape_id;
+    ShapeType type;
+    union {
+        Capsule* capsule;
+        CompoundData* compound;
+        HeightFieldData* height_field;
+        HullData* hull;
+        Mesh* mesh;
+        Sphere* sphere;
+    }
+}
+
+<*
+ Draws one shape at the pose its body holds. user_shape is whatever WorldDef.create_debug_shape
+ answered for that shape, which box3d keeps, so it asks once and draws through the answer after.
+*>
+alias DrawShapeFn = fn void(void* user_shape, WorldTransform transform, HexColor color, void* context);
+alias DrawSegmentFn = fn void(Pos p1, Pos p2, HexColor color, void* context);
+alias DrawTransformFn = fn void(WorldTransform transform, void* context);
+alias DrawPointFn = fn void(Pos p, float size, HexColor color, void* context);
+alias DrawSphereFn = fn void(Pos p, float radius, HexColor color, float alpha, void* context);
+alias DrawCapsuleFn = fn void(Pos p1, Pos p2, float radius, HexColor color, float alpha, void* context);
+alias DrawBoundsFn = fn void(Aabb aabb, HexColor color, void* context);
+alias DrawBoxFn = fn void(Vec3 extents, WorldTransform transform, HexColor color, void* context);
+alias DrawStringFn = fn void(Pos p, ZString s, HexColor color, void* context);
+
+<*
+ What a renderer hands WorldId.draw(): nine callbacks taking world coordinates, the box outside
+ which nothing is drawn, and a flag per thing to draw. See default_debug_draw() for the state one
+ starts in, and DrawShapeFn for what a shape needs beyond draw_shapes.
+*>
+struct DebugDraw {
+    DrawShapeFn draw_shape_fcn;
+    DrawSegmentFn draw_segment_fcn;
+    DrawTransformFn draw_transform_fcn;
+    DrawPointFn draw_point_fcn;
+    DrawSphereFn draw_sphere_fcn;
+    DrawCapsuleFn draw_capsule_fcn;
+    DrawBoundsFn draw_bounds_fcn;
+    DrawBoxFn draw_box_fcn;
+    DrawStringFn draw_string_fcn;
+    Aabb drawing_bounds;
+    float force_scale;
+    float joint_scale;
+    bool draw_shapes;
+    bool draw_joints;
+    bool draw_joint_extras;
+    bool draw_bounds;
+    bool draw_mass;
+    bool draw_sleep;
+    bool draw_body_names;
+    bool draw_contacts;
+    bool draw_anchor_a;
+    bool draw_graph_colors;
+    bool draw_contact_features;
+    bool draw_contact_normals;
+    bool draw_contact_forces;
+    bool draw_islands;
+    void* context;
+}
+
+<*
+ A draw definition with every flag false, so a caller who takes it and draws sees nothing until
+ one is raised. The nine callbacks are box3d's own empty bodies rather than null, the drawing
+ bounds reach 100 length units either side of the origin, and both scales are 1.
+*>
+extern fn DebugDraw default_debug_draw() @cname("b3DefaultDebugDraw");
+
+<*
+ Draws the world through the definition's callbacks, culled to its drawing bounds and to
+ mask_bits, which gates everything: a mask of zero draws nothing at all. Shapes take a second
+ switch as well, WorldDef.create_debug_shape, which only world creation can set. box3d tests no
+ callback for null before calling it, so a raised flag over a null one is a crash rather than a
+ skip, and its check that the drawing bounds are a valid box is an assertion this build compiles out.
+
+ @param mask_bits : "the bits a shape's own filter categories must overlap for it to be considered"
+*>
+extern fn void WorldId.draw(self, DebugDraw* draw, ulong mask_bits) @cname("b3World_Draw");
+
+<*
+ Draws the queries the last replayed frame re-issued, for a renderer to layer over the world it
+ has just drawn: casts as segments with a point and a normal per hit, movers and cast proxies as
+ capsules and spheres, overlaps as boxes around the shapes they found. It reads none of the
+ definition's flags, and a null callback or a null definition draws nothing here where
+ WorldId.draw() would call or dereference it.
+
+ @param query_index : "which of the frame's queries to draw, or any negative value for all of them"
+ @param selected_index : "which to draw in the reserved colour and label, or any index no query holds for none"
+*>
+extern fn void RecPlayer.draw_frame_queries(
+  &self,
+  DebugDraw* draw,
+  int query_index,
+  int selected_index,
+) @cname("b3RecPlayer_DrawFrameQueries");

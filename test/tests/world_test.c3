@@ -267,3 +267,95 @@ fn void the_world_bounds_enclose_the_shapes_it_holds() @test {
     assert(bounds.upper_bound.y >= shape_bounds.upper_bound.y);
     assert(bounds.upper_bound.z >= shape_bounds.upper_bound.z);
 }
+
+int memory_stat_lines;
+int memory_stat_lines_from_inside_a_step;
+int pre_solves_that_asked_for_the_breakdown;
+char[64] the_last_memory_stat_line;
+b3::WorldId the_world_dumping_its_memory;
+
+// Counts silently where base_hooks_test.c3's handler prints, the breakdown running to dozens of
+// lines per call.
+fn void record_a_memory_stat(ZString message) {
+    memory_stat_lines++;
+    String text = message.str_view();
+    usz length = text.len < the_last_memory_stat_line.len - 1 ? text.len : the_last_memory_stat_line.len - 1;
+    the_last_memory_stat_line[..] = 0;
+    foreach (i, c : text[:length]) {
+        the_last_memory_stat_line[i] = c;
+    }
+}
+
+fn bool ask_for_the_breakdown_mid_step(
+  b3::ShapeId shape_id_a,
+  b3::ShapeId shape_id_b,
+  b3::Pos point,
+  b3::Vec3 normal,
+  void* context,
+) {
+    pre_solves_that_asked_for_the_breakdown++;
+    int before = memory_stat_lines;
+    the_world_dumping_its_memory.dump_memory_stats();
+    memory_stat_lines_from_inside_a_step += memory_stat_lines - before;
+    return true;
+}
+
+struct MemoryBreakdown {
+    int lines_for_an_empty_world;
+    int lines_for_a_world_holding_bodies;
+    bool the_last_line_was_the_total;
+    int pre_solves;
+    int lines_from_inside_a_step;
+}
+
+// The world contact_test.c3 keeps one contact alive in, which is what makes a pre-solve callback
+// run at all — and a pre-solve callback is where a world is locked inside its own step.
+fn MemoryBreakdown the_readings_from_dumping_a_worlds_memory() {
+    MemoryBreakdown breakdown;
+    b3::set_log_fn(&record_a_memory_stat);
+
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId empty = b3::create_world(&world_def)!!;
+    memory_stat_lines = 0;
+    empty.dump_memory_stats();
+    breakdown.lines_for_an_empty_world = memory_stat_lines;
+    empty.destroy();
+
+    b3::BodyId ball;
+    the_world_dumping_its_memory = a_world_that_keeps_solving_one_contact(&ball);
+    memory_stat_lines = 0;
+    the_world_dumping_its_memory.dump_memory_stats();
+    breakdown.lines_for_a_world_holding_bodies = memory_stat_lines;
+    breakdown.the_last_line_was_the_total =
+      ((ZString)&the_last_memory_stat_line).str_view().starts_with("total:");
+
+    the_world_dumping_its_memory.set_pre_solve_callback(&ask_for_the_breakdown_mid_step, null);
+    b3::ShapeId[4] storage;
+    foreach (shape : ball.shapes(storage[..])) {
+        shape.enable_pre_solve_events(true);
+    }
+    memory_stat_lines_from_inside_a_step = 0;
+    pre_solves_that_asked_for_the_breakdown = 0;
+    for (int i = 0; i < 120; i++) {
+        the_world_dumping_its_memory.step(1.0f / 60.0f, 4);
+    }
+    breakdown.pre_solves = pre_solves_that_asked_for_the_breakdown;
+    breakdown.lines_from_inside_a_step = memory_stat_lines_from_inside_a_step;
+
+    the_world_dumping_its_memory.destroy();
+    b3::set_log_fn(&capturing_log);
+    return breakdown;
+}
+
+fn void a_worlds_memory_breakdown_goes_to_the_log_handler_and_never_from_inside_a_step() @test {
+    MemoryBreakdown breakdown = the_readings_from_dumping_a_worlds_memory();
+
+    assert(breakdown.lines_for_an_empty_world > 20 && breakdown.lines_for_an_empty_world < 200,
+        "a few dozen lines even for a world holding nothing");
+    assert(breakdown.lines_for_a_world_holding_bodies == breakdown.lines_for_an_empty_world,
+        "and the same number for a world holding bodies: one line per pool, never one per thing in it");
+    assert(breakdown.the_last_line_was_the_total, "the last of them carrying the total");
+    assert(breakdown.pre_solves > 0,
+        "the world was stepped with a callback that asks for the breakdown from inside the step");
+    assert(breakdown.lines_from_inside_a_step == 0, "and a world locked in its own step writes nothing");
+}

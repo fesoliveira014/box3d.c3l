@@ -1053,7 +1053,7 @@ struct DebugShapeTally {
     int withdrawn;
 }
 
-fn void* offer_a_debug_shape(void* debug_shape, void* user_context) {
+fn void* offer_a_debug_shape(b3::DebugShape* debug_shape, void* user_context) {
     DebugShapeTally* tally = (DebugShapeTally*)user_context;
     tally.offered++;
     return user_context;

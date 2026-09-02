@@ -1,6 +1,8 @@
 module b3_test;
 
 import b3;
+import std::io;
+import std::io::path;
 
 fn void the_geometry_definition_types_match_the_c_layout() @test {
     assert(b3::MeshDef::size == 40);
@@ -2081,4 +2083,264 @@ fn void the_compound_child_types_match_the_c_layout() @test {
     assert(b3::CompoundHull::size == 40);
     assert(b3::CompoundMesh::size == 64);
     assert(b3::CompoundSphere::size == 20);
+}
+
+const int A_COMPOUND_SPHERE_COUNT = 2;
+
+struct CompoundThroughBytes {
+    int baseline;
+    int bytes_with_the_compound;
+    int bytes_at_the_end;
+    int byte_length;
+    bool the_tree_was_live_before;
+    bool the_tree_was_nulled_by_the_conversion;
+    bool the_tree_came_back_in_the_copy;
+    bool the_copy_is_a_different_address;
+    bool the_original_was_repaired_in_place;
+    int children_in_the_copy;
+    b3::Aabb bounds_written;
+    b3::Aabb bounds_read;
+    float[A_COMPOUND_SPHERE_COUNT] radii_read;
+    fault a_slice_too_short_for_a_header;
+    fault a_slice_of_the_wrong_length;
+    fault bytes_of_another_version;
+}
+
+// Two spheres of different radii in different places, so a copy that read the wrong child, or
+// read the original rather than the copy, could not pass. Nothing here asserts: the compound
+// would be stranded on byte_count() for the rest of the process.
+fn CompoundThroughBytes the_readings_from_a_compound_through_its_bytes() {
+    CompoundThroughBytes trip;
+
+    b3::CompoundSphereDef[A_COMPOUND_SPHERE_COUNT] spheres = {
+      {
+        .sphere = { .center = { -0.75, 0.0, 0.0 }, .radius = 0.5 },
+        .material = b3::default_surface_material(),
+      },
+      {
+        .sphere = { .center = { 1.25, 0.5, 0.25 }, .radius = 0.25 },
+        .material = b3::default_surface_material(),
+      },
+    };
+    b3::CompoundDef def;
+    def.spheres = &spheres[0];
+    def.sphere_count = A_COMPOUND_SPHERE_COUNT;
+
+    trip.baseline = b3::byte_count();
+    b3::CompoundData*? built = b3::create_compound(&def);
+    if (catch built) return trip;
+    defer built.destroy();
+    trip.bytes_with_the_compound = b3::byte_count();
+
+    trip.the_tree_was_live_before = built.tree.nodes != null;
+    if (try bounds = built.compute_aabb(CHILD_TRANSFORM)) trip.bounds_written = bounds;
+
+    char[] bytes = built.to_bytes();
+    trip.byte_length = (int)bytes.len;
+    trip.the_tree_was_nulled_by_the_conversion = built.tree.nodes == null;
+
+    long[512] storage;
+    if (bytes.len > storage.len * (usz)long::size) return trip;
+    char[] copy = ((char*)&storage)[:bytes.len];
+    copy[..] = bytes[..];
+
+    b3::CompoundData*? restored = b3::compound_from_bytes(copy);
+    if (catch restored) return trip;
+    trip.the_copy_is_a_different_address = restored != built;
+    trip.the_tree_came_back_in_the_copy = restored.tree.nodes != null;
+    trip.children_in_the_copy = restored.child_count();
+    if (try bounds = restored.compute_aabb(CHILD_TRANSFORM)) trip.bounds_read = bounds;
+    for (int i = 0; i < A_COMPOUND_SPHERE_COUNT; i++) {
+        if (try child = restored.sphere(i)) trip.radii_read[i] = child.sphere.radius;
+    }
+
+    if (catch err = b3::compound_from_bytes(copy[:8])) trip.a_slice_too_short_for_a_header = err;
+    if (catch err = b3::compound_from_bytes(copy[:copy.len - 1])) trip.a_slice_of_the_wrong_length = err;
+    copy[0] = copy[0] ^ 0xFF;
+    if (catch err = b3::compound_from_bytes(copy)) trip.bytes_of_another_version = err;
+
+    if (try repaired = b3::compound_from_bytes(bytes)) {
+        trip.the_original_was_repaired_in_place = repaired == built && built.tree.nodes != null;
+    }
+    trip.bytes_at_the_end = b3::byte_count();
+    return trip;
+}
+
+fn void a_compound_read_back_from_its_bytes_holds_the_children_it_was_baked_with() @test {
+    CompoundThroughBytes trip = the_readings_from_a_compound_through_its_bytes();
+
+    assert(trip.children_in_the_copy == A_COMPOUND_SPHERE_COUNT && trip.the_copy_is_a_different_address,
+        "the copy is a compound of its own, read at an address the original never had");
+    assert(trip.radii_read[0] > 0.49 && trip.radii_read[0] < 0.51
+        && trip.radii_read[1] > 0.24 && trip.radii_read[1] < 0.26,
+        "with each child's own radius still on that child");
+
+    for (int axis = 0; axis < 3; axis++) {
+        float lower_slip = trip.bounds_read.lower_bound[axis] - trip.bounds_written.lower_bound[axis];
+        float upper_slip = trip.bounds_read.upper_bound[axis] - trip.bounds_written.upper_bound[axis];
+        assert(lower_slip > -1.0e-5 && lower_slip < 1.0e-5, "and the tree it walks reporting the bounds it reported before");
+        assert(upper_slip > -1.0e-5 && upper_slip < 1.0e-5);
+    }
+    assert(trip.bounds_written.upper_bound.x > 1.49 && trip.bounds_written.upper_bound.x < 1.51,
+        "which reach the far side of the smaller sphere rather than the origin");
+}
+
+fn void the_bytes_are_the_compound_itself_and_the_conversion_takes_its_tree_out() @test {
+    CompoundThroughBytes trip = the_readings_from_a_compound_through_its_bytes();
+
+    assert(trip.byte_length >= (int)b3::CompoundData::size && trip.byte_length < 4096,
+        "the slice spans the whole baked compound, header and tree and children together");
+    assert(trip.the_tree_was_live_before && trip.the_tree_was_nulled_by_the_conversion,
+        "converting nulls the one address the compound holds, so every query through it stops working");
+    assert(trip.the_tree_came_back_in_the_copy && trip.the_original_was_repaired_in_place,
+        "and reading bytes back points that address into whichever buffer holds them");
+    assert(trip.bytes_with_the_compound > trip.baseline
+        && trip.bytes_at_the_end == trip.bytes_with_the_compound,
+        "neither direction allocates: the whole round trip moves the byte count by nothing");
+}
+
+fn void bytes_that_are_no_compound_are_refused_before_they_are_read_as_one() @test {
+    CompoundThroughBytes trip = the_readings_from_a_compound_through_its_bytes();
+
+    assert(trip.children_in_the_copy == A_COMPOUND_SPHERE_COUNT,
+        "the same fixture read a compound back, so the three refusals below are refusals");
+    assert(trip.a_slice_too_short_for_a_header == b3::BUFFER_TOO_SMALL,
+        "a slice shorter than the header is refused by the binding, box3d reading the version before any length");
+    assert(trip.a_slice_of_the_wrong_length == b3::NOT_A_COMPOUND,
+        "a slice one byte short of the length the header names is refused by box3d");
+    assert(trip.bytes_of_another_version == b3::NOT_A_COMPOUND, "and so are bytes whose version it does not know");
+}
+
+const int A_FIELD_COUNT_X = 4;
+const int A_FIELD_COUNT_Z = 3;
+const int A_FIELD_CELL_COUNT = (A_FIELD_COUNT_X - 1) * (A_FIELD_COUNT_Z - 1);
+
+// box3d takes a path rather than a handle, so a dumped grid needs somewhere on disk that is not
+// the repository. Every test that writes one deletes it before returning.
+fn String a_temporary_height_field_path(String name) {
+    Path directory = path::temp_directory(tmem) ?? (Path)"/tmp";
+    return string::tformat("%s/%s", (String)directory, name);
+}
+
+struct HeightFieldThroughAFile {
+    int baseline;
+    int bytes_with_both;
+    int bytes_at_the_end;
+    b3::Aabb bounds_written;
+    b3::Aabb bounds_read;
+    float struck_the_written_at;
+    float struck_the_read_at;
+    bool the_dump_was_accepted;
+    bool a_grid_with_no_materials_still_builds;
+    fault dumping_a_grid_with_no_materials;
+    fault dumping_a_grid_of_one_row;
+    fault a_path_that_holds_nothing;
+    fault a_file_of_the_wrong_kind;
+}
+
+// Twelve heights no two rows of which repeat, over a range the field's own bounds cannot reach by
+// accident, so a dump that lost the interior heights would answer the cast below at the floor.
+fn HeightFieldThroughAFile the_readings_from_a_height_field_through_a_file() {
+    String file = a_temporary_height_field_path("box3d_height_field.txt");
+    defer (void)path::delete((PathCommon)file);
+    String junk = a_temporary_height_field_path("box3d_height_field_junk.txt");
+    defer (void)path::delete((PathCommon)junk);
+
+    HeightFieldThroughAFile trip;
+
+    float[A_FIELD_COUNT_X * A_FIELD_COUNT_Z] heights = {
+        0.50, 0.75, 1.00, 1.25,
+        1.75, 1.50, 0.75, 1.00,
+        1.25, 0.50, 1.75, 0.75,
+    };
+    char[A_FIELD_CELL_COUNT] materials = { 0, 1, 2, 2, 1, 0 };
+
+    b3::HeightFieldDef def;
+    def.heights = &heights[0];
+    def.material_indices = &materials[0];
+    def.scale = { 1.0, 1.0, 1.0 };
+    def.count_x = A_FIELD_COUNT_X;
+    def.count_z = A_FIELD_COUNT_Z;
+    def.global_minimum_height = 0.0;
+    def.global_maximum_height = 2.0;
+
+    b3::RayCastInput straight_down = {
+      .origin = { 1.5, 5.0, 0.5 },
+      .translation = { 0.0, -10.0, 0.0 },
+      .max_fraction = 1.0,
+    };
+
+    trip.baseline = b3::byte_count();
+    b3::HeightFieldData*? direct = b3::create_height_field(&def);
+    if (catch direct) return trip;
+    defer direct.destroy();
+
+    trip.bounds_written = direct.compute_aabb(CHILD_TRANSFORM);
+    if (try struck = direct.ray_cast(straight_down)) trip.struck_the_written_at = struck.point.y;
+
+    trip.the_dump_was_accepted = @ok(b3::dump_height_data(&def, file.zstr_tcopy()));
+    b3::HeightFieldData*? reread = b3::load_height_field(file.zstr_tcopy());
+    if (catch reread) return trip;
+    defer reread.destroy();
+    trip.bytes_with_both = b3::byte_count();
+
+    trip.bounds_read = reread.compute_aabb(CHILD_TRANSFORM);
+    if (try struck = reread.ray_cast(straight_down)) trip.struck_the_read_at = struck.point.y;
+
+    b3::HeightFieldDef unmaterialed = def;
+    unmaterialed.material_indices = null;
+    if (catch err = b3::dump_height_data(&unmaterialed, file.zstr_tcopy())) {
+        trip.dumping_a_grid_with_no_materials = err;
+    }
+    b3::HeightFieldData*? without_materials = b3::create_height_field(&unmaterialed);
+    if (try built = without_materials) {
+        trip.a_grid_with_no_materials_still_builds = true;
+        built.destroy();
+    }
+
+    b3::HeightFieldDef one_row = def;
+    one_row.count_z = 1;
+    if (catch err = b3::dump_height_data(&one_row, file.zstr_tcopy())) trip.dumping_a_grid_of_one_row = err;
+
+    if (catch err = b3::load_height_field("box3d_no_such_directory/field.txt")) {
+        trip.a_path_that_holds_nothing = err;
+    }
+    if (catch file::save(junk, "not a height field at all")) return trip;
+    if (catch err = b3::load_height_field(junk.zstr_tcopy())) trip.a_file_of_the_wrong_kind = err;
+
+    trip.bytes_at_the_end = b3::byte_count();
+    return trip;
+}
+
+fn void a_dumped_grid_loads_back_as_the_surface_it_was_measured_from() @test {
+    HeightFieldThroughAFile trip = the_readings_from_a_height_field_through_a_file();
+
+    assert(trip.the_dump_was_accepted, "the grid was written before anything was read back");
+    assert(trip.struck_the_written_at > 0.4 && trip.struck_the_written_at < 1.8,
+        "a ray dropped over the middle of the grid meets an interior height, not the floor or the ceiling");
+    float apart = trip.struck_the_read_at - trip.struck_the_written_at;
+    assert(apart > -1.0e-4 && apart < 1.0e-4,
+        "and meets the loaded field at the same height, so the interior heights survived the file");
+
+    for (int axis = 0; axis < 3; axis++) {
+        float lower_slip = trip.bounds_read.lower_bound[axis] - trip.bounds_written.lower_bound[axis];
+        float upper_slip = trip.bounds_read.upper_bound[axis] - trip.bounds_written.upper_bound[axis];
+        assert(lower_slip > -1.0e-4 && lower_slip < 1.0e-4, "the bounds come back with it");
+        assert(upper_slip > -1.0e-4 && upper_slip < 1.0e-4);
+    }
+    assert(trip.bytes_with_both > trip.baseline && trip.bytes_at_the_end == trip.bytes_with_both,
+        "and the refusals after the round trip took nothing the loaded field did not already hold");
+}
+
+fn void a_grid_a_constructor_accepts_can_still_be_refused_by_the_dump() @test {
+    HeightFieldThroughAFile trip = the_readings_from_a_height_field_through_a_file();
+
+    assert(trip.a_grid_with_no_materials_still_builds,
+        "create_height_field() reads no material index at all and spreads zeroes over the cells");
+    assert(trip.dumping_a_grid_with_no_materials == b3::INVALID_DEFINITION,
+        "where the dump writes one per cell and would read that missing array, so it is refused instead");
+    assert(trip.dumping_a_grid_of_one_row == b3::DEGENERATE_GEOMETRY,
+        "and a grid too thin to hold a cell is refused as it is at construction");
+    assert(trip.a_path_that_holds_nothing == b3::FILE_UNAVAILABLE, "a path with no file behind it will not load");
+    assert(trip.a_file_of_the_wrong_kind == b3::FILE_UNAVAILABLE, "and neither will a file that is no grid");
 }

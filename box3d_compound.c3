@@ -139,6 +139,30 @@ fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
 }
 
 <*
+ The compound's own bytes, ready to be written out, with the one address it holds nulled so they
+ carry none. They are neither a copy nor a second allocation — destroy() is what frees them — and
+ the nulling is not cosmetic: every query, cast and overlap against this compound reads that
+ pointer, so it answers none of them until compound_from_bytes() points it back, over these bytes
+ or over a copy of them.
+*>
+fn char[] CompoundData.to_bytes(&self) {
+    return compound_to_bytes_raw(self)[:self.byte_count];
+}
+
+<*
+ Points a compound's tree back into the caller's own bytes and hands them back read as one. It
+ allocates nothing and takes nothing over: the bytes stay the caller's, so destroy() is right
+ only for a compound box3d allocated. box3d reads the header through the pointer before it checks
+ any length, which is what the first guard is for.
+
+ @return "the compound, BUFFER_TOO_SMALL when the slice is shorter than a compound header, or NOT_A_COMPOUND when it carries another version, another length, or no tree"
+*>
+fn CompoundData*? compound_from_bytes(char[] bytes) {
+    if (bytes.len < CompoundData::size) return BUFFER_TOO_SMALL~;
+    return checked_geometry(compound_from_bytes_raw(bytes.ptr, (int)bytes.len), NOT_A_COMPOUND);
+}
+
+<*
  Attaches a baked compound to this body, under the definition and null guards create_mesh_shape
  describes and borrowing the compound exactly as that call borrows its mesh.
 

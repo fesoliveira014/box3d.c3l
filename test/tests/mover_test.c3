@@ -177,7 +177,7 @@ struct GroundClips {
     b3::Vec3 across_an_unsolved_plane;
     b3::Vec3 beside_a_wall_the_solve_never_leaned_on;
     float the_push_the_ground_took;
-    float the_push_the_wall_took;
+    bool the_wall_took_no_push;
     b3::Vec3 across_a_plane_that_does_not_clip;
     b3::Vec3 across_no_planes;
     float the_push_behind_the_plane_that_will_not_clip;
@@ -208,7 +208,7 @@ fn GroundClips the_clips_against_a_ground_plane() {
       .across_an_unsolved_plane = b3::clip_vector(down_and_out, unsolved[..]),
       .beside_a_wall_the_solve_never_leaned_on = b3::clip_vector({ -1.0, -1.0, 0.0 }, ground_and_wall[..]),
       .the_push_the_ground_took = ground_and_wall[0].push,
-      .the_push_the_wall_took = ground_and_wall[1].push,
+      .the_wall_took_no_push = ground_and_wall[1].push == 0.0f,
       .across_a_plane_that_does_not_clip = b3::clip_vector(down_and_out, not_clipping[..]),
       .across_no_planes = b3::clip_vector(down_and_out, no_planes),
       .the_push_behind_the_plane_that_will_not_clip = not_clipping[0].push,
@@ -234,8 +234,7 @@ fn void a_velocity_clip_passes_over_every_plane_no_solve_leaned_on() @test {
     assert(0.9999 < clips.across_an_unsolved_plane.x && clips.across_an_unsolved_plane.x < 1.0001
         && -1.0001 < clips.across_an_unsolved_plane.y && clips.across_an_unsolved_plane.y < -0.9999,
         "a plane pushing nothing is skipped, so a slice never solved leaves the vector as it arrived");
-    assert(clips.the_push_the_ground_took > 0.5
-        && math::abs(clips.the_push_the_wall_took) < 0.0001,
+    assert(clips.the_push_the_ground_took > 0.5 && clips.the_wall_took_no_push,
         "a solve driven straight down leans on the ground and leaves the wall beside it pushing nothing");
     assert(math::abs(clips.beside_a_wall_the_solve_never_leaned_on.y) < 0.0001
         && -1.0001 < clips.beside_a_wall_the_solve_never_leaned_on.x

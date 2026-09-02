@@ -142,6 +142,7 @@ fn void a_distance_query_subtracts_both_radii_only_when_it_is_asked_to() @test {
 struct BoxPairDiagnostics {
     DistanceReading clear;
     DistanceReading overlapping;
+    DistanceReading a_point_pair_measured_after_them;
 }
 
 // The eight corners of a box a quarter metre out on every axis, small enough to sit wholly inside
@@ -156,8 +157,8 @@ fn b3::Vec3[8] the_corners_of_a_half_metre_box() {
 }
 
 // Eight corners apiece at two different sizes, so each witness point lands somewhere its own box
-// alone puts it and a query reading the two proxies the wrong way round answers differently. The
-// second offset buries the smaller box in the larger, which box3d answers before counting at all.
+// alone puts it and a query reading the two proxies the wrong way round answers differently. A
+// point pair follows them, so a query that carried state between two unrelated pairs would show.
 fn BoxPairDiagnostics the_diagnostics_of_two_boxes() {
     b3::Vec3[8] a = the_corners_of_a_two_metre_box();
     b3::Vec3[8] b = the_corners_of_a_half_metre_box();
@@ -173,9 +174,21 @@ fn BoxPairDiagnostics the_diagnostics_of_two_boxes() {
     b3::DistanceInput overlapping = clear;
     overlapping.transform = a_placement_at({ 0.5, 0.0, 0.0 });
 
+    b3::Vec3[1] one_point = { { 0.0, 0.0, 0.0 } };
+    b3::Vec3[1] another_point = { { 0.0, 0.0, 0.0 } };
+    b3::DistanceInput after_them = a_point_pair(
+      a: one_point[..],
+      radius_a: 0.0,
+      b: another_point[..],
+      radius_b: 0.0,
+      offset: 3.0,
+      use_radii: false,
+    );
+
     return {
       .clear = @the_distance_of(b3::shape_distance(clear)),
       .overlapping = @the_distance_of(b3::shape_distance(overlapping)),
+      .a_point_pair_measured_after_them = @the_distance_of(b3::shape_distance(after_them)),
     };
 }
 
@@ -200,6 +213,16 @@ fn void a_distance_query_asks_box3d_for_no_diagnostic_simplexes() @test {
         "where a pair of single points is answered by that first simplex alone");
     assert(boxes.overlapping.iterations == 0,
         "and a core overlap reports none at all, box3d returning before the count is written");
+}
+
+fn void a_distance_query_is_unmoved_by_the_pairs_measured_before_it() @test {
+    BoxPairDiagnostics boxes = the_diagnostics_of_two_boxes();
+
+    assert(boxes.clear.answered && boxes.a_point_pair_measured_after_them.answered,
+        "both pairs answered, the point pair measured after two eight-corner boxes");
+    assert(2.9999 < boxes.a_point_pair_measured_after_them.distance
+        && boxes.a_point_pair_measured_after_them.distance < 3.0001,
+        "three metres apart, unchanged by the two eight-corner pairs measured before it");
 }
 
 struct ClosingDistances {
@@ -390,6 +413,9 @@ fn void a_swept_pair_reports_the_fraction_at_which_the_two_first_touch() @test {
         "the same total radius split unevenly meets at the same fraction");
     assert(math::abs(swept.uneven.point.x - 0.25f) < 0.00001,
         "with the point still on A's surface, which that split has moved");
+
+    assert(swept.meeting.triangle_index == -1 && swept.meeting.child_index == 0,
+        "a proxy pair naming no triangle, and leaving child_index at a zero it never writes");
 }
 
 fn void a_swept_pair_that_never_reaches_the_other_reports_no_hit() @test {
@@ -454,6 +480,9 @@ struct ProxyPairRefusals {
     fault distance_without_a_second_proxy;
     fault sweep_without_a_first_proxy;
     fault sweep_without_a_second_proxy;
+    fault sweep_below_the_interval;
+    fault sweep_past_the_interval;
+    fault sweep_at_no_number;
     bool distance_still_answers;
     bool sweep_still_answers;
 }
@@ -492,12 +521,21 @@ fn ProxyPairRefusals the_proxy_pairs_the_two_queries_refuse() {
     swept_no_first.proxy_a.count = 0;
     b3::ShapeCastPairInput swept_no_second = swept;
     swept_no_second.proxy_b.count = 0;
+    b3::ShapeCastPairInput swept_below = swept;
+    swept_below.max_fraction = -1.0;
+    b3::ShapeCastPairInput swept_past = swept;
+    swept_past.max_fraction = 10.0;
+    b3::ShapeCastPairInput swept_at_no_number = swept;
+    swept_at_no_number.max_fraction = 0.0f / 0.0f;
 
     ProxyPairRefusals refusals;
     if (catch err = b3::shape_distance(no_first)) refusals.distance_without_a_first_proxy = err;
     if (catch err = b3::shape_distance(no_second)) refusals.distance_without_a_second_proxy = err;
     if (catch err = b3::shape_cast(swept_no_first)) refusals.sweep_without_a_first_proxy = err;
     if (catch err = b3::shape_cast(swept_no_second)) refusals.sweep_without_a_second_proxy = err;
+    if (catch err = b3::shape_cast(swept_below)) refusals.sweep_below_the_interval = err;
+    if (catch err = b3::shape_cast(swept_past)) refusals.sweep_past_the_interval = err;
+    if (catch err = b3::shape_cast(swept_at_no_number)) refusals.sweep_at_no_number = err;
 
     if (try out = b3::shape_distance(measured)) refusals.distance_still_answers = out.distance > 1.0;
     if (try out = b3::shape_cast(swept)) refusals.sweep_still_answers = out.fraction > 0.0;
@@ -514,6 +552,13 @@ fn void both_proxy_pair_queries_refuse_a_proxy_box3d_would_answer_wrongly() @tes
     assert(refused.sweep_without_a_first_proxy == b3::INVALID_DEFINITION,
         "and neither will a swept pair take a first proxy of no points");
     assert(refused.sweep_without_a_second_proxy == b3::INVALID_DEFINITION, "nor a second");
+
+    assert(refused.sweep_below_the_interval == b3::INVALID_DEFINITION,
+        "a negative max_fraction is refused rather than swept backwards");
+    assert(refused.sweep_past_the_interval == b3::INVALID_DEFINITION,
+        "and one past the end rather than swept on past the translation, which reports a touch beyond it");
+    assert(refused.sweep_at_no_number == b3::INVALID_DEFINITION,
+        "and one that is no number, which box3d sweeps as though it were unbounded");
 
     assert(refused.distance_still_answers, "where a pair of ordinary proxies is measured");
     assert(refused.sweep_still_answers, "and swept");

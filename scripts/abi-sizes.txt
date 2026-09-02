@@ -103,3 +103,7 @@ b3PlaneSolverResult 16 4 delta=0 iterationCount=12
 b3PlaneResult 28 4 plane=0 point=16
 b3BodyPlaneResult 36 4 shapeId=0 result=8
 b3ExplosionDef 32 8 maskBits=0 position=8 radius=20 falloff=24 impulsePerArea=28
+b3RecPlayerInfo 44 4 frameCount=0 workerCount=4 timeStep=8 subStepCount=12 lengthScale=16 bounds=20
+b3RecQueryType 4 4
+b3RecQueryInfo 120 8 type=0 filter=8 aabb=40 origin=64 translation=76 hitCount=88 key=96 id=104 name=112
+b3RecQueryHit 36 4 shape=0 point=8 normal=20 fraction=32

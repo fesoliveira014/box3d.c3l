@@ -76,3 +76,49 @@ fn RecPlayer*? create_player(char[] data, int worker_count) {
     if (player == null) return NOT_A_RECORDING~;
     return player;
 }
+
+<*
+ Where the replay first stopped reproducing the recording, which is the frame to look at when
+ has_diverged() answers true.
+
+ @return "the frame, or NO_HIT while every state hash has matched — restart() puts it back to that"
+*>
+fn int? RecPlayer.diverge_frame(&self) {
+    int frame = diverge_frame_raw(self);
+    if (frame < 0) return NO_HIT~;
+    return frame;
+}
+
+<*
+ The live body at a creation ordinal — see body_count() for why an ordinal below the count is not
+ a promise of a body.
+
+ @return "the body, INDEX_OUT_OF_RANGE outside 0 to body_count() - 1, or INVALID_HANDLE when the body at that ordinal has been destroyed"
+*>
+fn BodyId? RecPlayer.body_id(&self, int index) {
+    if (index < 0 || index >= self.body_count()) return INDEX_OUT_OF_RANGE~;
+    return body_id_raw(self, index).checked();
+}
+
+<*
+ One of the queries the last replayed frame re-issued. box3d answers an index it does not hold
+ with a zeroed struct, which reads as a real untagged overlap of nothing, hence the fault.
+
+ @return "the query, or INDEX_OUT_OF_RANGE outside 0 to frame_query_count() - 1"
+*>
+fn RecQueryInfo? RecPlayer.frame_query(&self, int index) {
+    if (index < 0 || index >= self.frame_query_count()) return INDEX_OUT_OF_RANGE~;
+    return frame_query_raw(self, index);
+}
+
+<*
+ One result of one of the last replayed frame's queries — see RecQueryHit for the fields an
+ overlap leaves holding the replay's scratch rather than a hit.
+
+ @return "the hit, or INDEX_OUT_OF_RANGE when no query holds query_index or that query holds no hit_index"
+*>
+fn RecQueryHit? RecPlayer.frame_query_hit(&self, int query_index, int hit_index) {
+    RecQueryInfo query = self.frame_query(query_index)!;
+    if (hit_index < 0 || hit_index >= query.hit_count) return INDEX_OUT_OF_RANGE~;
+    return frame_query_hit_raw(self, query_index, hit_index);
+}

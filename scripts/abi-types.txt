@@ -103,3 +103,7 @@ b3PlaneSolverResult delta,iterationCount
 b3PlaneResult plane,point
 b3BodyPlaneResult shapeId,result
 b3ExplosionDef maskBits,position,radius,falloff,impulsePerArea
+b3RecPlayerInfo frameCount,workerCount,timeStep,subStepCount,lengthScale,bounds
+b3RecQueryType
+b3RecQueryInfo type,filter,aabb,origin,translation,hitCount,key,id,name
+b3RecQueryHit shape,point,normal,fraction

@@ -437,3 +437,684 @@ fn void a_player_owns_a_world_and_the_length_unit_while_it_lives() @test {
         "a live player replaces the caller's length unit with the one its recording was made under");
     assert(around.unit_after == 3.0, "and destroying it restores the caller's");
 }
+
+const int A_DROPPED_BODY_COUNT = 3;
+const int A_SEEK_TARGET = 30;
+
+struct ReplayedDrop {
+    int recorded_bytes;
+    b3::Pos live_west;
+    b3::Pos live_east;
+    int frames;
+    int frame_count;
+    int bodies;
+    bool every_state_hash_matched;
+    fault no_divergence;
+    b3::Pos[A_DROPPED_BODY_COUNT] replayed;
+    bool every_ordinal_named_a_body;
+    int worlds_the_player_added;
+    int worlds_left_after_it;
+}
+
+fn ReplayedDrop the_readings_from_a_replayed_drop() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    ReplayedDrop replay;
+    if (catch pair.world.start_recording(recording)) return replay;
+    for (int frame = 0; frame < A_RECORDED_FRAME_COUNT; frame++) {
+        pair.world.step(A_TIME_STEP, A_SUB_STEP_COUNT);
+    }
+    pair.world.stop_recording();
+
+    replay.recorded_bytes = recording.data().len;
+    replay.live_west = pair.west.position();
+    replay.live_east = pair.east.position();
+
+    int worlds_before = b3::world_count();
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return replay;
+    replay.worlds_the_player_added = b3::world_count() - worlds_before;
+
+    while (player.step_frame()) {}
+    replay.frames = player.frame();
+    replay.frame_count = player.frame_count();
+    replay.bodies = player.body_count();
+    replay.every_state_hash_matched = !player.has_diverged();
+    if (catch err = player.diverge_frame()) replay.no_divergence = err;
+
+    bool named = replay.bodies == A_DROPPED_BODY_COUNT;
+    for (int ordinal = 0; ordinal < A_DROPPED_BODY_COUNT && ordinal < replay.bodies; ordinal++) {
+        b3::BodyId? body = player.body_id(ordinal);
+        if (catch body) {
+            named = false;
+            continue;
+        }
+        replay.replayed[ordinal] = body.position();
+    }
+    replay.every_ordinal_named_a_body = named;
+
+    player.destroy();
+    replay.worlds_left_after_it = b3::world_count() - worlds_before;
+    return replay;
+}
+
+fn void a_recorded_world_replays_to_the_positions_it_recorded() @test {
+    ReplayedDrop replay = the_readings_from_a_replayed_drop();
+
+    assert(replay.recorded_bytes > 1000 && replay.recorded_bytes < 20000,
+        "the session wrote a recording worth replaying");
+    assert(replay.live_west.x > -1.05 && replay.live_west.x < -0.95
+        && replay.live_west.y > 0.45 && replay.live_west.y < 0.55,
+        "the recorded world left the west sphere resting on the slab");
+    assert(replay.live_east.x > 0.95 && replay.live_east.x < 1.05
+        && replay.live_east.y > 0.45 && replay.live_east.y < 0.55,
+        "and the east sphere resting on its own side of it");
+    assert(replay.frames == A_RECORDED_FRAME_COUNT && replay.frame_count == A_RECORDED_FRAME_COUNT,
+        "the replay ran out of records on the last frame the session recorded");
+    assert(replay.bodies == A_DROPPED_BODY_COUNT && replay.every_ordinal_named_a_body,
+        "and stood up three bodies, the static slab being one of them");
+    assert(replay.replayed[1].x == replay.live_west.x && replay.replayed[1].y == replay.live_west.y
+        && replay.replayed[1].z == replay.live_west.z,
+        "the west sphere came to rest exactly where the recorded world left it, not merely near it");
+    assert(replay.replayed[2].x == replay.live_east.x && replay.replayed[2].y == replay.live_east.y
+        && replay.replayed[2].z == replay.live_east.z,
+        "and so did the east one, which a replay that transposed the pair would fail");
+    assert(replay.replayed[0].y > -0.55 && replay.replayed[0].y < -0.45,
+        "with the slab back at the height it was built at");
+    assert(replay.every_state_hash_matched && replay.no_divergence == b3::NO_HIT,
+        "and every state hash the recording carries was reproduced");
+    assert(replay.worlds_the_player_added == 1 && replay.worlds_left_after_it == 0,
+        "the world the player stood up for the replay went back when it was destroyed");
+}
+
+struct SeekReadings {
+    b3::Pos stepping_forward;
+    b3::Pos after_seeking_back;
+    b3::Pos after_a_restart;
+    int frame_after_the_seek;
+    int frame_after_the_restart;
+    int frame_after_overshooting;
+    int frame_after_undershooting;
+    bool the_end_was_reached_by_overshooting;
+    bool the_stream_was_live_at_frame_zero;
+    usz keyframe_bytes_after_a_replay;
+}
+
+fn SeekReadings the_readings_around_a_seek() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    SeekReadings around;
+    if (catch pair.world.start_recording(recording)) return around;
+    for (int frame = 0; frame < A_RECORDED_FRAME_COUNT; frame++) {
+        pair.world.step(A_TIME_STEP, A_SUB_STEP_COUNT);
+    }
+    pair.world.stop_recording();
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return around;
+
+    for (int frame = 0; frame < A_SEEK_TARGET; frame++) player.step_frame();
+    if (try west = player.body_id(1)) around.stepping_forward = west.position();
+
+    while (player.step_frame()) {}
+    around.keyframe_bytes_after_a_replay = player.keyframe_bytes();
+
+    player.seek_frame(A_SEEK_TARGET);
+    around.frame_after_the_seek = player.frame();
+    if (try west = player.body_id(1)) around.after_seeking_back = west.position();
+
+    player.seek_frame(2 * A_RECORDED_FRAME_COUNT);
+    around.frame_after_overshooting = player.frame();
+    around.the_end_was_reached_by_overshooting = player.is_at_end();
+
+    player.seek_frame(-A_SEEK_TARGET);
+    around.frame_after_undershooting = player.frame();
+    around.the_stream_was_live_at_frame_zero = !player.is_at_end();
+
+    player.restart();
+    around.frame_after_the_restart = player.frame();
+    if (try west = player.body_id(1)) around.after_a_restart = west.position();
+
+    player.destroy();
+    return around;
+}
+
+fn void a_seek_puts_the_replay_back_on_a_frame_it_has_already_left() @test {
+    SeekReadings around = the_readings_around_a_seek();
+
+    assert(around.stepping_forward.y > 0.70 && around.stepping_forward.y < 0.78,
+        "thirty frames in, the west sphere is part way through its fall");
+    assert(around.keyframe_bytes_after_a_replay > 0,
+        "and a full replay filled the keyframe ring a backward seek restores from");
+    assert(around.frame_after_the_seek == A_SEEK_TARGET,
+        "seeking back to that frame from the end of the recording lands on it");
+    assert(around.after_seeking_back.x == around.stepping_forward.x
+        && around.after_seeking_back.y == around.stepping_forward.y
+        && around.after_seeking_back.z == around.stepping_forward.z,
+        "with the sphere exactly where the forward pass had it, not merely near it");
+    assert(around.frame_after_overshooting == A_RECORDED_FRAME_COUNT
+        && around.the_end_was_reached_by_overshooting,
+        "a target past the recording stops on its last frame rather than being refused");
+    assert(around.frame_after_undershooting == 0 && around.the_stream_was_live_at_frame_zero,
+        "and a negative target lands on frame 0 with the whole stream still to replay");
+    assert(around.frame_after_the_restart == 0
+        && around.after_a_restart.y > 1.95 && around.after_a_restart.y < 2.05,
+        "a restart puts the sphere back at the height the session was started at");
+}
+
+const int A_BUSY_FRAME_COUNT = 60;
+const int A_PEBBLE_STEP = 10;
+const int A_QUERY_STEP = 30;
+const int A_PEBBLE_END_STEP = 40;
+const int A_PEBBLE_ORDINAL = 3;
+const int A_TAGGED_RAY_ID = 7;
+const int A_TAGGED_BOX_ID = 9;
+
+// One session carrying what the player accessors are read through: a pebble created and destroyed
+// part way in, and three queries on one step, two of them tagged. A record written before a step
+// belongs to the frame that step completes, so each lands one frame after the step it precedes.
+fn bool a_busy_session_recorded_into(DroppedPair pair, b3::Recording* recording) {
+    if (catch pair.world.start_recording(recording)) return false;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere pebble = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.25 };
+    b3::Pos from_above = { 0.0, 3.0, 0.0 };
+    b3::Vec3 straight_down = { 0.0, -5.0, 0.0 };
+    b3::ShapeId[8] overlapped;
+    b3::BodyId transient;
+
+    for (int step = 0; step < A_BUSY_FRAME_COUNT; step++) {
+        if (step == A_PEBBLE_STEP) {
+            b3::BodyDef pebble_def = b3::default_body_def();
+            pebble_def.type = b3::BodyType.DYNAMIC;
+            pebble_def.position = { 0.0, 4.0, 0.0 };
+            transient = pair.world.create_body(&pebble_def)!!;
+            transient.create_sphere_shape(&shape_def, &pebble)!!;
+        }
+        if (step == A_QUERY_STEP) {
+            b3::QueryFilter ray_filter = b3::default_query_filter();
+            ray_filter.id = A_TAGGED_RAY_ID;
+            ray_filter.name = "a_dropped_ray";
+            if (catch pair.world.cast_ray_closest(from_above, straight_down, ray_filter)) return false;
+
+            b3::QueryFilter box_filter = b3::default_query_filter();
+            box_filter.id = A_TAGGED_BOX_ID;
+            box_filter.name = "a_dropped_box";
+            b3::Aabb around_them = { .lower_bound = { -6.0, -2.0, -6.0 }, .upper_bound = { 6.0, 6.0, 6.0 } };
+            b3::ShapeId[] found = pair.world.overlap_aabb_all(around_them, box_filter, overlapped[..]);
+            if (found.len == 0) return false;
+
+            if (catch pair.world.cast_ray_closest(from_above, straight_down, b3::default_query_filter())) return false;
+        }
+        if (step == A_PEBBLE_END_STEP) transient.destroy();
+        pair.world.step(A_TIME_STEP, A_SUB_STEP_COUNT);
+    }
+    pair.world.stop_recording();
+    return true;
+}
+
+struct ReplayEnds {
+    bool the_stream_was_live_at_the_open;
+    bool the_pause_was_clear_at_the_open;
+    bool the_stream_ran_out_at_the_end;
+    int frame_at_the_end;
+    bool a_step_past_the_end_was_refused;
+    int bodies_before_the_pause;
+    int bodies_at_the_pause;
+    bool the_sub_step_paused_before_the_step;
+    int frame_at_the_pause;
+    int frame_after_the_pause;
+    bool the_pause_cleared_on_the_step;
+}
+
+fn ReplayEnds the_readings_at_both_ends_of_a_replay() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    ReplayEnds ends;
+    if (!a_busy_session_recorded_into(pair, recording)) return ends;
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return ends;
+
+    ends.the_stream_was_live_at_the_open = !player.is_at_end();
+    ends.the_pause_was_clear_at_the_open = !player.is_at_pre_step();
+
+    while (player.step_frame()) {}
+    ends.the_stream_ran_out_at_the_end = player.is_at_end();
+    ends.frame_at_the_end = player.frame();
+    ends.a_step_past_the_end_was_refused = !player.step_frame();
+
+    player.seek_frame(A_PEBBLE_STEP);
+    ends.bodies_before_the_pause = player.body_count();
+    player.sub_step_frame();
+    ends.the_sub_step_paused_before_the_step = player.is_at_pre_step();
+    ends.frame_at_the_pause = player.frame();
+    ends.bodies_at_the_pause = player.body_count();
+    player.sub_step_frame();
+    ends.frame_after_the_pause = player.frame();
+    ends.the_pause_cleared_on_the_step = !player.is_at_pre_step();
+
+    player.destroy();
+    return ends;
+}
+
+fn void a_replay_reports_both_its_ends_and_pauses_where_a_body_is_created() @test {
+    ReplayEnds ends = the_readings_at_both_ends_of_a_replay();
+
+    assert(ends.the_stream_was_live_at_the_open && ends.the_pause_was_clear_at_the_open,
+        "a player opens with the whole stream ahead of it and no pause outstanding");
+    assert(ends.frame_at_the_end == A_BUSY_FRAME_COUNT && ends.the_stream_ran_out_at_the_end
+        && ends.a_step_past_the_end_was_refused,
+        "and reports the end once the last recorded frame has been replayed");
+    assert(ends.frame_at_the_pause == A_PEBBLE_STEP && ends.the_sub_step_paused_before_the_step,
+        "a sub step over a frame that creates a body stops before that frame's step");
+    assert(ends.bodies_before_the_pause == A_PEBBLE_ORDINAL
+        && ends.bodies_at_the_pause == A_PEBBLE_ORDINAL + 1,
+        "with the pebble already created, which is what makes the pause worth drawing");
+    assert(ends.frame_after_the_pause == A_PEBBLE_STEP + 1 && ends.the_pause_cleared_on_the_step,
+        "and the second sub step runs that step and clears the pause");
+}
+
+struct BodyOrdinals {
+    int bodies_before_the_pebble;
+    int bodies_after_the_pebble;
+    int bodies_after_the_pebble_was_destroyed;
+    bool the_pebble_was_live_while_it_lasted;
+    fault the_hole_it_left;
+    fault past_the_last_ordinal;
+    fault below_the_first_ordinal;
+}
+
+fn BodyOrdinals the_readings_across_a_destroyed_body_ordinal() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    BodyOrdinals ordinals;
+    if (!a_busy_session_recorded_into(pair, recording)) return ordinals;
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return ordinals;
+
+    player.seek_frame(A_PEBBLE_STEP);
+    ordinals.bodies_before_the_pebble = player.body_count();
+
+    player.seek_frame(A_PEBBLE_END_STEP);
+    ordinals.bodies_after_the_pebble = player.body_count();
+    if (try pebble = player.body_id(A_PEBBLE_ORDINAL)) {
+        ordinals.the_pebble_was_live_while_it_lasted = pebble.is_valid();
+    }
+
+    player.seek_frame(A_PEBBLE_END_STEP + 1);
+    ordinals.bodies_after_the_pebble_was_destroyed = player.body_count();
+    if (catch err = player.body_id(A_PEBBLE_ORDINAL)) ordinals.the_hole_it_left = err;
+    if (catch err = player.body_id(player.body_count())) ordinals.past_the_last_ordinal = err;
+    if (catch err = player.body_id(-1)) ordinals.below_the_first_ordinal = err;
+
+    player.destroy();
+    return ordinals;
+}
+
+fn void a_destroyed_body_leaves_its_ordinal_behind_as_a_hole() @test {
+    BodyOrdinals ordinals = the_readings_across_a_destroyed_body_ordinal();
+
+    assert(ordinals.bodies_before_the_pebble == A_PEBBLE_ORDINAL
+        && ordinals.bodies_after_the_pebble == A_PEBBLE_ORDINAL + 1,
+        "the pebble the session created part way in takes the next creation ordinal");
+    assert(ordinals.the_pebble_was_live_while_it_lasted,
+        "which names a live body for as long as the recording keeps it");
+    assert(ordinals.bodies_after_the_pebble_was_destroyed == A_PEBBLE_ORDINAL + 1
+        && ordinals.the_hole_it_left == b3::INVALID_HANDLE,
+        "and stays counted once it is destroyed, naming nothing from there on");
+    assert(ordinals.past_the_last_ordinal == b3::INDEX_OUT_OF_RANGE
+        && ordinals.below_the_first_ordinal == b3::INDEX_OUT_OF_RANGE,
+        "where an ordinal the replay never handed out is refused instead");
+}
+
+const usz A_KEYFRAME_BUDGET = 1048576;
+const int A_KEYFRAME_INTERVAL = 8;
+
+struct KeyframePolicy {
+    usz budget_at_the_open;
+    int min_interval_at_the_open;
+    int interval_at_the_open;
+    usz bytes_after_a_replay;
+    usz budget_after_the_change;
+    int min_interval_after_the_change;
+    int interval_after_the_change;
+    usz bytes_after_the_change;
+    usz budget_after_a_keeping_call;
+    int min_interval_after_a_keeping_call;
+}
+
+fn KeyframePolicy the_readings_around_a_keyframe_policy() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    KeyframePolicy policy;
+    if (!a_busy_session_recorded_into(pair, recording)) return policy;
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return policy;
+
+    policy.budget_at_the_open = player.keyframe_budget();
+    policy.min_interval_at_the_open = player.keyframe_min_interval();
+    policy.interval_at_the_open = player.keyframe_interval();
+
+    while (player.step_frame()) {}
+    policy.bytes_after_a_replay = player.keyframe_bytes();
+
+    player.set_keyframe_policy(A_KEYFRAME_BUDGET, A_KEYFRAME_INTERVAL);
+    policy.budget_after_the_change = player.keyframe_budget();
+    policy.min_interval_after_the_change = player.keyframe_min_interval();
+    policy.interval_after_the_change = player.keyframe_interval();
+    policy.bytes_after_the_change = player.keyframe_bytes();
+
+    player.set_keyframe_policy(0, -A_KEYFRAME_INTERVAL);
+    policy.budget_after_a_keeping_call = player.keyframe_budget();
+    policy.min_interval_after_a_keeping_call = player.keyframe_min_interval();
+
+    player.destroy();
+    return policy;
+}
+
+fn void a_keyframe_policy_round_trips_and_drops_the_ring_it_replaces() @test {
+    KeyframePolicy policy = the_readings_around_a_keyframe_policy();
+
+    assert(policy.budget_at_the_open >= 268435456 && policy.budget_at_the_open <= 1073741824,
+        "a player opens with a keyframe budget of a few hundred megabytes");
+    assert(policy.min_interval_at_the_open > 1 && policy.min_interval_at_the_open < 128
+        && policy.interval_at_the_open == policy.min_interval_at_the_open,
+        "and captures at its finest spacing until the ring has to evict");
+    assert(policy.bytes_after_a_replay > 0,
+        "replaying to the end fills the ring, which is the memory the budget caps");
+    assert(policy.budget_after_the_change == A_KEYFRAME_BUDGET
+        && policy.min_interval_after_the_change == A_KEYFRAME_INTERVAL
+        && policy.interval_after_the_change == A_KEYFRAME_INTERVAL,
+        "setting a policy takes both values and restarts the spacing at the new finest one");
+    assert(policy.bytes_after_the_change == 0 && policy.bytes_after_a_replay > 0,
+        "and drops the snapshots the old policy had captured");
+    assert(policy.budget_after_a_keeping_call == A_KEYFRAME_BUDGET
+        && policy.min_interval_after_a_keeping_call == A_KEYFRAME_INTERVAL,
+        "where a budget of zero and an interval below one keep the policy rather than clearing it");
+}
+
+struct WorkerCounts {
+    int at_the_open;
+    int in_the_replay_world;
+    int above_the_ceiling;
+    int in_the_world_above_the_ceiling;
+    int at_zero;
+    int below_zero;
+    int back_at_one;
+}
+
+fn WorkerCounts the_readings_around_a_worker_count() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    WorkerCounts counts;
+    if (!a_busy_session_recorded_into(pair, recording)) return counts;
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return counts;
+
+    counts.at_the_open = player.info().worker_count;
+    counts.in_the_replay_world = player.world_id().worker_count();
+
+    player.set_worker_count(4 * b3::MAX_WORKERS);
+    counts.above_the_ceiling = player.info().worker_count;
+    counts.in_the_world_above_the_ceiling = player.world_id().worker_count();
+
+    player.set_worker_count(0);
+    counts.at_zero = player.info().worker_count;
+    player.set_worker_count(-b3::MAX_WORKERS);
+    counts.below_zero = player.info().worker_count;
+    player.set_worker_count(1);
+    counts.back_at_one = player.info().worker_count;
+
+    player.destroy();
+    return counts;
+}
+
+fn void a_worker_count_outside_the_range_is_clamped_rather_than_refused() @test {
+    WorkerCounts counts = the_readings_around_a_worker_count();
+
+    assert(counts.at_the_open == 1 && counts.in_the_replay_world == 1,
+        "a player opens at the count it was created with, and stands its world up on it");
+    assert(counts.above_the_ceiling == b3::MAX_WORKERS
+        && counts.in_the_world_above_the_ceiling == b3::MAX_WORKERS,
+        "a count above the ceiling lands on it, in the player and in the world it drives");
+    assert(counts.at_zero == 1 && counts.below_zero == 1,
+        "and zero and a negative land on one rather than being refused");
+    assert(counts.back_at_one == 1 && counts.above_the_ceiling > counts.back_at_one,
+        "a count inside the range is taken as it stands");
+}
+
+const int A_QUERY_FRAME = A_QUERY_STEP + 1;
+const int A_RECORDED_QUERY_COUNT = 3;
+
+struct FrameQueries {
+    int at_the_frame_before;
+    int at_the_query_frame;
+    int at_the_frame_after;
+    b3::RecQueryType the_rays_kind;
+    b3::RecQueryType the_boxs_kind;
+    ulong the_rays_id;
+    ulong the_boxs_id;
+    bool the_ray_named_itself;
+    bool the_box_named_itself;
+    bool the_untagged_ray_carried_no_tag;
+    int the_rays_hits;
+    int the_boxs_hits;
+    b3::Pos the_rays_origin;
+    b3::Vec3 the_rays_translation;
+    b3::Aabb the_boxs_bounds;
+    float the_rays_hit_fraction;
+    float the_rays_hit_normal_y;
+    bool every_box_hit_named_a_shape;
+    fault past_the_last_query;
+    fault below_the_first_query;
+    fault past_a_querys_hits;
+    fault a_hit_of_no_query;
+}
+
+fn FrameQueries the_readings_from_a_replayed_frames_queries() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    FrameQueries queries;
+    if (!a_busy_session_recorded_into(pair, recording)) return queries;
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return queries;
+
+    player.seek_frame(A_QUERY_FRAME - 1);
+    queries.at_the_frame_before = player.frame_query_count();
+    player.seek_frame(A_QUERY_FRAME);
+    queries.at_the_query_frame = player.frame_query_count();
+
+    if (try ray = player.frame_query(0)) {
+        queries.the_rays_kind = ray.type;
+        queries.the_rays_id = ray.id;
+        queries.the_ray_named_itself = ray.name != null && ray.name.str_view() == "a_dropped_ray";
+        queries.the_rays_hits = ray.hit_count;
+        queries.the_rays_origin = ray.origin;
+        queries.the_rays_translation = ray.translation;
+    }
+    if (try hit = player.frame_query_hit(0, 0)) {
+        queries.the_rays_hit_fraction = hit.fraction;
+        queries.the_rays_hit_normal_y = hit.normal.y;
+    }
+    if (try box = player.frame_query(1)) {
+        queries.the_boxs_kind = box.type;
+        queries.the_boxs_id = box.id;
+        queries.the_box_named_itself = box.name != null && box.name.str_view() == "a_dropped_box";
+        queries.the_boxs_hits = box.hit_count;
+        queries.the_boxs_bounds = box.aabb;
+
+        bool named = box.hit_count > 0;
+        for (int index = 0; index < box.hit_count; index++) {
+            b3::RecQueryHit? hit = player.frame_query_hit(1, index);
+            if (catch hit) {
+                named = false;
+                continue;
+            }
+            if (!hit.shape.is_valid()) named = false;
+        }
+        queries.every_box_hit_named_a_shape = named;
+    }
+    if (try untagged = player.frame_query(2)) {
+        queries.the_untagged_ray_carried_no_tag = untagged.key == 0 && untagged.id == 0 && untagged.name == null;
+    }
+
+    if (catch err = player.frame_query(player.frame_query_count())) queries.past_the_last_query = err;
+    if (catch err = player.frame_query(-1)) queries.below_the_first_query = err;
+    if (catch err = player.frame_query_hit(0, queries.the_rays_hits)) queries.past_a_querys_hits = err;
+    if (catch err = player.frame_query_hit(player.frame_query_count(), 0)) queries.a_hit_of_no_query = err;
+
+    player.seek_frame(A_QUERY_FRAME + 1);
+    queries.at_the_frame_after = player.frame_query_count();
+
+    player.destroy();
+    return queries;
+}
+
+fn void a_replayed_frame_reports_the_queries_recorded_ahead_of_its_step() @test {
+    FrameQueries queries = the_readings_from_a_replayed_frames_queries();
+
+    assert(queries.at_the_query_frame == A_RECORDED_QUERY_COUNT && queries.at_the_frame_before == 0
+        && queries.at_the_frame_after == 0,
+        "the three queries belong to the frame whose step they were recorded ahead of, and to no other");
+    assert(queries.the_rays_kind == b3::RecQueryType.CAST_RAY_CLOSEST
+        && queries.the_boxs_kind == b3::RecQueryType.OVERLAP_AABB,
+        "each names the world call that made it");
+    assert(queries.the_rays_id == A_TAGGED_RAY_ID && queries.the_boxs_id == A_TAGGED_BOX_ID
+        && queries.the_ray_named_itself && queries.the_box_named_itself,
+        "a tagged query carries back the id and name its filter was given");
+    assert(queries.the_untagged_ray_carried_no_tag,
+        "and an untagged one carries no key, no id and no name at all");
+    assert(queries.the_rays_origin.y > 2.95 && queries.the_rays_origin.y < 3.05
+        && queries.the_rays_translation.y > -5.05 && queries.the_rays_translation.y < -4.95,
+        "the ray reports the span it was fired over rather than a normalised direction");
+    assert(queries.the_boxs_bounds.lower_bound.y > -2.05 && queries.the_boxs_bounds.lower_bound.y < -1.95
+        && queries.the_boxs_bounds.upper_bound.y > 5.95 && queries.the_boxs_bounds.upper_bound.y < 6.05,
+        "and the overlap reports the box it was given");
+    assert(queries.the_rays_hits == 1 && queries.the_rays_hit_fraction > 0.59
+        && queries.the_rays_hit_fraction < 0.61 && queries.the_rays_hit_normal_y > 0.95,
+        "a cast records where its hit landed, three fifths of the way down onto the slab's top face");
+    assert(queries.the_boxs_hits == A_DROPPED_BODY_COUNT + 1 && queries.every_box_hit_named_a_shape,
+        "where an overlap records the shapes alone, one per body in the busy session");
+    assert(queries.past_the_last_query == b3::INDEX_OUT_OF_RANGE
+        && queries.below_the_first_query == b3::INDEX_OUT_OF_RANGE,
+        "an index no query holds is refused rather than answered with a zeroed struct");
+    assert(queries.past_a_querys_hits == b3::INDEX_OUT_OF_RANGE
+        && queries.a_hit_of_no_query == b3::INDEX_OUT_OF_RANGE,
+        "and so is a hit past a query's own count, or one of a query that is not there");
+}
+
+struct DebugShapeTally {
+    int offered;
+    int withdrawn;
+}
+
+fn void* offer_a_debug_shape(void* debug_shape, void* user_context) {
+    DebugShapeTally* tally = (DebugShapeTally*)user_context;
+    tally.offered++;
+    return user_context;
+}
+
+fn void withdraw_a_debug_shape(void* user_shape, void* user_context) {
+    DebugShapeTally* tally = (DebugShapeTally*)user_context;
+    tally.withdrawn++;
+}
+
+struct DebugShapeWiring {
+    ushort generation_before;
+    ushort generation_after;
+    bool the_world_it_replaced_stopped_being_valid;
+    bool the_world_it_stood_up_is_valid;
+    int frame_before;
+    int frame_after;
+    int worlds_before;
+    int worlds_after;
+    int bodies_at_the_end;
+    int shapes_offered_by_a_replay;
+    int shapes_withdrawn_by_a_replay;
+}
+
+fn DebugShapeWiring the_readings_around_wiring_a_renderer_in() {
+    b3::Recording* recording = b3::create_recording(0);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    DebugShapeWiring wiring;
+    if (!a_busy_session_recorded_into(pair, recording)) return wiring;
+
+    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    if (catch player) return wiring;
+
+    player.seek_frame(A_QUERY_FRAME);
+    b3::WorldId replaced = player.world_id();
+    wiring.generation_before = replaced.generation;
+    wiring.frame_before = player.frame();
+    wiring.worlds_before = b3::world_count();
+
+    DebugShapeTally tally;
+    player.set_debug_shape_callbacks(&offer_a_debug_shape, &withdraw_a_debug_shape, &tally);
+
+    b3::WorldId stood_up = player.world_id();
+    wiring.generation_after = stood_up.generation;
+    wiring.the_world_it_replaced_stopped_being_valid = !replaced.is_valid();
+    wiring.the_world_it_stood_up_is_valid = stood_up.is_valid();
+    wiring.frame_after = player.frame();
+    wiring.worlds_after = b3::world_count();
+
+    while (player.step_frame()) {}
+    wiring.bodies_at_the_end = player.body_count();
+    wiring.shapes_offered_by_a_replay = tally.offered;
+    wiring.shapes_withdrawn_by_a_replay = tally.withdrawn;
+
+    player.destroy();
+    return wiring;
+}
+
+fn void wiring_a_renderer_in_stands_a_new_replay_world_up() @test {
+    DebugShapeWiring wiring = the_readings_around_wiring_a_renderer_in();
+
+    assert(wiring.frame_before == A_QUERY_FRAME && wiring.frame_after == 0,
+        "wiring the callbacks in rewinds the replay to frame 0, wherever it had reached");
+    assert(wiring.generation_after != wiring.generation_before
+        && wiring.the_world_it_replaced_stopped_being_valid && wiring.the_world_it_stood_up_is_valid,
+        "and stands a new world up in place of the one whose id the caller was holding");
+    assert(wiring.worlds_before > 0 && wiring.worlds_after == wiring.worlds_before,
+        "one world for one, so the rebuild leaks none");
+    assert(wiring.bodies_at_the_end == A_PEBBLE_ORDINAL + 1
+        && wiring.shapes_offered_by_a_replay == 0 && wiring.shapes_withdrawn_by_a_replay == 0,
+        "and replaying every record afterwards reaches neither callback: only a draw of that world does");
+}

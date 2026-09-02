@@ -224,6 +224,13 @@ alias DestroyDebugShapeFn = fn void(void* user_shape, void* user_context);
 *>
 const int MAX_WORLDS = 128;
 
+<*
+ The most workers a world can run its step across. Mirrors B3_MAX_WORKERS in constants.h, which
+ the C API does not expose as a function, and is the ceiling RecPlayer.set_worker_count() clamps
+ into.
+*>
+const int MAX_WORKERS = 32;
+
 struct Capacity {
     int static_shape_count;
     int dynamic_shape_count;
@@ -4475,3 +4482,178 @@ typedef RecPlayer = void;
 extern fn void RecPlayer.destroy(&self) @cname("b3DestroyPlayer");
 
 extern fn RecPlayer* create_player_raw(void* data, int size, int worker_count) @cname("b3CreatePlayer") @private;
+
+<*
+ What a player read out of its recording when it opened it, so bounds covers the whole recording
+ before a frame of it has been replayed. worker_count is the player's own rather than the
+ recording's — create_player()'s argument, as RecPlayer.set_worker_count() has since clamped it.
+*>
+struct RecPlayerInfo {
+    int frame_count;
+    int worker_count;
+    float time_step;
+    int sub_step_count;
+    float length_scale;
+    Aabb bounds;
+}
+
+<*
+ The kind of spatial query a frame recorded, naming the world call that made it.
+*>
+enum RecQueryType : int {
+    OVERLAP_AABB,
+    OVERLAP_SHAPE,
+    CAST_RAY,
+    CAST_SHAPE,
+    CAST_RAY_CLOSEST,
+    CAST_MOVER,
+    COLLIDE_MOVER,
+}
+
+<*
+ One spatial query the replay re-issued for the frame it belongs to. A field the query's kind does
+ not carry stays zero. key, id and name are the tag the recorded call's filter carried, so an
+ untagged query leaves all three empty, and name borrows the player's tag table rather than owning
+ its bytes.
+*>
+struct RecQueryInfo {
+    RecQueryType type;
+    QueryFilter filter;
+    Aabb aabb;
+    Pos origin;
+    Vec3 translation;
+    int hit_count;
+    ulong key;
+    ulong id;
+    ZString name;
+}
+
+<*
+ One result of a recorded query. Only a cast records where its hit landed: an overlap records the
+ shape alone, and point, normal and fraction then carry whatever the replay's shared hit scratch
+ last held, which is neither zero nor stable.
+*>
+struct RecQueryHit {
+    ShapeId shape;
+    Pos point;
+    Vec3 normal;
+    float fraction;
+}
+
+<*
+ Replays every record up to and including the next step, then the state hash that closes it.
+ False once the op stream is exhausted, which is what ends a replay loop.
+*>
+extern fn bool RecPlayer.step_frame(&self) @cname("b3RecPlayer_StepFrame");
+
+<*
+ Replays a frame that creates bodies in two calls, the first stopping at the pose those bodies
+ were created in — see is_at_pre_step(). A frame that creates none is replayed whole by a single
+ call, so this is not a fixed two calls per frame.
+*>
+extern fn void RecPlayer.sub_step_frame(&self) @cname("b3RecPlayer_SubStepFrame");
+
+<*
+ Rewinds to frame 0 in place, which is what keeps world_id() stable across it. Clears the
+ divergence latch and the frame's recorded queries, and rolls the body list back to frame 0's.
+*>
+extern fn void RecPlayer.restart(&self) @cname("b3RecPlayer_Restart");
+
+<*
+ Replays to target_frame, a backward seek restoring the nearest keyframe before it rather than
+ replaying from the start. Neither end is refused: a negative target lands on frame 0, and one
+ past the recording stops at its last frame with is_at_end() true.
+*>
+extern fn void RecPlayer.seek_frame(&self, int target_frame) @cname("b3RecPlayer_SeekFrame");
+
+<*
+ The world this player drives. restart() and every seek keep it, but set_debug_shape_callbacks()
+ stands a new world up and leaves the id read before it invalid.
+*>
+extern fn WorldId RecPlayer.world_id(&self) @cname("b3RecPlayer_GetWorldId");
+
+<*
+ The last fully replayed frame: 0 before the first step, frame_count() at the end.
+*>
+extern fn int RecPlayer.frame(&self) @cname("b3RecPlayer_GetFrame");
+
+extern fn int RecPlayer.frame_count(&self) @cname("b3RecPlayer_GetFrameCount");
+extern fn bool RecPlayer.is_at_end(&self) @cname("b3RecPlayer_IsAtEnd");
+
+<*
+ True while sub_step_frame() is paused between a frame's body creations and its step, which is
+ where a renderer draws a body at the pose it was created in. step_frame() never leaves it true.
+*>
+extern fn bool RecPlayer.is_at_pre_step(&self) @cname("b3RecPlayer_IsAtPreStep");
+
+<*
+ True once a replayed frame failed to reproduce a recorded state hash, which is what makes a
+ recording a determinism test. restart() clears it, and diverge_frame() names the frame.
+*>
+extern fn bool RecPlayer.has_diverged(&self) @cname("b3RecPlayer_HasDiverged");
+
+extern fn RecPlayerInfo RecPlayer.info(&self) @cname("b3RecPlayer_GetInfo");
+extern fn int diverge_frame_raw(RecPlayer* player) @cname("b3RecPlayer_GetDivergeFrame") @private;
+
+<*
+ Sets the worker count the replay world partitions its constraint graph across, clamped into 1 to
+ MAX_WORKERS rather than refused. A count the recording was not made at turns the state hash check
+ into a cross-thread determinism test.
+*>
+extern fn void RecPlayer.set_worker_count(&self, int count) @cname("b3RecPlayer_SetWorkerCount");
+
+<*
+ Tunes the keyframe ring a backward seek restores from, trading memory for seek speed. A budget of
+ zero or an interval below one keeps the value it had rather than setting it, and either way the
+ ring is dropped, so a later replay repopulates it under the policy left here.
+*>
+extern fn void RecPlayer.set_keyframe_policy(
+  &self,
+  usz budget_bytes,
+  int min_interval_frames,
+) @cname("b3RecPlayer_SetKeyframePolicy");
+
+extern fn usz RecPlayer.keyframe_budget(&self) @cname("b3RecPlayer_GetKeyframeBudget");
+extern fn int RecPlayer.keyframe_min_interval(&self) @cname("b3RecPlayer_GetKeyframeMinInterval");
+
+<*
+ The spacing keyframes are actually captured at: keyframe_min_interval() until the ring evicts to
+ stay under budget, and doubling from there.
+*>
+extern fn int RecPlayer.keyframe_interval(&self) @cname("b3RecPlayer_GetKeyframeInterval");
+
+extern fn usz RecPlayer.keyframe_bytes(&self) @cname("b3RecPlayer_GetKeyframeBytes");
+
+<*
+ How many bodies the replay has created up to this frame, keeping the ordinal of every destroyed
+ one, so it is the bound body_id() indexes against and not a count of live bodies.
+*>
+extern fn int RecPlayer.body_count(&self) @cname("b3RecPlayer_GetBodyCount");
+
+extern fn BodyId body_id_raw(RecPlayer* player, int index) @cname("b3RecPlayer_GetBodyId") @private;
+
+<*
+ Wires a renderer's per-shape callbacks into the replay world. box3d reaches them from a draw of
+ that world and from nowhere else, so replaying alone calls neither. It stands a new world up and
+ rewinds to frame 0, which is why it belongs immediately after create_player() — read world_id()
+ again afterwards.
+*>
+extern fn void RecPlayer.set_debug_shape_callbacks(
+  &self,
+  CreateDebugShapeFn create_debug_shape,
+  DestroyDebugShapeFn destroy_debug_shape,
+  void* context,
+) @cname("b3RecPlayer_SetDebugShapeCallbacks");
+
+<*
+ How many spatial queries the last replayed frame re-issued. A query is recorded ahead of the step
+ it precedes, so it belongs to the frame that step completes and every other frame reports none.
+*>
+extern fn int RecPlayer.frame_query_count(&self) @cname("b3RecPlayer_GetFrameQueryCount");
+
+extern fn RecQueryInfo frame_query_raw(RecPlayer* player, int index) @cname("b3RecPlayer_GetFrameQuery") @private;
+extern fn RecQueryHit frame_query_hit_raw(
+  RecPlayer* player,
+  int query_index,
+  int hit_index,
+) @cname("b3RecPlayer_GetFrameQueryHit") @private;

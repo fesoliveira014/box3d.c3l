@@ -1807,13 +1807,13 @@ extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
 extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");
 
 <*
- The force this joint is applying to hold its constraint, in newtons.
+ The force this joint is applying to hold its constraint, in newtons. box3d branches on the
+ joint's own type, so a zero says nothing until read against that type: the joint may be unloaded,
+ the channel may be one the type never measures, or one it measures only in some states.
 
- box3d answers this and the three that follow from a branch on the joint's own type, so a zero
- says nothing until read against that type: the joint may be unloaded, the channel may be one the
- type never measures — a parallel joint's force, a distance joint's torque — or one it measures
- only in some states, and a wheel joint's angular separation is unwritten upstream and handed back
- as zero. A filter joint's permanent zeros are the second case, not a rule of their own.
+ A non-zero can be wrong too — the prismatic and wheel readings are permuted, and the wheel's
+ axial term sums a stored suspension limit in metres into the impulse, so it carries a length
+ whatever the permutation. Prefer the per-type accessor.
 *>
 extern fn Vec3 JointId.constraint_force(self) @cname("b3Joint_GetConstraintForce");
 
@@ -2451,12 +2451,11 @@ extern fn float PrismaticJointId.lower_limit(self) @cname("b3PrismaticJoint_GetL
 extern fn float PrismaticJointId.upper_limit(self) @cname("b3PrismaticJoint_GetUpperLimit");
 
 <*
- Sets the two translations in metres the limit holds the slider between. box3d takes the smaller
- of the pair as the lower and the larger as the upper, so a reversed pair is quietly corrected
- rather than refused, and it stops there — neither end is bounded, where the revolute set_limits
- also clamps. This is where the setter and the constructor part company: PrismaticJointDef stores
- its pair as written, so a pair that stays reversed through construction comes back ordered
- through here. The limit acts only while enable_limit() is on.
+ Sets the two translations in metres the limit holds the slider between, both asserted finite
+ under an assertion this build compiles out. box3d takes the smaller as the lower, so a reversed
+ pair is quietly corrected rather than refused, and it stops there — neither end is bounded, where
+ the revolute set_limits also clamps. This is where the setter and the constructor part company:
+ PrismaticJointDef stores its pair as written. The limit acts only while enable_limit() is on.
 *>
 extern fn void PrismaticJointId.set_limits(self, float lower, float upper) @cname("b3PrismaticJoint_SetLimits");
 
@@ -2693,13 +2692,13 @@ extern fn JointId create_parallel_joint_raw(
 ) @cname("b3CreateParallelJoint") @private;
 
 <*
- Sets the spring's stiffness in hertz. 1 on a joint built from a default definition, where the
- weld joint's two are 0 — and 0 means the opposite here: box3d's softness for a zero hertz carries
- a zero mass scale, so a parallel spring at 0 stops solving rather than going rigid.
+ Sets the spring's stiffness in hertz, asserted finite and at or above 0 under an assertion this
+ build compiles out. 1 by default, and 0 means the opposite of the weld joint's: box3d's softness
+ for a zero hertz carries a zero mass scale, so a parallel spring at 0 stops solving, not goes rigid.
 
- That frees the two frames only on a joint silenced before it accumulated an impulse: the warm
- start re-applies the impulse the spring holds every substep, gated on neither hertz nor ceiling,
- so one silenced after working goes on pushing with it.
+ That frees the frames only on a joint silenced before it accumulated an impulse — the warm start
+ re-applies the impulse the spring holds every substep, gated on neither hertz nor ceiling, so one
+ silenced after working goes on pushing with it.
 *>
 extern fn void ParallelJointId.set_spring_hertz(self, float hertz) @cname("b3ParallelJoint_SetSpringHertz");
 
@@ -2721,12 +2720,12 @@ extern fn void ParallelJointId.set_spring_damping_ratio(self, float damping_rati
 extern fn float ParallelJointId.spring_damping_ratio(self) @cname("b3ParallelJoint_GetSpringDampingRatio");
 
 <*
- Sets the ceiling in newton-metres on the torque the spring may apply — box3d bounds the spring's
- accumulated impulse to the time step times this value — float::max on a joint built from a
- default definition. The ceiling gates the constraint as well as bounding it, so set_max_torque(0)
- leaves the joint solving nothing at all. Upstream names the parameter a force; what it stores and
- everything that reads it is a torque. Silencing a spring that has already worked does not undo
- the impulse it holds — see set_spring_hertz.
+ Sets the ceiling in newton-metres on the torque the spring may apply, asserted finite and at or
+ above 0 under an assertion this build compiles out. float::max by default. The ceiling gates the
+ constraint as well as bounding it, so set_max_torque(0) leaves the joint solving nothing at all.
+ Upstream names the parameter a force; what it stores and everything reading it is a torque.
+ Silencing a spring that has already worked does not undo the impulse it holds — see
+ set_spring_hertz.
 *>
 extern fn void ParallelJointId.set_max_torque(self, float torque) @cname("b3ParallelJoint_SetMaxTorque");
 
@@ -3151,11 +3150,11 @@ extern fn bool SphericalJointId.is_motor_enabled(self) @cname("b3SphericalJoint_
 
 <*
  Sets the angular velocity in radians per second the motor drives body B towards relative to body
- A, about the world axes: box3d subtracts it from the difference of the two bodies' angular
- velocities, rotating it into no frame and projecting it onto no axis, so (0, 0, 1) turns body B
- about world z however the local frames are turned. It is a target the motor pursues only as far
- as max_motor_torque() lets it, and the motor's accumulated impulse is left standing rather than
- discarded.
+ A, about the world axes, asserted finite under an assertion this build compiles out. box3d
+ subtracts it from the difference of the two bodies' angular velocities, rotating it into no frame
+ and projecting it onto no axis, so (0, 0, 1) turns body B about world z however the local frames
+ are turned. A target the motor pursues only as far as max_motor_torque() lets it, leaving the
+ motor's accumulated impulse standing.
 *>
 extern fn void SphericalJointId.set_motor_velocity(self, Vec3 motor_velocity) @cname("b3SphericalJoint_SetMotorVelocity");
 
@@ -3378,8 +3377,8 @@ extern fn float WheelJointId.spin_speed(self) @cname("b3WheelJoint_GetSpinSpeed"
 
  It is a torque only while steering is enabled. With steering off — the default — box3d applies
  the spin impulse twice and this reports the correction for that, a number moving with the ceiling
- and doubling with the sub-step count. constraint_torque() carries the same impulse laid on frame
- A's z axis instead, and constraint_force() is permuted as the prismatic joint's is.
+ and doubling with the sub-step count. constraint_torque() lays the same impulse on frame A's z
+ axis instead, and constraint_force() is wrong twice over — see there.
 *>
 extern fn float WheelJointId.spin_torque(self) @cname("b3WheelJoint_GetSpinTorque");
 

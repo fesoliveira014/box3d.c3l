@@ -4,9 +4,9 @@ module b3;
  Inserts a proxy holding the box and the user data. A destroyed proxy's id goes to the next one.
 
  box3d's check on the box is compiled out here and an invalid box is not inert: inverted, no query
- reports it; infinite, every query does; NaN, every query does and the boxes above it corrupt —
- box3d's float min and max return whichever operand is not the NaN, so an ancestor swallows a real
- bound and proxies fall out of a root box that still reads clean. A zero box is valid.
+ reports it; infinite, every query does; NaN, the boxes above it corrupt — box3d's float min and
+ max return whichever operand is not the NaN, so an ancestor swallows a real bound and proxies
+ fall out of a root box that still reads clean. A zero box is valid.
 
  @return "the id, or INVALID_DEFINITION when the box is inverted or not finite"
 *>

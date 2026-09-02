@@ -30,25 +30,27 @@ fn void a_destroyed_tree_gives_back_every_byte_it_took() @test {
     assert(b3::byte_count() == around[0], "and destroying the tree must give every byte back");
 }
 
-fn int[3] the_byte_count_around_a_tree_destroyed_twice() {
+fn int[4] the_byte_count_around_a_tree_destroyed_twice() {
     int baseline = b3::byte_count();
 
     b3::DynamicTree tree = b3::create_tree(16);
+    int while_alive = b3::byte_count();
     tree.destroy();
     int after_one = b3::byte_count();
     tree.destroy();
 
-    return { baseline, after_one, b3::byte_count() };
+    return { baseline, while_alive, after_one, b3::byte_count() };
 }
 
 // Destroying zeroes the struct, so the second call has a null pool and a capacity of 0 to free.
 // That makes a repeated destroy harmless on one struct and says nothing about a copy of it,
 // which owns the same pool and frees it a second time for real.
 fn void destroying_a_tree_a_second_time_frees_nothing() @test {
-    int[3] around = the_byte_count_around_a_tree_destroyed_twice();
+    int[4] around = the_byte_count_around_a_tree_destroyed_twice();
 
-    assert(around[1] == around[0], "the first destroy gives the pool back");
-    assert(around[2] == around[1], "and the second finds nothing left to give");
+    assert(around[1] > around[0], "the tree took a pool while it was alive");
+    assert(around[2] == around[0], "the first destroy gives every byte of it back");
+    assert(around[3] == around[2], "and the second finds nothing left to give");
 }
 
 struct TreeCapacities {
@@ -1109,7 +1111,8 @@ fn void an_empty_tree_answers_both_traversals_without_a_single_hit() @test {
     assert(answers.query_node_visits == 0, "and visits no node at all");
     assert(answers.closest_visits == 0, "the closest query calls nothing either");
     assert(answers.closest_node_visits == 0);
-    assert(answers.closest_bound == answers.initial_bound, "and gives its search bound straight back");
+    assert(answers.initial_bound == 1.0e9f, "the bound the query was given is the one under test");
+    assert(answers.closest_bound == 1.0e9f, "and an empty tree gives it straight back");
 }
 
 // The closest traversal reads the same mask flags the box query does, and its point is the thing

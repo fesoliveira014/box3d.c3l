@@ -53,6 +53,10 @@ Four deliberate, recorded carve-outs from `docs/style.md`, so they are not re-fl
 
   Everything §7 forbids stays forbidden at any length: narration of the body, prose restating the signature, a rediscovery of the design, a second declaration's contract restated instead of cross-referenced. When a contract genuinely needs more than six lines it belongs in `.dev/notes.md`, with one line here pointing at it. **`./scripts/audit-docstrings.sh` prints every docstring over the cap and must print nothing** — treat a violation as an Important defect, which is what the `c3-style` skill calls comment bloat, not a nit.
 
+  **A compiled-out assertion is never the line a trim cuts.** The cap has a priority order and that is the top of it; the first pass at the cap cut four of these because it fit the line count mechanically instead. `./scripts/audit-assertions.sh` surveys declarations whose C body asserts an argument's validity while the docstring says nothing — a standing backlog rather than a gate, which must never grow.
+
+  **Cross-reference a reason, not a claim.** A docstring pointing at a sibling inherits whatever that sibling says today, including a sentence that is false for the referring call or one a later trim deletes. Both have happened here.
+
 ## Wrappers are where errors become faults
 
 The `extern fn` layer stays faithful to C: raw return types, raw out-parameters, no interpretation. The `box3d.c3` wrapper layer is what callers use, and it is allowed — expected — to be a real C3 abstraction:

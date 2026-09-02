@@ -34,7 +34,7 @@ fn CompoundData*? create_compound(CompoundDef* def) {
         if (mesh.material_count < 1 || mesh.material_count > MAX_COMPOUND_MESH_MATERIALS) return INVALID_DEFINITION~;
     }
 
-    return checked_compound(create_compound_raw(def));
+    return checked_geometry(create_compound_raw(def), CHILD_LIMIT_REACHED);
 }
 
 <*
@@ -121,6 +121,21 @@ fn CompoundSphere? CompoundData.sphere(&self, int index) {
 *>
 fn SurfaceMaterial[] CompoundData.materials(&self) {
     return compound_materials_raw(self)[:self.material_count];
+}
+
+<*
+ The bounds of the compound placed by this transform: the box its tree root holds, which is the
+ union of every child's, widened under rotation exactly as HullData.compute_aabb() is.
+
+ A compound with no children carries the root -1 and box3d indexes its node array with it, a read
+ landing back inside the compound's own header that answers a zero-extent box at the transform's
+ position — a plausible empty box rather than an obvious wrong one, which is why it is refused.
+
+ @return "the bounds, or DEGENERATE_GEOMETRY when the compound holds no children"
+*>
+fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
+    if (self.tree.root < 0) return DEGENERATE_GEOMETRY~;
+    return compute_compound_aabb_raw(self, transform);
 }
 
 <*

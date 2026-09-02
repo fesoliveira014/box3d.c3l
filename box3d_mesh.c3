@@ -4,30 +4,32 @@ module b3;
  Builds a flat grid of triangles in the x-z plane, x_count by z_count cells around the origin.
 
  The caller owns the mesh and must destroy() it; byte_count() carries it until then, as for every
- mesh constructor below. A refusal leaks: box3d clones the vertices before rejecting geometry with
- no triangle of area or a hierarchy too deep to traverse, and frees back only part. Only its
- refusals on the counts alone — fewer than three vertices or no triangles — are allocation-free,
- and nothing else about the arguments predicts which.
+ mesh constructor below. A refusal leaks — box3d frees back only part of what it cloned — so a
+ test must not reach one.
+
+ The count guard covers something worse: box3d turns a large negative count into a large positive
+ vertex count and charges the allocation without giving it back, measured 36 MB at -1000.
 
  @param material_count : "how many distinct material indices to spread over the triangles"
  @param identify_edges : "compute the shared-edge adjacency the solver uses to hide inner edges"
- @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
+ @return "the mesh, or DEGENERATE_GEOMETRY when a count is below one or the arguments describe no triangle with area"
 *>
 fn MeshData*? create_grid_mesh(int x_count, int z_count, float cell_width, int material_count, bool identify_edges) {
-    return checked_mesh(create_grid_mesh_raw(
+    if (x_count < 1 || z_count < 1) return DEGENERATE_GEOMETRY~;
+    return checked_geometry(create_grid_mesh_raw(
       x_count: x_count,
       z_count: z_count,
       cell_width: cell_width,
       material_count: material_count,
       identify_edges: identify_edges,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
  Builds a grid of triangles in the x-z plane with a sine wave raised over it. Ownership and the
  fault work as they do for create_grid_mesh.
 
- @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
+ @return "the mesh, or DEGENERATE_GEOMETRY when a count is below one or the arguments describe no triangle with area"
 *>
 fn MeshData*? create_wave_mesh(
   int x_count,
@@ -37,14 +39,15 @@ fn MeshData*? create_wave_mesh(
   float row_frequency,
   float column_frequency,
 ) {
-    return checked_mesh(create_wave_mesh_raw(
+    if (x_count < 1 || z_count < 1) return DEGENERATE_GEOMETRY~;
+    return checked_geometry(create_wave_mesh_raw(
       x_count: x_count,
       z_count: z_count,
       cell_width: cell_width,
       amplitude: amplitude,
       row_frequency: row_frequency,
       column_frequency: column_frequency,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -56,12 +59,12 @@ fn MeshData*? create_wave_mesh(
  @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
 *>
 fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, float radius, float thickness) {
-    return checked_mesh(create_torus_mesh_raw(
+    return checked_geometry(create_torus_mesh_raw(
       radial_resolution: radial_resolution,
       tubular_resolution: tubular_resolution,
       radius: radius,
       thickness: thickness,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -72,7 +75,7 @@ fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, f
  @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
 *>
 fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {
-    return checked_mesh(create_box_mesh_raw(center, extent, identify_edges));
+    return checked_geometry(create_box_mesh_raw(center, extent, identify_edges), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -82,7 +85,7 @@ fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {
  @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
 *>
 fn MeshData*? create_hollow_box_mesh(Vec3 center, Vec3 extent) {
-    return checked_mesh(create_hollow_box_mesh_raw(center, extent));
+    return checked_geometry(create_hollow_box_mesh_raw(center, extent), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -92,12 +95,12 @@ fn MeshData*? create_hollow_box_mesh(Vec3 center, Vec3 extent) {
  @return "the mesh, or DEGENERATE_GEOMETRY when the height and the two widths collapse it"
 *>
 fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, float bottom_width) {
-    return checked_mesh(create_platform_mesh_raw(
+    return checked_geometry(create_platform_mesh_raw(
       center: center,
       height: height,
       top_width: top_width,
       bottom_width: bottom_width,
-    ));
+    ), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -112,7 +115,10 @@ fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, f
  @return "the mesh, or DEGENERATE_GEOMETRY when the definition names fewer than three vertices, no triangles, or no triangle with area"
 *>
 fn MeshData*? create_mesh(MeshDef* def) {
-    return checked_mesh(create_mesh_raw(def: def, degenerate_triangle_indices: null, degenerate_capacity: 0));
+    return checked_geometry(
+      create_mesh_raw(def: def, degenerate_triangle_indices: null, degenerate_capacity: 0),
+      DEGENERATE_GEOMETRY,
+    );
 }
 
 <*

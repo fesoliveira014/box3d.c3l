@@ -444,6 +444,56 @@ struct Capsule {
     float radius;
 }
 
+<*
+ The mass, centre of mass and inertia of a solid ball of this radius at this density. The centre
+ is the sphere's own and the tensor is about that centre, never about the shape frame's origin,
+ so moving the sphere moves the centre and leaves the inertia where it was.
+
+ box3d checks neither the radius nor the density. Both run straight into the volume, so a
+ negative one of either yields a negative mass instead of a refusal.
+*>
+extern fn MassData Sphere.compute_mass_data(&self, float density) @cname("b3ComputeSphereMass");
+
+<*
+ The bounds of the sphere placed by this transform. Exact rather than conservative: box3d carries
+ the centre through the transform and adds the radius on each axis, so a rotation moves the box
+ without widening it. The hull, mesh, height field and compound bounds all rotate a cached box
+ instead and do widen — see HullData.compute_aabb().
+*>
+extern fn Aabb Sphere.compute_aabb(&self, Transform transform) @cname("b3ComputeSphereAABB");
+
+<*
+ The mass, centre of mass and inertia of the capsule at this density: a cylinder between the two
+ centres plus one ball's worth of end caps. The centre is the midpoint of the two, and the tensor
+ is rotated so its axial column follows the segment rather than the y axis it is built on.
+
+ Two centres too close to leave a cylinder weigh the end caps alone — a ball, not a refusal — and
+ neither the radius nor the density is checked, so a negative one yields a negative mass.
+*>
+extern fn MassData Capsule.compute_mass_data(&self, float density) @cname("b3ComputeCapsuleMass");
+
+<*
+ The bounds of the capsule placed by this transform. Exact for the reason Sphere.compute_aabb()
+ is: box3d carries both centres through the transform and adds the radius to the box around them,
+ so a rotation moves the box without widening it.
+*>
+extern fn Aabb Capsule.compute_aabb(&self, Transform transform) @cname("b3ComputeCapsuleAABB");
+
+<*
+ The ceiling create_hull() clamps max_vertex_count to. Mirrors B3_MAX_HULL_VERTICES in
+ constants.h, which the C API does not expose as a function and no layout pin can see. box3d
+ fixes it for performance: the hull's vertex, edge and face indices are all single bytes.
+*>
+const int MAX_HULL_VERTICES = 128;
+
+<*
+ The most ring steps create_cylinder() and create_cone() accept. Not box3d's number: the widest
+ either builds is a cone with one radius at zero, at 64, and both refuse below that on their own
+ edge and face ceilings. The bound exists because far above it box3d writes through an allocation
+ that failed rather than refusing.
+*>
+const int MAX_HULL_RING_STEPS = 64;
+
 struct HullVertex {
     char edge;
 }
@@ -463,6 +513,10 @@ struct HullFace {
  A convex hull. The arrays live past the end of the struct and are reached through the byte
  offsets it carries, so a bare HullData must never be copied — only a BoxHull, which embeds
  one together with its storage, copies correctly.
+
+ create_hull() and its siblings in box3d_hull.c3 allocate one the caller owns and must destroy()
+ exactly once; byte_count() carries it until then. A BoxHull owns its storage instead, so calling
+ destroy() on its base frees a pointer box3d never allocated.
 *>
 struct HullData {
     ulong version;
@@ -507,6 +561,61 @@ extern fn BoxHull make_box_hull(float hx, float hy, float hz) @cname("b3MakeBoxH
 extern fn BoxHull make_offset_box_hull(float hx, float hy, float hz, Vec3 offset) @cname("b3MakeOffsetBoxHull");
 extern fn BoxHull make_transformed_box_hull(float hx, float hy, float hz, Transform transform) @cname("b3MakeTransformedBoxHull");
 extern fn BoxHull make_scaled_box_hull(Vec3 half_widths, Transform transform, Vec3 post_scale) @cname("b3MakeScaledBoxHull");
+
+<*
+ A box with a post scale resolved into it, as scale_box() reports one. A C3 type with no C
+ counterpart: box3d rewrites the half widths and the placement it was handed, through two in-out
+ pointers.
+*>
+struct ScaledBox {
+    Vec3 half_widths;
+    Transform transform;
+}
+
+<*
+ Raw box scaler. Rewrites both of the arguments it is handed, so box3d_hull.c3's scale_box is the
+ only public way in.
+*>
+extern fn void scale_box_raw(Vec3* half_widths, Transform* transform, Vec3 post_scale, float min_half_width) @cname("b3ScaleBox") @private;
+
+<*
+ Raw hull constructors, whose null returns the wrappers in box3d_hull.c3 turn into faults; those
+ wrappers are the only public way in. The cylinder, cone and rock end in b3CreateHull and answer
+ null for a point set it will not close. The two clones do not: they allocate and copy, and answer
+ null for an absent hull or, when transformed, for a volume the rebake underflows.
+*>
+extern fn HullData* create_hull_raw(Vec3* points, int point_count, int max_vertex_count) @cname("b3CreateHull") @private;
+extern fn HullData* create_cylinder_raw(float height, float radius, float y_offset, int sides) @cname("b3CreateCylinder") @private;
+extern fn HullData* create_cone_raw(float height, float radius1, float radius2, int slices) @cname("b3CreateCone") @private;
+extern fn HullData* create_rock_raw(float radius) @cname("b3CreateRock") @private;
+extern fn HullData* clone_hull_raw(HullData* hull) @cname("b3CloneHull") @private;
+extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform transform, Vec3 scale) @cname("b3CloneAndTransformHull") @private;
+
+<*
+ Releases a hull box3d_hull.c3 returned, exactly once.
+
+ Only those. A BoxHull's base, a compound's hull child and the hull a shape reports are all owned
+ by something else and abort the process or corrupt it here — see HullData.
+*>
+extern fn void HullData.destroy(&self) @cname("b3DestroyHull");
+
+<*
+ The mass and inertia of the hull at this density, both linear in it, about the hull's own
+ centroid — which box3d hands back unscaled, having baked all three at build time rather than
+ integrating again. HullData.clone_and_transform() re-bakes them for a placed or scaled copy.
+
+ The density is unchecked, so a negative one yields a negative mass and tensor, not a refusal.
+*>
+extern fn MassData HullData.compute_mass_data(&self, float density) @cname("b3ComputeHullMass");
+
+<*
+ The box in HullData.aabb carried through this transform, never a refit of the points. box3d
+ widens it by the absolute of the rotation matrix, which is exact only where the rotation carries
+ the coordinate axes onto coordinate axes — a quarter turn about one of them, but a half turn
+ about a face diagonal and a third turn about a body diagonal too. Anything else, an eighth turn
+ included, answers wider. clone_and_transform() bakes the rotation in and its aabb is tight.
+*>
+extern fn Aabb HullData.compute_aabb(&self, Transform transform) @cname("b3ComputeHullAABB");
 
 <*
  The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it: call
@@ -603,6 +712,15 @@ extern fn void MeshData.destroy(&self) @cname("b3DestroyMesh");
 extern fn int MeshData.tree_height(&self) @cname("b3GetHeight");
 
 <*
+ The bounds of the mesh scaled and then placed by this transform. The scale multiplies the mesh's
+ cached bounds component by component in mesh space and box3d re-orders the corners afterwards,
+ so a negative component mirrors the box rather than turning it inside out, and a zero one
+ flattens it. The placement then widens the box under rotation exactly as
+ HullData.compute_aabb() does.
+*>
+extern fn Aabb MeshData.compute_aabb(&self, Transform transform, Vec3 scale) @cname("b3ComputeMeshAABB");
+
+<*
  Raw height field constructors. None of them can return a null pointer — box3d allocates
  whatever it is asked for, including a grid with no cells at all — so the wrappers in
  box3d_mesh.c3 carry the guards instead and are the only public way in.
@@ -615,6 +733,14 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
  Releases the height field. The caller owns it and must call this exactly once — see MeshData.
 *>
 extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
+
+<*
+ The bounds of the height field placed by this transform. The scale the field was built with is
+ already inside the cached box this carries through, which is why there is no scale argument
+ here and MeshData.compute_aabb() has one. The placement widens the box under rotation exactly
+ as HullData.compute_aabb() does.
+*>
+extern fn Aabb HeightFieldData.compute_aabb(&self, Transform transform) @cname("b3ComputeHeightFieldAABB");
 
 <*
  The two children of an internal tree node, as indices into the tree's own node array. box3d
@@ -1016,6 +1142,13 @@ extern fn CompoundSphere compound_sphere_raw(CompoundData* compound, int index) 
 extern fn SurfaceMaterial* compound_materials_raw(CompoundData* compound) @cname("b3GetCompoundMaterials") @private;
 
 <*
+ Raw compound bounds. box3d indexes the compound's node array at the tree's root without testing
+ it, and a compound with no children carries the root -1, so the wrapper in box3d_compound.c3
+ refuses that one case and is the only public way in.
+*>
+extern fn Aabb compute_compound_aabb_raw(CompoundData* compound, Transform transform) @cname("b3ComputeCompoundAABB") @private;
+
+<*
  Raw shape constructors. Each bypasses the definition-cookie guard its wrapper in
  box3d_shape.c3 applies, so they are private to the module.
 *>
@@ -1136,6 +1269,11 @@ extern fn void ShapeId.set_hull(self, HullData* hull) @cname("b3Shape_SetHull");
 *>
 extern fn void set_mesh_raw(ShapeId shape_id, MeshData* mesh, Vec3 scale) @cname("b3Shape_SetMesh") @private;
 
+<*
+ The geometry box widened by box3d's fixed speculative distance — neither the tight box the
+ compute_aabb() functions answer nor the larger, body-type-dependent box the broad phase indexes
+ and tests before moving a proxy.
+*>
 extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
 extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");
 extern fn Vec3 ShapeId.closest_point(self, Vec3 target) @cname("b3Shape_GetClosestPoint");

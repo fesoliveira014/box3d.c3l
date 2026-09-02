@@ -11,7 +11,8 @@ faultdef
     INDEX_OUT_OF_RANGE,
     CHILD_LIMIT_REACHED,
     NOT_A_PROXY,
-    NO_HIT;
+    NO_HIT,
+    BUFFER_TOO_SMALL;
 
 macro bool WorldId.is_null(self) => self.index1 == 0;
 macro bool BodyId.is_null(self) => self.index1 == 0;

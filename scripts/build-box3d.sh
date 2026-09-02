@@ -37,10 +37,19 @@ generate_layout() {
             }
             return out
         }
-        function to_type(s,   r) {
+        # An acronym in a C type name folds to one capital: b3AABB is Aabb and b3SATCache is
+        # SatCache, because an all-uppercase C3 identifier parses as a constant.
+        function to_type(s,   r, out, i, c, prev, after) {
             r = substr(s, 3)
-            if (r ~ /^[A-Z0-9]+$/) r = substr(r, 1, 1) tolower(substr(r, 2))
-            return r
+            out = substr(r, 1, 1)
+            for (i = 2; i <= length(r); i++) {
+                c = substr(r, i, 1)
+                prev = substr(r, i - 1, 1)
+                after = (i < length(r)) ? substr(r, i + 1, 1) : ""
+                if (c ~ /[A-Z]/ && prev ~ /[A-Z]/ && after !~ /[a-z]/) c = tolower(c)
+                out = out c
+            }
+            return out
         }
         BEGIN {
             print "module b3;"

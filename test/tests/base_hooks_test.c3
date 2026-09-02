@@ -145,6 +145,19 @@ fn void the_timing_hooks_measure_elapsed_milliseconds() @test {
     assert(elapsed < 2000.0, "a two millisecond sleep must not read as two seconds");
 }
 
+fn void the_resetting_timer_moves_the_stamp_it_measured_from() @test {
+    ulong stamp = b3::ticks();
+    ulong started_at = stamp;
+    b3::sleep(2);
+    float elapsed = b3::milliseconds_and_reset(&stamp);
+    float since_that_call = b3::milliseconds_and_reset(&stamp);
+
+    assert(elapsed >= 1.0 && elapsed < 2000.0, "two milliseconds of sleep register as at least one");
+    assert(stamp > started_at, "and the stamp is advanced to the reading, not left where it began");
+    assert(since_that_call >= 0.0 && since_that_call < elapsed,
+        "so the second call measures the gap since the first rather than the sleep again");
+}
+
 <*
  Both settings are process-wide and the length unit scales box3d's slop and margins, so each is
  restored before the assertions run.

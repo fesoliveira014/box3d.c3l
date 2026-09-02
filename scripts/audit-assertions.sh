@@ -10,8 +10,9 @@
 # The predicate list below is the whole of what this survey can see, so a family missing from it is
 # a blind spot rather than a clean result. Position and the two transform predicates were absent
 # until a review found a declaration asserting b3IsValidPosition that the survey could not report;
-# adding them raised the backlog from 25 to 31 without a single new omission being written. Check
-# the list against math_functions.h whenever box3d moves.
+# adding them raised the backlog from 25 to 31 without a single new omission being written.
+# b3IsNormalized was added the same way, and the backlog stayed at 31: nothing public asserts it
+# yet. Check the list against math_functions.h whenever box3d moves.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -38,7 +39,7 @@ awk '
     ' vendor/box3d/src/*.c 2>/dev/null || true)
     # Only argument-validity assertions: those a caller trips by passing a bad value, which this
     # build accepts in silence. Internal state assertions are box3d's business, not the caller's.
-    if printf '%s\n' "$body" | grep -qE 'B3_ASSERT\([^)]*b3IsValid(Float|Vec3|Quat|AABB|Plane|Ray|Position|WorldTransform|Transform)'; then
+    if printf '%s\n' "$body" | grep -qE 'B3_ASSERT\([^)]*b3Is(Valid(Float|Vec3|Quat|AABB|Plane|Ray|Position|WorldTransform|Transform)|Normalized)'; then
         echo "$sym: asserts its argument, docstring is silent"
     fi
 done

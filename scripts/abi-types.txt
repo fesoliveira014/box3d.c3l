@@ -6,7 +6,7 @@ b3ContactId index1,world0,padding,generation
 b3Vec3
 b3Pos
 b3Quat
-b3Matrix3
+b3Matrix3 cx,cy,cz
 b3Transform
 b3WorldTransform p,q
 b3AABB lowerBound,upperBound
@@ -14,6 +14,7 @@ b3Plane
 b3Version
 b3CosSin
 b3SegmentDistanceResult
+b3HexColor
 b3Capacity staticShapeCount,dynamicShapeCount,staticBodyCount,dynamicBodyCount,contactCount
 b3WorldDef gravity,restitutionThreshold,hitEventThreshold,contactHertz,contactDampingRatio,contactSpeed,maximumLinearSpeed,frictionCallback,restitutionCallback,enableSleep,enableContinuous,workerCount,enqueueTask,finishTask,userTaskContext,userData,createDebugShape,destroyDebugShape,userDebugShapeContext,capacity,internalValue
 b3Profile
@@ -52,6 +53,7 @@ b3ShapeCastInput proxy,translation,maxFraction,canEncroach
 b3CastOutput normal,point,fraction,iterations,triangleIndex,childIndex,materialIndex,hit
 b3WorldCastOutput
 b3BodyCastResult shapeId,point,normal,fraction,triangleIndex,userMaterialId,iterations,hit
+b3BoxCastInput box,translation,maxFraction
 b3TreeStats nodeVisits,leafVisits
 b3ContactData contactId,shapeIdA,shapeIdB,manifolds,manifoldCount
 b3ManifoldPoint anchorA,anchorB,separation,baseSeparation,normalImpulse,totalNormalImpulse,normalVelocity,featureId,triangleIndex,persisted

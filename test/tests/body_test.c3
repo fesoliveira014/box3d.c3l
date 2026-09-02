@@ -451,18 +451,18 @@ fn void mass_data_reads_back_through_every_mass_accessor() @test {
     b3::MassData got = body.mass_data();
     assert(got.mass == 4.0);
     assert(got.center.x == 0.5 && got.center.y == 0.0 && got.center.z == 0.0);
-    assert(got.inertia[0].x == 2.0 && got.inertia[0].y == 0.0 && got.inertia[0].z == 0.0);
-    assert(got.inertia[1].x == 0.0 && got.inertia[1].y == 4.0 && got.inertia[1].z == 0.0);
-    assert(got.inertia[2].x == 0.0 && got.inertia[2].y == 0.0 && got.inertia[2].z == 8.0);
+    assert(got.inertia.cx.x == 2.0 && got.inertia.cx.y == 0.0 && got.inertia.cx.z == 0.0);
+    assert(got.inertia.cy.x == 0.0 && got.inertia.cy.y == 4.0 && got.inertia.cy.z == 0.0);
+    assert(got.inertia.cz.x == 0.0 && got.inertia.cz.y == 0.0 && got.inertia.cz.z == 8.0);
 
     b3::Matrix3 local_inertia = body.local_rotational_inertia();
-    assert(local_inertia[0].x == 2.0 && local_inertia[1].y == 4.0 && local_inertia[2].z == 8.0);
+    assert(local_inertia.cx.x == 2.0 && local_inertia.cy.y == 4.0 && local_inertia.cz.z == 8.0);
 
     // The inertia diagonal is chosen as powers of two so its reciprocal is exact.
     b3::Matrix3 world_inv_inertia = body.world_inverse_rotational_inertia();
-    assert(world_inv_inertia[0].x == 0.5);
-    assert(world_inv_inertia[1].y == 0.25);
-    assert(world_inv_inertia[2].z == 0.125);
+    assert(world_inv_inertia.cx.x == 0.5);
+    assert(world_inv_inertia.cy.y == 0.25);
+    assert(world_inv_inertia.cz.z == 0.125);
 
     b3::Vec3 local_c = body.local_center();
     assert(local_c.x == 0.5 && local_c.y == 0.0 && local_c.z == 0.0);

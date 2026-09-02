@@ -4,7 +4,15 @@ import std::math::quaternion;
 
 alias Vec3 = float[<3>];
 alias Quat = Quaternionf;
-alias Matrix3 = Vec3[3];
+<*
+ A three by three matrix held as its three columns, which is how box3d multiplies it: b3MulMV
+ reads cx * a.x + cy * a.y + cz * a.z. A caller filling it from rows transposes it silently.
+*>
+struct Matrix3 {
+    Vec3 cx;
+    Vec3 cy;
+    Vec3 cz;
+}
 
 <*
  A world position. Distinct from Vec3 so a position is never silently used as a direction.
@@ -76,13 +84,63 @@ struct SegmentDistanceResult {
 
 extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
 extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
+<*
+ An approximate arc tangent of y over x, in radians over [-pi, pi]. box3d's own, because the
+ standard library's is not deterministic across platforms: sampled against it every tenth of a
+ degree over a full turn the worst error is 0.0000277 radians, 0.00158 degrees. Both zero gives 0.
+*>
+extern fn float atan2(float y, float x) @cname("b3Atan2");
 extern fn SegmentDistanceResult segment_distance(Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2) @cname("b3SegmentDistance");
+<*
+ Raw line distance. Private because line_distance() refuses the zero first direction box3d divides
+ by wherever the lines are parallel, which a zero direction always is.
+*>
+extern fn SegmentDistanceResult line_distance_raw(Vec3 p1, Vec3 d1, Vec3 p2, Vec3 d2) @cname("b3LineDistance") @private;
+<*
+ The inertia tensor of a point mass held at an offset from the origin, the parallel axis theorem's
+ term: mass times the squared distance across each axis down the diagonal, the negated
+ mass-weighted products off it. Add it to a tensor about the centre of mass to move that tensor.
+*>
+extern fn Matrix3 steiner(float mass, Vec3 origin) @cname("b3Steiner");
+<*
+ Raw rotation from a matrix. Private because make_quat_from_matrix() takes the matrix by value
+ where box3d takes a pointer to it.
+*>
+extern fn Quat make_quat_from_matrix_raw(Matrix3* m) @cname("b3MakeQuatFromMatrix") @private;
+<*
+ Raw rotation between two vectors. Private because compute_quat_between_unit_vectors() refuses the
+ vectors box3d does no more than assert are unit.
+*>
+extern fn Quat compute_quat_between_unit_vectors_raw(Vec3 v1, Vec3 v2) @cname("b3ComputeQuatBetweenUnitVectors") @private;
 extern fn bool is_valid_float(float a) @cname("b3IsValidFloat");
 extern fn bool is_valid_vec3(Vec3 a) @cname("b3IsValidVec3");
 extern fn bool is_valid_position(Pos p) @cname("b3IsValidPosition");
 extern fn bool is_valid_quat(Quat q) @cname("b3IsValidQuat");
 extern fn bool is_valid_transform(Transform a) @cname("b3IsValidTransform");
+<*
+ Whether the position is finite and the rotation is a unit quaternion. Nothing bounds how far out
+ the position is: one 1e30 length units from the origin passes.
+*>
+extern fn bool is_valid_world_transform(WorldTransform t) @cname("b3IsValidWorldTransform");
+<*
+ Whether all nine entries are finite. Not a test for a rotation: the zero matrix passes, and so
+ does one whose entries are 1e30.
+*>
+extern fn bool is_valid_matrix3(Matrix3 a) @cname("b3IsValidMatrix3");
 extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
+<*
+ Two one-sided comparisons and nothing else: false when a lower bound falls under minus B3_HUGE or
+ an upper bound rises over it, 1e5 length units so the reach moves with set_length_units_per_meter.
+ It reads the two named fields and not where the box lies, so an inverted box is judged the same
+ way — one whose lower is far positive and upper far negative passes, one whose lower is far
+ negative does not — and a NaN passes because every comparison against one is false.
+*>
+extern fn bool is_bounded_aabb(Aabb a) @cname("b3IsBoundedAABB");
+<*
+ Whether the box is both valid and bounded, which is the whole of the test, so it carries nothing
+ the two do not: an inverted box near the origin is bounded and not valid, a wide one the reverse.
+*>
+extern fn bool is_sane_aabb(Aabb a) @cname("b3IsSaneAABB");
 extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");
 
 alias AllocFn = fn void*(int size, int alignment);
@@ -104,6 +162,11 @@ extern fn void set_assert_fn(AssertFn assert_fn) @cname("b3SetAssertFcn");
 extern fn void set_log_fn(LogFn log_fn) @cname("b3SetLogFcn");
 extern fn ulong ticks() @cname("b3GetTicks");
 extern fn float milliseconds(ulong ticks) @cname("b3GetMilliseconds");
+<*
+ The milliseconds elapsed since the tick stamp, which it then advances to now. Consecutive calls
+ measure the gap between calls, where milliseconds() reads from a stamp it leaves where it is.
+*>
+extern fn float milliseconds_and_reset(ulong* ticks) @cname("b3GetMillisecondsAndReset");
 extern fn void yield() @cname("b3Yield");
 extern fn void sleep(int milliseconds) @cname("b3Sleep");
 extern fn float length_units_per_meter() @cname("b3GetLengthUnitsPerMeter");
@@ -115,7 +178,39 @@ extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
 *>
 extern fn uint hash_raw(uint seed, char* data, int count) @cname("b3Hash") @private;
 
+<*
+ A colour packed as 0xRRGGBB. Not an enum: box3d's b3HexColor names 145 constants, but the values
+ a renderer is handed are not confined to them, box3d passing a shape's custom colour through
+ unexamined and packing a debug material preset into the unused high byte.
+*>
+typedef HexColor = inline uint;
+
+<*
+ The number of constraint graph colours, mirroring B3_GRAPH_COLOR_COUNT in constants.h, which the
+ C API does not expose as a function. The last of them is the overflow slot.
+*>
+const int GRAPH_COLOR_COUNT = 24;
+
+<*
+ Raw graph colour. Private because graph_color() refuses the out-of-range index box3d does no more
+ than assert against before reading past its table.
+*>
+extern fn HexColor graph_color_raw(int index) @cname("b3GetGraphColor") @private;
+
+<*
+ Mixes two touching surfaces' frictions into the one the solver uses, in place of box3d's own
+ sqrt(a * b). box3d may call it from a worker thread and hands it no context of the caller's, so it
+ must not touch the world. It runs every step the pair's narrow phase finds them touching, and once
+ per manifold point against a mesh or height field, where the answers are averaged — recycling,
+ sleeping and mere nearness each suppress it, so the count is neither one per pair nor per step.
+*>
 alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float friction_b, ulong user_material_id_b);
+
+<*
+ Mixes two touching surfaces' restitutions, in place of box3d's own max(a, b). The threading,
+ context and frequency rules are FrictionFn's, because box3d asks both from the same place: the
+ line after a contact's manifold is recomputed.
+*>
 alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, float restitution_b, ulong user_material_id_b);
 alias TaskFn = fn void(void* task_context);
 alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, ZString task_name);
@@ -257,6 +352,21 @@ extern fn Capacity WorldId.max_capacity(self) @cname("b3World_GetMaxCapacity");
 extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
 extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
 extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
+
+<*
+ Replaces the world's friction mixing with fcn, and restores box3d's own when fcn is null. A
+ locked world — mid step(), or inside a callback it runs — keeps the mixing it has, under an
+ assertion this build compiles out. See FrictionFn for what box3d then calls, and how often.
+*>
+extern fn void WorldId.set_friction_callback(self, FrictionFn fcn) @cname("b3World_SetFrictionCallback");
+
+<*
+ Replaces the world's restitution mixing with fcn, and restores box3d's own when fcn is null. A
+ locked world keeps the mixing it has, under the same assertion this build compiles out. See
+ RestitutionFn for what box3d then calls, and how often.
+*>
+extern fn void WorldId.set_restitution_callback(self, RestitutionFn fcn) @cname("b3World_SetRestitutionCallback");
+
 extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");
 
 <*
@@ -965,6 +1075,61 @@ struct ClosestSearch {
     TreeStats stats;
     float search_bound;
 }
+
+<*
+ An axis-aligned box swept along translation, in the tree's own frame. The box never rotates, and
+ what travels is its centre: DynamicTree.box_cast() grows each node box by this one's half-extents
+ on all three axes and runs the centre's line through that, so the box enters the sweep only as a
+ centre and a size.
+*>
+struct BoxCastInput {
+    Aabb box;
+    Vec3 translation;
+    float max_fraction;
+}
+
+<*
+ Called once for each proxy a ray cast reaches, given the input with max_fraction narrowed to the
+ bound the cast currently holds. Returning 0 ends the traversal, a value between 0 and that bound
+ clips the ray to it, and the bound itself continues unclipped; anything negative does neither,
+ which is how box3d skips a proxy. TreeQueryFn's rule against modifying the tree holds here too.
+*>
+alias TreeRayCastFn = fn float(RayCastInput* input, int proxy_id, ulong user_data, void* context);
+
+<*
+ The box cast's counterpart to TreeRayCastFn, over a BoxCastInput and with the same return
+ contract and the same rule against modifying the tree.
+*>
+alias TreeBoxCastFn = fn float(BoxCastInput* input, int proxy_id, ulong user_data, void* context);
+
+<*
+ Reports the proxies whose box the ray crosses, calling fcn once for each. This is the broad phase
+ alone — a proxy is offered because the ray met its box, and the exact cast against whatever that
+ box holds is the callback's work. query() gives the mask flags and the traversal stack's limit,
+ which apply here too, and TreeRayCastFn gives what fcn's return does.
+*>
+extern fn TreeStats DynamicTree.ray_cast(
+  &self,
+  RayCastInput* input,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeRayCastFn fcn,
+  void* context,
+) @cname("b3DynamicTree_RayCast");
+
+<*
+ Sweeps the input's box along its translation and reports the proxies it reaches, on the terms
+ ray_cast() states and with TreeBoxCastFn in place of TreeRayCastFn. See BoxCastInput for what
+ box3d sweeps, which is not the box itself.
+*>
+extern fn TreeStats DynamicTree.box_cast(
+  &self,
+  BoxCastInput* input,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeBoxCastFn fcn,
+  void* context,
+) @cname("b3DynamicTree_BoxCast");
 
 <*
  The ceiling on a compound's children, which is one more than the number it can hold: box3d

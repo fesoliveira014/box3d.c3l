@@ -6,12 +6,12 @@ library written in C17.
 Status: most of the API surface is bound. Worlds and bodies, every shape kind — sphere, capsule,
 convex hull, mesh, height field and baked compound — the world's event arrays with the pre-solve
 and custom-filter callbacks, the ray casts, shape casts, overlap queries and contact data, all nine
-joint types, the dynamic tree, the character mover and explosions, and the standalone geometry,
-distance and manifold functions that answer about shapes with no world in play. Debug draw with
-recording and replay follows, along with a tail of math and validity singles, the tree's two
-traversals, and the world's two contact callbacks. Rather than trust this paragraph, derive the
-remainder: every bound symbol is a `@cname` in `box3d.c3i`, and every available one is a `B3_API`
-in `vendor/box3d/include/box3d/*.h`.
+joint types, the dynamic tree and its two traversals, the character mover and explosions, the
+world's two contact callbacks, the math and validity singles, and the standalone geometry, distance
+and manifold functions that answer about shapes with no world in play. Debug draw with recording
+and replay follows. Rather than trust this paragraph, derive the remainder: every bound symbol is
+a `@cname` in `box3d.c3i`, and every available one is a `B3_API` in
+`vendor/box3d/include/box3d/*.h`.
 
 ## Using it
 
@@ -69,8 +69,10 @@ does not, since a release build of box3d compiles out its own check for this and
 construct silently with a garbage definition.
 
 box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
-operators and vector methods work directly on values that cross the ABI. Matrices are a plain
-array alias, `Vec3[3]`, not a standard-library matrix type.
+operators and vector methods work directly on values that cross the ABI. Matrices are not a
+standard-library matrix type: `Matrix3` is a struct of the three `Vec3` **columns** box3d
+multiplies it as, named `cx`, `cy` and `cz`, so a caller filling it from rows cannot do so by
+accident.
 
 ## License
 

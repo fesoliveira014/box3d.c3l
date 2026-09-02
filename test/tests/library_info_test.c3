@@ -29,3 +29,17 @@ fn void hashing_matches_the_c_implementation() @test {
 fn void the_default_length_unit_is_one_meter() @test {
     assert(b3::length_units_per_meter() == 1.0);
 }
+
+fn void the_constraint_graph_colours_are_refused_outside_the_table() @test {
+    b3::HexColor first = b3::graph_color(0)!!;
+    b3::HexColor overflow = b3::graph_color(b3::GRAPH_COLOR_COUNT - 1)!!;
+
+    fault under;
+    fault over;
+    if (catch err = b3::graph_color(-1)) under = err;
+    if (catch err = b3::graph_color(b3::GRAPH_COLOR_COUNT)) over = err;
+
+    assert(first == 0xFF0000 && overflow == 0xC0C0C0, "the table runs from red to the silver overflow slot");
+    assert(under == b3::INDEX_OUT_OF_RANGE, "box3d reads a negative index and answers black");
+    assert(over == b3::INDEX_OUT_OF_RANGE, "and reads past the table for a value that is neither a colour nor the same twice");
+}

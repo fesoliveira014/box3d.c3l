@@ -900,3 +900,310 @@ fn void a_body_local_mover_collide_passes_over_a_shape_the_world_form_reports() 
     assert(readings.the_body_named_the_sphere,
         "and the one it answers for is the sphere rather than the mesh it stepped over");
 }
+
+// The sphere every explosion fixture below throws, and how far from the blast its body stands. Both
+// numbers reach the reading: the impulse scales with the area the sphere turns to the blast and
+// against the mass its radius gives it, and the distance places it on the falloff ramp.
+const float A_RING_SPHERE_RADIUS = 0.5;
+const float A_RING_DISTANCE = 2.0;
+
+// The blast every ring fixture is measured under. A sphere's near surface stands half a metre past
+// the blast's own radius, so the ring sits on the falloff ramp rather than at full strength, and a
+// falloff that never reached box3d would cull the whole ring instead of weakening it.
+const float A_BLAST_RADIUS = 1.0;
+const float A_BLAST_FALLOFF = 3.0;
+const float AN_IMPULSE_PER_AREA = 10.0;
+
+// What one sphere of the ring comes away with under that blast, outward under a positive impulse
+// per area and inward under a negative one, and the band either reading is taken inside.
+const float A_RING_SPEED = 0.0125;
+const float A_SPEED_BAND = 0.0002;
+
+// A speed two orders below the ring's own, so a body reading under it took nothing from the blast.
+const float AN_UNTOUCHED_SPEED = 0.0001;
+
+// What the sphere standing around the blast point itself comes away with: the full strength of the
+// impulse, no falloff reaching a body the blast is inside, and along an axis box3d falls back on
+// because a blast at a body's own centre gives it no direction to be thrown in.
+const float A_SPEED_AT_THE_BLAST_POINT = 0.015;
+
+// The four dynamic spheres standing around a blast and the static one standing with them, under one
+// explosion. A still body's zero velocity is this struct's own zero too, so the static reading is
+// carried as a bool, beside a position no zeroed struct holds and which proves the body was read.
+struct RingVelocities {
+    bool the_blast_was_accepted;
+    b3::Vec3 east;
+    b3::Vec3 west;
+    b3::Vec3 north;
+    b3::Vec3 south;
+    b3::Pos static_position;
+    bool the_static_body_stayed_still;
+}
+
+// What one body took from the blast at its own centre, and what the same body took from a definition
+// with a radius and an impulse in it.
+struct DefaultBlastReadings {
+    bool the_default_was_accepted;
+    b3::Vec3 at_the_blast_point;
+    b3::Vec3 out_in_the_ring;
+    b3::Vec3 at_the_blast_point_when_filled_in;
+    b3::Vec3 out_in_the_ring_when_filled_in;
+}
+
+struct BlastGuards {
+    fault negative_radius;
+    fault infinite_radius;
+    fault radius_not_a_number;
+    fault negative_falloff;
+    fault infinite_falloff;
+    fault falloff_not_a_number;
+    fault infinite_impulse;
+    fault impulse_not_a_number;
+    fault infinite_position;
+    fault position_not_a_number;
+    fault negative_impulse;
+    fault the_default_definition;
+}
+
+fn float the_speed_of(b3::Vec3 velocity) {
+    return math::sqrt(velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z);
+}
+
+fn bool stands_still(b3::Vec3 velocity) {
+    return math::abs(velocity.x) < AN_UNTOUCHED_SPEED
+        && math::abs(velocity.y) < AN_UNTOUCHED_SPEED
+        && math::abs(velocity.z) < AN_UNTOUCHED_SPEED;
+}
+
+// True when the velocity is the ring's own speed along the direction given and nothing across it,
+// which is the one reading a blast at the origin may give a sphere standing on that axis. The ring
+// is symmetric, so each of the four is named its own direction rather than a common magnitude.
+fn bool thrown_along(b3::Vec3 velocity, b3::Vec3 direction) {
+    return math::abs(velocity.x - direction.x * A_RING_SPEED) < A_SPEED_BAND
+        && math::abs(velocity.y - direction.y * A_RING_SPEED) < A_SPEED_BAND
+        && math::abs(velocity.z - direction.z * A_RING_SPEED) < A_SPEED_BAND;
+}
+
+fn b3::WorldId a_world_without_gravity() {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.gravity = { 0.0, 0.0, 0.0 };
+    return b3::create_world(&world_def)!!;
+}
+
+fn b3::BodyId a_sphere_standing_at(b3::WorldId world, b3::Pos position, b3::BodyType type) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = type;
+    body_def.position = position;
+    b3::BodyId body = world.create_body(&body_def)!!;
+
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = A_RING_SPHERE_RADIUS };
+    body.create_sphere_shape(&shape_def, &sphere)!!;
+    return body;
+}
+
+fn b3::ExplosionDef a_blast_of(float impulse_per_area) {
+    b3::ExplosionDef def = b3::default_explosion_def();
+    def.position = { 0.0, 0.0, 0.0 };
+    def.radius = A_BLAST_RADIUS;
+    def.falloff = A_BLAST_FALLOFF;
+    def.impulse_per_area = impulse_per_area;
+    return def;
+}
+
+// Four dynamic spheres around the blast and a static one the same distance out on the third axis.
+// That fifth body is the whole of the difference between the tree this query walks and the three the
+// mover queries walk, and no arrangement of dynamic bodies alone can show it.
+fn RingVelocities the_ring_under(float impulse_per_area) {
+    b3::WorldId world = a_world_without_gravity();
+    defer world.destroy();
+
+    b3::BodyId east = a_sphere_standing_at(world, { A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
+    b3::BodyId west = a_sphere_standing_at(world, { -A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
+    b3::BodyId north = a_sphere_standing_at(world, { 0.0, A_RING_DISTANCE, 0.0 }, b3::BodyType.DYNAMIC);
+    b3::BodyId south = a_sphere_standing_at(world, { 0.0, -A_RING_DISTANCE, 0.0 }, b3::BodyType.DYNAMIC);
+    b3::BodyId standing = a_sphere_standing_at(world, { 0.0, 0.0, A_RING_DISTANCE }, b3::BodyType.STATIC);
+
+    RingVelocities ring;
+    if (catch world.explode(a_blast_of(impulse_per_area))) return ring;
+
+    return {
+      .the_blast_was_accepted = true,
+      .east = east.linear_velocity(),
+      .west = west.linear_velocity(),
+      .north = north.linear_velocity(),
+      .south = south.linear_velocity(),
+      .static_position = standing.position(),
+      .the_static_body_stayed_still = stands_still(standing.linear_velocity()),
+    };
+}
+
+fn void an_explosion_throws_the_dynamic_ring_outward_and_leaves_the_static_body_standing() @test {
+    RingVelocities ring = the_ring_under(AN_IMPULSE_PER_AREA);
+    assert(ring.the_blast_was_accepted, "the blast the ring is read under was accepted");
+
+    assert(thrown_along(ring.east, { 1.0, 0.0, 0.0 }),
+        "the sphere standing out along x is thrown further out along x, and nowhere across it");
+    assert(thrown_along(ring.west, { -1.0, 0.0, 0.0 }),
+        "and the one behind the blast on that axis away from it the other way");
+    assert(thrown_along(ring.north, { 0.0, 1.0, 0.0 }),
+        "the sphere out along y likewise along y");
+    assert(thrown_along(ring.south, { 0.0, -1.0, 0.0 }),
+        "and its opposite the other way, each of the four named its own direction");
+
+    assert(math::abs(ring.static_position.z - A_RING_DISTANCE) < 0.0001f
+        && math::abs(ring.static_position.x) < 0.0001f
+        && math::abs(ring.static_position.y) < 0.0001f,
+        "the static sphere stands as far from the blast as the four it was read beside");
+    assert(ring.the_static_body_stayed_still,
+        "and takes nothing from it: the explosion queries the dynamic tree and neither of the others");
+}
+
+fn void a_negative_impulse_per_area_pulls_the_ring_inward_instead() @test {
+    RingVelocities ring = the_ring_under(-AN_IMPULSE_PER_AREA);
+    assert(ring.the_blast_was_accepted,
+        "a negative impulse per area is the implosion box3d documents, not a definition to refuse");
+
+    assert(thrown_along(ring.east, { -1.0, 0.0, 0.0 }),
+        "the sphere standing out along x is pulled back towards the blast");
+    assert(thrown_along(ring.west, { 1.0, 0.0, 0.0 }),
+        "and the one behind it on that axis forward towards the same place");
+    assert(thrown_along(ring.north, { 0.0, -1.0, 0.0 }),
+        "the sphere out along y likewise inward");
+    assert(thrown_along(ring.south, { 0.0, 1.0, 0.0 }),
+        "and its opposite inward the other way, the whole ring closing rather than opening");
+}
+
+// A sphere around the blast point itself and one out in the ring. The default definition's radius
+// reaches nothing, so the near sphere is the only body it could move at all, and its zero impulse is
+// then the only thing left holding that sphere still.
+fn DefaultBlastReadings the_readings_of_a_default_explosion() {
+    b3::WorldId world = a_world_without_gravity();
+    defer world.destroy();
+
+    b3::BodyId near = a_sphere_standing_at(world, { 0.0, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
+    b3::BodyId far = a_sphere_standing_at(world, { A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
+
+    DefaultBlastReadings readings;
+    if (catch world.explode(b3::default_explosion_def())) return readings;
+
+    readings.the_default_was_accepted = true;
+    readings.at_the_blast_point = near.linear_velocity();
+    readings.out_in_the_ring = far.linear_velocity();
+
+    near.set_linear_velocity({ 0.0, 0.0, 0.0 });
+    far.set_linear_velocity({ 0.0, 0.0, 0.0 });
+    world.explode(a_blast_of(AN_IMPULSE_PER_AREA))!!;
+
+    readings.at_the_blast_point_when_filled_in = near.linear_velocity();
+    readings.out_in_the_ring_when_filled_in = far.linear_velocity();
+    return readings;
+}
+
+fn void the_default_explosion_definition_moves_nothing() @test {
+    DefaultBlastReadings readings = the_readings_of_a_default_explosion();
+    assert(readings.the_default_was_accepted,
+        "the default definition is a definition box3d takes, not one this binding refuses");
+
+    assert(stands_still(readings.at_the_blast_point),
+        "the sphere around the blast point takes nothing from a default explosion");
+    assert(stands_still(readings.out_in_the_ring),
+        "and neither does the one out in the ring: radius, falloff and impulse all come back zero");
+
+    assert(thrown_along(readings.out_in_the_ring_when_filled_in, { 1.0, 0.0, 0.0 }),
+        "filling that same definition in throws the far sphere out along its own axis");
+    float near_speed = the_speed_of(readings.at_the_blast_point_when_filled_in);
+    assert(near_speed > A_SPEED_AT_THE_BLAST_POINT - A_SPEED_BAND
+        && near_speed < A_SPEED_AT_THE_BLAST_POINT + A_SPEED_BAND,
+        "and throws the near one at full strength, in a direction of box3d's own choosing");
+}
+
+// One world, one dynamic sphere in reach, and every definition box3d does no more than assert
+// against. The last two are the controls: an implosion and the default, neither of them asserted.
+fn BlastGuards the_definitions_an_explosion_is_refused_for() {
+    b3::WorldId world = a_world_without_gravity();
+    defer world.destroy();
+    a_sphere_standing_at(world, { A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
+
+    float infinity = (float)1.0e40;
+    float nan = infinity - infinity;
+
+    BlastGuards guards;
+    b3::ExplosionDef def = a_blast_of(AN_IMPULSE_PER_AREA);
+
+    def.radius = -A_BLAST_RADIUS;
+    if (catch err = world.explode(def)) guards.negative_radius = err;
+    def.radius = infinity;
+    if (catch err = world.explode(def)) guards.infinite_radius = err;
+    def.radius = nan;
+    if (catch err = world.explode(def)) guards.radius_not_a_number = err;
+
+    def = a_blast_of(AN_IMPULSE_PER_AREA);
+    def.falloff = -A_BLAST_FALLOFF;
+    if (catch err = world.explode(def)) guards.negative_falloff = err;
+    def.falloff = infinity;
+    if (catch err = world.explode(def)) guards.infinite_falloff = err;
+    def.falloff = nan;
+    if (catch err = world.explode(def)) guards.falloff_not_a_number = err;
+
+    def = a_blast_of(infinity);
+    if (catch err = world.explode(def)) guards.infinite_impulse = err;
+    def = a_blast_of(nan);
+    if (catch err = world.explode(def)) guards.impulse_not_a_number = err;
+
+    def = a_blast_of(AN_IMPULSE_PER_AREA);
+    def.position = { 0.0, 0.0, infinity };
+    if (catch err = world.explode(def)) guards.infinite_position = err;
+    def.position = { 0.0, nan, 0.0 };
+    if (catch err = world.explode(def)) guards.position_not_a_number = err;
+
+    if (catch err = world.explode(a_blast_of(-AN_IMPULSE_PER_AREA))) guards.negative_impulse = err;
+    if (catch err = world.explode(b3::default_explosion_def())) guards.the_default_definition = err;
+
+    return guards;
+}
+
+// box3d asserts a finite position, a finite non-negative radius and falloff, and a finite impulse
+// per area, and this build compiles all four assertions out. None of what gets past them is inert,
+// and each reading below is what the unguarded call did to a sphere two metres from the blast.
+fn void an_explosion_definition_box3d_would_assert_against_is_refused() @test {
+    BlastGuards guards = the_definitions_an_explosion_is_refused_for();
+    fault none;
+
+    assert(guards.negative_radius == b3::INVALID_DEFINITION,
+        "a negative radius explodes smaller rather than not at all");
+    assert(guards.infinite_radius == b3::INVALID_DEFINITION,
+        "an infinite one reaches every dynamic body in the world at full strength");
+    assert(guards.radius_not_a_number == b3::INVALID_DEFINITION,
+        "and a NaN radius explodes larger, the falloff ramp comparing false and standing aside");
+    assert(guards.negative_falloff == b3::INVALID_DEFINITION,
+        "a negative falloff culls every shape and does nothing at all");
+    assert(guards.infinite_falloff == b3::INVALID_DEFINITION,
+        "an infinite one divides its own ramp by itself and hands back a NaN velocity");
+    assert(guards.falloff_not_a_number == b3::INVALID_DEFINITION,
+        "and a NaN falloff explodes larger, as a NaN radius does");
+    assert(guards.infinite_impulse == b3::INVALID_DEFINITION,
+        "an infinite impulse per area sets an infinite velocity");
+    assert(guards.impulse_not_a_number == b3::INVALID_DEFINITION,
+        "and a NaN one poisons the velocity for the rest of the run, nothing later clearing it");
+    assert(guards.infinite_position == b3::INVALID_DEFINITION,
+        "a blast at an infinite position is beyond everything and does nothing");
+    assert(guards.position_not_a_number == b3::INVALID_DEFINITION,
+        "and a NaN position throws every dynamic body in the world at full strength, aimed at nothing");
+
+    assert(guards.negative_impulse == none,
+        "a negative impulse per area is the implosion box3d documents and stays accepted");
+    assert(guards.the_default_definition == none,
+        "and the default definition, whose zeroes are all valid, is accepted and moves nothing");
+}
+
+fn void an_explosion_allocates_nothing() @test {
+    int worlds_before = b3::world_count();
+    int bytes_before = b3::byte_count();
+
+    RingVelocities ring = the_ring_under(AN_IMPULSE_PER_AREA);
+    assert(ring.the_blast_was_accepted && thrown_along(ring.east, { 1.0, 0.0, 0.0 }),
+        "the explosion the byte count is read around ran and threw the ring");
+    assert(b3::world_count() == worlds_before && b3::byte_count() == bytes_before,
+        "and took nothing from box3d it did not give back: the impulse goes straight onto the bodies");
+}

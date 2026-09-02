@@ -77,7 +77,9 @@ struct SegmentDistanceResult {
 extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
 extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
 extern fn SegmentDistanceResult segment_distance(Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2) @cname("b3SegmentDistance");
+extern fn bool is_valid_float(float a) @cname("b3IsValidFloat");
 extern fn bool is_valid_vec3(Vec3 a) @cname("b3IsValidVec3");
+extern fn bool is_valid_position(Pos p) @cname("b3IsValidPosition");
 extern fn bool is_valid_quat(Quat q) @cname("b3IsValidQuat");
 extern fn bool is_valid_transform(Transform a) @cname("b3IsValidTransform");
 extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
@@ -269,6 +271,19 @@ struct ExplosionDef {
     float falloff;
     float impulse_per_area;
 }
+
+<*
+ Raw explosion. Private because WorldId.explode() refuses the definitions box3d does no more than
+ assert against, this release build compiling those assertions out.
+*>
+extern fn void world_explode_raw(WorldId world_id, ExplosionDef* def) @cname("b3World_Explode") @private;
+
+<*
+ An explosion definition that moves nothing: every mask bit set, the position at the origin, and
+ radius, falloff and impulse_per_area all zero. Unlike the package's other defaults it is a
+ starting point rather than a usable definition, so every field but the mask has to be filled in.
+*>
+extern fn ExplosionDef default_explosion_def() @cname("b3DefaultExplosionDef");
 
 enum BodyType : int {
     STATIC,

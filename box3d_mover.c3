@@ -52,3 +52,22 @@ fn BodyPlaneResult[] BodyId.collide_mover(
     );
     return buffer[:written];
 }
+
+<*
+ Applies the definition's radial impulse to every dynamic body with a shape in reach of the blast.
+
+ Static and kinematic bodies are never reached, only the dynamic tree being queried, and a locked
+ world is answered by doing nothing. A mesh shape on a dynamic body is worse than passed over:
+ box3d builds it a proxy of no points and reads the first one anyway, so a blast reaching one takes
+ the process down unless that shape's explosion_scale is zero.
+
+ @return "INVALID_DEFINITION when the position is not finite, when radius or falloff is negative or not finite, or when impulse_per_area is not finite — box3d asserts all four and this release build compiles those assertions out"
+*>
+fn void? WorldId.explode(self, ExplosionDef def) {
+    if (!is_valid_position(def.position)) return INVALID_DEFINITION~;
+    if (!is_valid_float(def.radius) || !(def.radius >= 0.0f)) return INVALID_DEFINITION~;
+    if (!is_valid_float(def.falloff) || !(def.falloff >= 0.0f)) return INVALID_DEFINITION~;
+    if (!is_valid_float(def.impulse_per_area)) return INVALID_DEFINITION~;
+
+    world_explode_raw(self, &def);
+}

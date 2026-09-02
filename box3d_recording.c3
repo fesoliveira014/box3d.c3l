@@ -16,7 +16,7 @@ fn char[] Recording.data(&self) {
  recording — and writes its header when it accepts, which is what the fault reads.
 
  @param recording : "the buffer to write into, which must outlive the session"
- @return "void, or NOT_A_RECORDING when the buffer holds nothing after the call; a reused buffer still holding an earlier session reads as accepted"
+ @return "void, or NOT_A_RECORDING when the buffer holds nothing after the call — so any buffer that is not empty when box3d refuses reads as accepted, including the one this world is already recording into and one just loaded from a file"
 *>
 fn void? WorldId.start_recording(self, Recording* recording) {
     if (recording == null) return NOT_A_RECORDING~;
@@ -51,7 +51,8 @@ fn Recording*? load_recording(ZString path) {
 <*
  Replays the bytes in a world of its own and checks every state hash they carry, which is what
  makes a recording a determinism test. It creates and destroys that world itself, leaving
- world_count() and byte_count() where it found them.
+ world_count() and byte_count() where it found them — but not the process-wide length unit, which
+ a buffer refused past its header leaves at the recording's value with both counters clean.
 
  @param worker_count : "the count it stands its replay world up with, which it hands to create_player()"
  @return "true when the replay reproduced every recorded hash — false covers both a divergence and bytes box3d could not read as a recording"
@@ -62,11 +63,12 @@ fn bool validate_replay(char[] data, int worker_count) {
 
 <*
  Stands up a replay of these bytes — see RecPlayer for the world it owns. box3d copies them, so
- the slice need not outlive the call. A live player also holds the process-wide length unit at the
- one its recording was made under, which destroy() gives back, and box3d prints on standard output
- the reason it refused a buffer.
+ the slice need not outlive the call, and it prints on standard output the reason it refused one.
+ A live player holds the process-wide length unit at the one its recording was made under, and
+ only a player that was built gives it back: a buffer refused past its header keeps it, silently,
+ with world_count() and byte_count() both correct.
 
- @param worker_count : "how many workers the replay world runs, clamped into box3d's worker range; a count other than the recorded one makes the replay a cross-thread determinism test"
+ @param worker_count : "how many workers the replay world runs, clamped into box3d's worker range; the recording does not carry the count it was produced at, so replaying under a different one is the caller's own cross-thread determinism test"
  @return "the player, or NOT_A_RECORDING when the bytes carry no header box3d will replay"
 *>
 fn RecPlayer*? create_player(char[] data, int worker_count) {

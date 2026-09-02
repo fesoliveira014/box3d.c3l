@@ -296,6 +296,7 @@ struct StartRefusals {
     bool the_refused_buffer_stayed_empty;
     bool a_restart_after_a_stop_was_taken;
     int the_first_session;
+    int the_second_session;
 }
 
 fn StartRefusals the_readings_around_a_refused_start() {
@@ -318,8 +319,49 @@ fn StartRefusals the_readings_around_a_refused_start() {
     refusals.the_first_session = first.data().len;
 
     refusals.a_restart_after_a_stop_was_taken = @ok(pair.world.start_recording(second));
+    pair.world.step(A_TIME_STEP, A_SUB_STEP_COUNT);
     pair.world.stop_recording();
+    refusals.the_second_session = second.data().len;
     return refusals;
+}
+
+struct BufferMoves {
+    bool the_session_moved_the_buffer;
+    bool the_slice_was_empty_before;
+    usz after_the_session;
+}
+
+// A capacity far under one session's bytes, so box3d must grow the buffer and hand back a different
+// pointer. The claim data() makes is that a slice taken before a recorded step does not survive it,
+// and only a buffer that actually grows can show that.
+fn BufferMoves the_readings_around_a_growing_buffer() {
+    b3::Recording* recording = b3::create_recording(128);
+    defer recording.destroy();
+
+    DroppedPair pair = a_pair_dropped_on_a_slab();
+    defer pair.world.destroy();
+
+    BufferMoves moved;
+    moved.the_slice_was_empty_before = recording.data().len == 0;
+    char* before = recording.data().ptr;
+
+    if (catch pair.world.start_recording(recording)) return moved;
+    for (int i = 0; i < 30; i++) pair.world.step(A_TIME_STEP, A_SUB_STEP_COUNT);
+    pair.world.stop_recording();
+
+    moved.the_session_moved_the_buffer = recording.data().ptr != before;
+    moved.after_the_session = recording.data().len;
+    return moved;
+}
+
+fn void a_recorded_step_moves_the_buffer_out_from_under_an_older_slice() @test {
+    BufferMoves moved = the_readings_around_a_growing_buffer();
+
+    assert(moved.the_slice_was_empty_before, "a recording no session has written to hands back no bytes");
+    assert(moved.after_the_session > 1000 && moved.after_the_session < 100000,
+        "where one that recorded thirty steps hands back the bytes they took");
+    assert(moved.the_session_moved_the_buffer,
+        "and grew past its own capacity to hold them, so the pointer an earlier slice held is gone");
 }
 
 fn void a_world_that_is_already_recording_refuses_a_second_buffer() @test {
@@ -328,8 +370,11 @@ fn void a_world_that_is_already_recording_refuses_a_second_buffer() @test {
     assert(refusals.a_null_recording == b3::NOT_A_RECORDING, "box3d takes no recording from a null pointer");
     assert(refusals.while_already_recording == b3::NOT_A_RECORDING, "nor a second buffer while a session is open");
     assert(refusals.the_refused_buffer_stayed_empty, "the buffer it refused is the empty one it never wrote a header into");
-    assert(refusals.the_first_session > 1000, "the open session went on writing into the buffer it did take");
+    assert(refusals.the_first_session > 1000 && refusals.the_first_session < 100000,
+        "the open session went on writing into the buffer it did take");
     assert(refusals.a_restart_after_a_stop_was_taken, "and the same world takes that buffer once the session is stopped");
+    assert(refusals.the_second_session > 1000 && refusals.the_second_session < 100000,
+        "which then fills, so the refusal was the open session and not anything about that buffer");
 }
 
 struct PlayerLifetime {
@@ -338,6 +383,7 @@ struct PlayerLifetime {
     int worlds_after;
     int baseline;
     int after;
+    float unit_the_caller_had;
     float unit_before;
     float unit_with_a_player;
     float unit_after;
@@ -359,6 +405,7 @@ fn PlayerLifetime the_readings_around_a_live_player() {
 
     around.baseline = b3::byte_count();
     around.worlds_before = b3::world_count();
+    around.unit_the_caller_had = b3::length_units_per_meter();
     b3::set_length_units_per_meter(3.0);
     around.unit_before = b3::length_units_per_meter();
 
@@ -372,7 +419,7 @@ fn PlayerLifetime the_readings_around_a_live_player() {
     player.destroy();
 
     around.unit_after = b3::length_units_per_meter();
-    b3::set_length_units_per_meter(1.0);
+    b3::set_length_units_per_meter(around.unit_the_caller_had);
     around.worlds_after = b3::world_count();
     around.after = b3::byte_count();
     return around;

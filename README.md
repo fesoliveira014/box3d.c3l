@@ -6,11 +6,12 @@ library written in C17.
 Status: most of the API surface is bound. Worlds and bodies, every shape kind — sphere, capsule,
 convex hull, mesh, height field and baked compound — the world's event arrays with the pre-solve
 and custom-filter callbacks, the ray casts, shape casts, overlap queries and contact data, all nine
-joint types, the dynamic tree, and the standalone geometry, distance and manifold functions that
-answer about shapes with no world in play. The character mover, explosions, debug draw, and
-recording and replay follow. Rather than trust this paragraph, derive the remainder: every bound
-symbol is a `@cname` in `box3d.c3i`, and every available one is a `B3_API` in
-`vendor/box3d/include/box3d/*.h`.
+joint types, the dynamic tree, the character mover and explosions, and the standalone geometry,
+distance and manifold functions that answer about shapes with no world in play. Debug draw with
+recording and replay follows, along with a tail of math and validity singles, the tree's two
+traversals, and the world's two contact callbacks. Rather than trust this paragraph, derive the
+remainder: every bound symbol is a `@cname` in `box3d.c3i`, and every available one is a `B3_API`
+in `vendor/box3d/include/box3d/*.h`.
 
 ## Using it
 
@@ -61,7 +62,7 @@ receiver already at hand becomes a method rather than a free function: `world.cr
 method on the world, not `create_body(world, def)`, because the world already exists at the call
 site; `create_world` stays free because there is no world yet to own that call.
 Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
-sentinel. `create_world`, `world.create_body`, and the four shape constructors
+sentinel. `create_world`, `world.create_body`, and the seven shape constructors
 (`body.create_sphere_shape` and friends) in particular validate that their definition came from the
 matching `default_*_def()` before calling into box3d — a behaviour they have that calling C directly
 does not, since a release build of box3d compiles out its own check for this and would otherwise

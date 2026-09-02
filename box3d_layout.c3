@@ -332,6 +332,11 @@ $assert BodyCastResult::members[4].offset == 36 && BodyCastResult::members[4].na
 $assert BodyCastResult::members[5].offset == 40 && BodyCastResult::members[5].name == "user_material_id";
 $assert BodyCastResult::members[6].offset == 48 && BodyCastResult::members[6].name == "iterations";
 $assert BodyCastResult::members[7].offset == 52 && BodyCastResult::members[7].name == "hit";
+$assert BoxCastInput::size == 40;
+$assert BoxCastInput::alignment == 4;
+$assert BoxCastInput::members[0].offset == 0 && BoxCastInput::members[0].name == "box";
+$assert BoxCastInput::members[1].offset == 24 && BoxCastInput::members[1].name == "translation";
+$assert BoxCastInput::members[2].offset == 36 && BoxCastInput::members[2].name == "max_fraction";
 $assert TreeStats::size == 8;
 $assert TreeStats::alignment == 4;
 $assert TreeStats::members[0].offset == 0 && TreeStats::members[0].name == "node_visits";

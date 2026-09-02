@@ -52,6 +52,7 @@ b3ShapeCastInput 40 8 proxy=0 translation=16 maxFraction=28 canEncroach=32
 b3CastOutput 48 4 normal=0 point=12 fraction=24 iterations=28 triangleIndex=32 childIndex=36 materialIndex=40 hit=44
 b3WorldCastOutput 48 4
 b3BodyCastResult 56 8 shapeId=0 point=8 normal=20 fraction=32 triangleIndex=36 userMaterialId=40 iterations=48 hit=52
+b3BoxCastInput 40 4 box=0 translation=24 maxFraction=36
 b3TreeStats 8 4 nodeVisits=0 leafVisits=4
 b3ContactData 48 8 contactId=0 shapeIdA=12 shapeIdB=20 manifolds=32 manifoldCount=40
 b3ManifoldPoint 56 4 anchorA=0 anchorB=12 separation=24 baseSeparation=28 normalImpulse=32 totalNormalImpulse=36 normalVelocity=40 featureId=44 triangleIndex=48 persisted=52

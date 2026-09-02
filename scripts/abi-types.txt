@@ -52,6 +52,7 @@ b3ShapeCastInput proxy,translation,maxFraction,canEncroach
 b3CastOutput normal,point,fraction,iterations,triangleIndex,childIndex,materialIndex,hit
 b3WorldCastOutput
 b3BodyCastResult shapeId,point,normal,fraction,triangleIndex,userMaterialId,iterations,hit
+b3BoxCastInput box,translation,maxFraction
 b3TreeStats nodeVisits,leafVisits
 b3ContactData contactId,shapeIdA,shapeIdB,manifolds,manifoldCount
 b3ManifoldPoint anchorA,anchorB,separation,baseSeparation,normalImpulse,totalNormalImpulse,normalVelocity,featureId,triangleIndex,persisted

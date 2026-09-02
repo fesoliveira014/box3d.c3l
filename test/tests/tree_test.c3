@@ -1130,3 +1130,487 @@ fn void a_closest_query_filters_on_the_mask_and_searches_from_the_point_it_was_g
     assert(hits_carry_exactly_ulongs(readings.near_the_far_end, (ulong[]){ 6, 5 }),
         "the two at the far end, which a query from the origin would never offer");
 }
+
+struct CastVisits {
+    ulong[8] user_data;
+    float[8] bound_seen;
+    int[8] proxy_id;
+    usz count;
+    // The bound to answer with, where 0 means "hand back the one offered" and so continues
+    // unclipped; stop is separate because 0 is also box3d's own value for ending the traversal.
+    float clip_to;
+    bool stop;
+}
+
+fn float answer_the_cast(float offered_bound, int proxy_id, ulong user_data, CastVisits* visits) {
+    if (visits.count < 8) {
+        visits.user_data[visits.count] = user_data;
+        visits.bound_seen[visits.count] = offered_bound;
+        visits.proxy_id[visits.count] = proxy_id;
+    }
+    visits.count++;
+    if (visits.stop) return 0.0f;
+    return visits.clip_to == 0.0f ? offered_bound : visits.clip_to;
+}
+
+fn float visit_ray_proxy(b3::RayCastInput* input, int proxy_id, ulong user_data, void* context) {
+    return answer_the_cast(
+      offered_bound: input.max_fraction,
+      proxy_id: proxy_id,
+      user_data: user_data,
+      visits: (CastVisits*)context,
+    );
+}
+
+fn float visit_box_proxy(b3::BoxCastInput* input, int proxy_id, ulong user_data, void* context) {
+    return answer_the_cast(
+      offered_bound: input.max_fraction,
+      proxy_id: proxy_id,
+      user_data: user_data,
+      visits: (CastVisits*)context,
+    );
+}
+
+fn bool casts_carry_exactly(CastVisits visits, ulong[] expected) {
+    if (visits.count != expected.len) return false;
+    foreach (want : expected) {
+        bool found = false;
+        for (usz i = 0; i < visits.count; i++) {
+            if (visits.user_data[i] == want) found = true;
+        }
+        if (!found) return false;
+    }
+    return true;
+}
+
+// Three unit cubes climbing in x and y together, so a cast along x alone meets one of them and a
+// cast along the diagonal meets all three. Nothing here is symmetric about an axis: swapping two
+// of the three coordinates moves every box.
+fn void fill_with_three_stepped_proxies(b3::DynamicTree* tree) {
+    float[3] centre_x = { 0.0, 2.0, 4.0 };
+    float[3] centre_y = { 0.0, 1.0, 2.0 };
+    for (int i = 0; i < 3; i++) {
+        tree.create_proxy(
+          aabb: (b3::Aabb){
+            .lower_bound = { centre_x[i] - 0.5f, centre_y[i] - 0.5f, -0.5 },
+            .upper_bound = { centre_x[i] + 0.5f, centre_y[i] + 0.5f, 0.5 },
+          },
+          category_bits: 1ul << i,
+          user_data: (ulong)(0x11 * (i + 1)),
+        )!!;
+    }
+}
+
+fn b3::RayCastInput the_diagonal_ray(float max_fraction) {
+    return {
+        .origin = { -2.0, -1.0, 0.0 },
+        .translation = { 12.0, 6.0, 0.0 },
+        .max_fraction = max_fraction,
+    };
+}
+
+fn b3::RayCastInput the_ray_along_x(float height) {
+    return {
+        .origin = { -2.0, height, 0.0 },
+        .translation = { 12.0, 0.0, 0.0 },
+        .max_fraction = 1.0,
+    };
+}
+
+fn b3::BoxCastInput the_diagonal_box_cast(float max_fraction) {
+    return {
+        .box = {
+            .lower_bound = { -2.25, -1.25, -0.25 },
+            .upper_bound = { -1.75, -0.75, 0.25 },
+        },
+        .translation = { 12.0, 6.0, 0.0 },
+        .max_fraction = max_fraction,
+    };
+}
+
+struct RayCastReadings {
+    CastVisits diagonal;
+    CastVisits along_x;
+    CastVisits along_x_at_one;
+    CastVisits along_x_at_two;
+    CastVisits masked;
+    CastVisits strict;
+    CastVisits empty_tree;
+    b3::TreeStats diagonal_stats;
+    b3::TreeStats along_x_stats;
+    b3::TreeStats empty_stats;
+}
+
+fn RayCastReadings the_ray_cast_readings_of_three_proxies() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+    fill_with_three_stepped_proxies(&tree);
+
+    b3::DynamicTree empty = b3::create_tree(16);
+    defer empty.destroy();
+
+    b3::RayCastInput diagonal = the_diagonal_ray(1.0f);
+    b3::RayCastInput along_x = the_ray_along_x(0.0f);
+    b3::RayCastInput along_x_at_one = the_ray_along_x(1.0f);
+    b3::RayCastInput along_x_at_two = the_ray_along_x(2.0f);
+
+    RayCastReadings read;
+    read.diagonal_stats = tree.ray_cast(
+      input: &diagonal,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.diagonal,
+    );
+    read.along_x_stats = tree.ray_cast(
+      input: &along_x,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.along_x,
+    );
+    tree.ray_cast(
+      input: &along_x_at_one,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.along_x_at_one,
+    );
+    tree.ray_cast(
+      input: &along_x_at_two,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.along_x_at_two,
+    );
+    tree.ray_cast(
+      input: &diagonal,
+      mask_bits: 1,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.masked,
+    );
+    tree.ray_cast(
+      input: &diagonal,
+      mask_bits: 0b011,
+      require_all_bits: true,
+      fcn: &visit_ray_proxy,
+      context: &read.strict,
+    );
+    read.empty_stats = empty.ray_cast(
+      input: &diagonal,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.empty_tree,
+    );
+
+    return read;
+}
+
+// The user data is what is asserted rather than the count, because a count alone passes for a
+// traversal that answered with the wrong proxies. The ray along x is the same tree read a second
+// way: it crosses one box of the three, so a traversal reporting everything cannot pass either.
+fn void a_ray_cast_reports_every_proxy_whose_box_it_crosses() @test {
+    RayCastReadings read = the_ray_cast_readings_of_three_proxies();
+
+    assert(read.diagonal.count == 3, "the diagonal ray crosses all three boxes");
+    assert(casts_carry_exactly(read.diagonal, (ulong[]){ 0x11, 0x22, 0x33 }),
+        "each carrying the user data its own proxy was created with");
+    assert(read.diagonal_stats.leaf_visits == 3, "which box3d counts as three leaf visits");
+    assert(read.diagonal_stats.node_visits == 5, "over the five nodes joining them");
+
+    assert(read.along_x.count == 1, "while a ray along x alone crosses one box of the three");
+    assert(casts_carry_exactly(read.along_x, (ulong[]){ 0x11 }), "the one on the line it runs along");
+    assert(read.along_x_stats.leaf_visits == 1);
+    assert(read.along_x_at_one.count == 1, "the same ray a metre higher crosses one box as well");
+    assert(casts_carry_exactly(read.along_x_at_one, (ulong[]){ 0x22 }), "and it is a different one");
+    assert(read.along_x_at_two.count == 1, "and a metre higher again, one more");
+    assert(casts_carry_exactly(read.along_x_at_two, (ulong[]){ 0x33 }), "so the count says nothing about which");
+
+    assert(read.empty_tree.count == 0, "a tree holding no proxy calls nothing");
+    assert(read.empty_stats.node_visits == 0, "and visits no node at all, where the filled tree visited five");
+}
+
+// The mask flags are the ones query() states, read here through a cast: each proxy carries a
+// single category bit, so any bit in common names exactly the one proxy the mask does, while
+// demanding every bit of a two-bit mask names none.
+fn void a_ray_cast_mask_narrows_three_proxies_to_one_and_then_to_none() @test {
+    RayCastReadings read = the_ray_cast_readings_of_three_proxies();
+
+    assert(read.masked.count == 1, "one proxy carries the single bit the mask names");
+    assert(casts_carry_exactly(read.masked, (ulong[]){ 0x11 }), "and it is the one created with that bit");
+    assert(read.diagonal.count == 3, "where the same ray unmasked reaches all three");
+    assert(read.strict.count == 0, "and none of them carries both bits of a two-bit mask");
+}
+
+// Proxy ids are node indices, and internal nodes take slots from the same pool, so the ids a
+// traversal reports are not a numbering of the proxies: three proxies do not give 0, 1, 2.
+fn void the_proxy_ids_a_cast_reports_are_node_indices() @test {
+    RayCastReadings read = the_ray_cast_readings_of_three_proxies();
+
+    assert(read.diagonal.count == 3, "all three proxies were reported");
+    int[3] ids = { read.diagonal.proxy_id[0], read.diagonal.proxy_id[1], read.diagonal.proxy_id[2] };
+    assert(ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2], "each naming a different node");
+    int highest = ids[0];
+    foreach (id : ids) {
+        if (id > highest) highest = id;
+    }
+    assert(highest >= 3, "and the highest is past the last slot three contiguous ids would occupy");
+}
+
+struct CastAnswerReadings {
+    CastVisits ray_unclipped;
+    CastVisits ray_clipped;
+    CastVisits ray_stopped;
+    CastVisits ray_negative;
+    CastVisits ray_bounded;
+    CastVisits box_clipped;
+    CastVisits box_stopped;
+    b3::TreeStats ray_stopped_stats;
+}
+
+fn CastAnswerReadings the_readings_of_five_callback_answers() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+    fill_with_three_stepped_proxies(&tree);
+
+    b3::RayCastInput diagonal = the_diagonal_ray(1.0f);
+    b3::RayCastInput half_way = the_diagonal_ray(0.5f);
+    b3::BoxCastInput box = the_diagonal_box_cast(1.0f);
+
+    CastAnswerReadings read;
+    read.ray_clipped.clip_to = 0.3f;
+    read.ray_stopped.stop = true;
+    read.ray_negative.clip_to = -1.0f;
+    read.box_clipped.clip_to = 0.3f;
+    read.box_stopped.stop = true;
+
+    tree.ray_cast(
+
+      input: &diagonal,
+
+      mask_bits: ulong::max,
+
+      require_all_bits: false,
+
+      fcn: &visit_ray_proxy,
+
+      context: &read.ray_unclipped,
+
+    );
+    tree.ray_cast(
+      input: &diagonal,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.ray_clipped,
+    );
+    read.ray_stopped_stats = tree.ray_cast(
+      input: &diagonal,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.ray_stopped,
+    );
+    tree.ray_cast(
+      input: &diagonal,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.ray_negative,
+    );
+    tree.ray_cast(
+      input: &half_way,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_ray_proxy,
+      context: &read.ray_bounded,
+    );
+    tree.box_cast(
+      input: &box,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.box_clipped,
+    );
+    tree.box_cast(
+      input: &box,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.box_stopped,
+    );
+
+    return read;
+}
+
+// The same tree and the same ray answer all four, so the only difference is what the callback
+// returned. The bound offered to the second call is what shows the clip took: a count alone would
+// pass for a traversal that reached two proxies for its own reasons.
+fn void a_cast_callback_clips_the_traversal_or_ends_it() @test {
+    CastAnswerReadings read = the_readings_of_five_callback_answers();
+
+    assert(read.ray_unclipped.count == 3, "answering with the bound it was offered clips nothing");
+    assert(read.ray_unclipped.bound_seen[0] == 1.0f, "so every call is offered the ray's own fraction");
+    assert(read.ray_unclipped.bound_seen[2] == 1.0f);
+
+    assert(read.ray_clipped.count == 2, "answering 0.3 puts the third proxy past the end of the ray");
+    assert(read.ray_clipped.bound_seen[0] == 1.0f, "the first call is still offered the ray's own fraction");
+    assert(read.ray_clipped.bound_seen[1] == 0.3f, "and the next is offered the one the callback set");
+
+    assert(read.ray_stopped.count == 1, "answering 0 ends the traversal there");
+    assert(read.ray_stopped_stats.leaf_visits == 1, "which box3d counts as the one leaf it reached");
+    assert(read.ray_stopped_stats.node_visits == 2, "over the two nodes it descended through");
+
+    assert(read.ray_negative.count == 3, "a negative answer neither clips nor ends anything");
+    assert(read.ray_negative.bound_seen[2] == 1.0f, "leaving the last call the ray's own fraction");
+}
+
+// The bound the callback is offered starts as the input's own max_fraction rather than at 1, and
+// the box cast answers the callback on the same terms the ray cast does.
+fn void a_cast_offers_the_callback_the_fraction_its_input_carried() @test {
+    CastAnswerReadings read = the_readings_of_five_callback_answers();
+
+    assert(read.ray_bounded.count == 3, "half the diagonal still reaches every box on it");
+    assert(read.ray_bounded.bound_seen[0] == 0.5f, "and each call is offered the input's fraction, not 1");
+    assert(read.ray_bounded.bound_seen[2] == 0.5f);
+
+    assert(read.box_clipped.count == 2, "a swept box clips on 0.3 as the ray does");
+    assert(read.box_clipped.bound_seen[1] == 0.3f, "offering the next call the bound the callback set");
+    assert(read.box_stopped.count == 1, "and ends on 0 as the ray does");
+}
+
+struct BoxCastReadings {
+    CastVisits diagonal;
+    CastVisits thin_along_x;
+    CastVisits thin_along_x_at_two;
+    CastVisits wide_along_x;
+    CastVisits wider_along_x;
+    CastVisits lifted_along_x;
+    CastVisits lowered_along_x;
+    CastVisits masked;
+    b3::TreeStats diagonal_stats;
+}
+
+fn b3::BoxCastInput a_box_swept_along_x(float lower_y, float upper_y) {
+    return {
+        .box = {
+            .lower_bound = { -2.1, lower_y, -0.1 },
+            .upper_bound = { -1.9, upper_y, 0.1 },
+        },
+        .translation = { 12.0, 0.0, 0.0 },
+        .max_fraction = 1.0,
+    };
+}
+
+fn BoxCastReadings the_box_cast_readings_of_three_proxies() {
+    b3::DynamicTree tree = b3::create_tree(16);
+    defer tree.destroy();
+    fill_with_three_stepped_proxies(&tree);
+
+    b3::BoxCastInput diagonal = the_diagonal_box_cast(1.0f);
+    b3::BoxCastInput thin = a_box_swept_along_x(-0.1f, 0.1f);
+    b3::BoxCastInput thin_at_two = a_box_swept_along_x(1.9f, 2.1f);
+    b3::BoxCastInput wide = a_box_swept_along_x(-0.75f, 0.75f);
+    b3::BoxCastInput wider = a_box_swept_along_x(-1.75f, 1.75f);
+    b3::BoxCastInput lifted = a_box_swept_along_x(-0.1f, 1.4f);
+    b3::BoxCastInput lowered = a_box_swept_along_x(-1.6f, 0.1f);
+
+    BoxCastReadings read;
+    read.diagonal_stats = tree.box_cast(
+      input: &diagonal,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.diagonal,
+    );
+    tree.box_cast(
+      input: &thin,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.thin_along_x,
+    );
+    tree.box_cast(
+      input: &thin_at_two,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.thin_along_x_at_two,
+    );
+    tree.box_cast(
+      input: &wide,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.wide_along_x,
+    );
+    tree.box_cast(
+      input: &wider,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.wider_along_x,
+    );
+    tree.box_cast(
+      input: &lifted,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.lifted_along_x,
+    );
+    tree.box_cast(
+      input: &lowered,
+      mask_bits: ulong::max,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.lowered_along_x,
+    );
+    tree.box_cast(
+      input: &diagonal,
+      mask_bits: 1,
+      require_all_bits: false,
+      fcn: &visit_box_proxy,
+      context: &read.masked,
+    );
+
+    return read;
+}
+
+// The swept box reaches every proxy the diagonal ray does, and the mask narrows it the same way.
+// The three boxes swept along x differ only in how tall they are, so what they reach is the
+// widening and nothing else.
+fn void a_swept_box_reports_the_proxies_it_reaches_and_widens_by_its_own_extents() @test {
+    BoxCastReadings read = the_box_cast_readings_of_three_proxies();
+
+    assert(read.diagonal.count == 3, "the diagonal sweep reaches all three boxes");
+    assert(casts_carry_exactly(read.diagonal, (ulong[]){ 0x11, 0x22, 0x33 }),
+        "each carrying the user data its own proxy was created with");
+    assert(read.diagonal_stats.leaf_visits == 3, "which box3d counts as three leaf visits");
+
+    assert(read.thin_along_x.count == 1, "a thin box swept along x reaches only the proxy on that line");
+    assert(casts_carry_exactly(read.thin_along_x, (ulong[]){ 0x11 }));
+    assert(read.thin_along_x_at_two.count == 1, "the same box two metres up reaches one proxy as well");
+    assert(casts_carry_exactly(read.thin_along_x_at_two, (ulong[]){ 0x33 }), "and it is the proxy two metres up");
+    assert(read.wide_along_x.count == 2, "growing it half a metre taller brings in the one a metre above");
+    assert(casts_carry_exactly(read.wide_along_x, (ulong[]){ 0x11, 0x22 }));
+    assert(read.wider_along_x.count == 3, "and a metre taller again brings in the one two metres above");
+
+    assert(read.masked.count == 1, "a single-bit mask narrows the sweep as it narrows a ray");
+    assert(casts_carry_exactly(read.masked, (ulong[]){ 0x11 }), "to the proxy created with that bit");
+}
+
+// What travels is the box's centre, not one of its faces: lifted to a centre of 0.65 it keeps the
+// proxy at y = 0 and misses the one at y = 2, and lowered to -0.75 it keeps that proxy alone. The
+// upper face would answer the first with the far pair, the lower face the second with nothing.
+fn void a_swept_box_travels_on_its_centre() @test {
+    BoxCastReadings read = the_box_cast_readings_of_three_proxies();
+
+    assert(read.lifted_along_x.count == 2, "the lifted box reaches two of the three");
+    assert(casts_carry_exactly(read.lifted_along_x, (ulong[]){ 0x11, 0x22 }),
+        "the proxy its centre passes through and the one its half-extent reaches up to");
+    assert(read.lowered_along_x.count == 1, "and the lowered one reaches a single proxy");
+    assert(casts_carry_exactly(read.lowered_along_x, (ulong[]){ 0x11 }),
+        "which is the same proxy, reached from below by the same half-extent");
+}

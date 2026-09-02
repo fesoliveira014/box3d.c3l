@@ -2294,9 +2294,9 @@ extern fn ToiOutput time_of_impact_raw(ToiInput* input) @cname("b3TimeOfImpact")
 <*
  The plane between a mover and one shape it touches. offset is how far the mover's surface reaches
  past the shape's, and point sits on the shape's core rather than its surface — the sphere's centre,
- the capsule's segment, the hull's own face. The normal points out of the shape towards the mover,
- except where the mover's core has closed within a linear slop of a sphere or capsule: box3d then
- substitutes a perpendicular of the mover's axis, and the direction means nothing.
+ the capsule's segment, the hull's own face. The normal points out of the shape towards the mover
+ unless the mover's core has closed within a linear slop of that same core, when box3d substitutes
+ a perpendicular of the mover's axis and the direction means nothing.
 *>
 struct PlaneResult {
     Plane plane;
@@ -2353,11 +2353,11 @@ alias PlaneResultFn = fn bool(ShapeId shape_id, PlaneResult* planes, int plane_c
 alias MoverFilterFn = fn bool(ShapeId shape_id, void* context);
 
 <*
- Collides a capsule mover with the world, calling fcn once per shape it touches; fcn is required and
- the planes are relative to origin. Static, kinematic and dynamic shapes all report. A sphere,
- capsule or hull gives one plane, a mesh or compound up to 64, past which it is cut in silence. A
- hull or triangle stops reporting once the mover's core reaches its surface, deep overlap being
- unhandled there, so a mover sunk past its own radius has nothing to solve on. A locked world: none.
+ Collides a capsule mover with the world, calling fcn once per shape it touches, static through
+ dynamic; fcn is required and the planes are relative to origin. A sphere, capsule or hull gives
+ one plane, a mesh, height field or compound up to 64, cut silently past that. A hull or triangle
+ stops reporting once the mover's core reaches its surface, so a mover sunk past its own radius has
+ nothing to solve on. A locked world, or an origin past a compiled-out assertion, gives none.
 *>
 extern fn void WorldId.collide_mover(
   self,

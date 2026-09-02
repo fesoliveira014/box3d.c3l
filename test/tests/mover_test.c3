@@ -944,8 +944,8 @@ struct RingVelocities {
 // with a radius and an impulse in it.
 struct DefaultBlastReadings {
     bool the_default_was_accepted;
-    b3::Vec3 at_the_blast_point;
-    b3::Vec3 out_in_the_ring;
+    bool nothing_moved_at_the_blast_point;
+    bool nothing_moved_out_in_the_ring;
     b3::Vec3 at_the_blast_point_when_filled_in;
     b3::Vec3 out_in_the_ring_when_filled_in;
 }
@@ -1088,8 +1088,8 @@ fn DefaultBlastReadings the_readings_of_a_default_explosion() {
     if (catch world.explode(b3::default_explosion_def())) return readings;
 
     readings.the_default_was_accepted = true;
-    readings.at_the_blast_point = near.linear_velocity();
-    readings.out_in_the_ring = far.linear_velocity();
+    readings.nothing_moved_at_the_blast_point = stands_still(near.linear_velocity());
+    readings.nothing_moved_out_in_the_ring = stands_still(far.linear_velocity());
 
     near.set_linear_velocity({ 0.0, 0.0, 0.0 });
     far.set_linear_velocity({ 0.0, 0.0, 0.0 });
@@ -1105,9 +1105,9 @@ fn void the_default_explosion_definition_moves_nothing() @test {
     assert(readings.the_default_was_accepted,
         "the default definition is a definition box3d takes, not one this binding refuses");
 
-    assert(stands_still(readings.at_the_blast_point),
+    assert(readings.nothing_moved_at_the_blast_point,
         "the sphere around the blast point takes nothing from a default explosion");
-    assert(stands_still(readings.out_in_the_ring),
+    assert(readings.nothing_moved_out_in_the_ring,
         "and neither does the one out in the ring: radius, falloff and impulse all come back zero");
 
     assert(thrown_along(readings.out_in_the_ring_when_filled_in, { 1.0, 0.0, 0.0 }),

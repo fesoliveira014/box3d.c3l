@@ -4529,9 +4529,11 @@ struct RecQueryInfo {
 }
 
 <*
- One result of a recorded query. Only a cast records where its hit landed: an overlap records the
- shape alone, and point, normal and fraction then carry whatever the replay's shared hit scratch
- last held, which is neither zero nor stable.
+ One result of a recorded query. point, normal and fraction are written only by CAST_RAY,
+ CAST_SHAPE and CAST_RAY_CLOSEST; OVERLAP_AABB, OVERLAP_SHAPE and COLLIDE_MOVER record the shape
+ alone, and CAST_MOVER records no hit at all. On the six that write none of them, those three
+ fields carry whatever the replay's shared hit scratch last held — which is often zero, since a
+ grown scratch copies only what it held before.
 *>
 struct RecQueryHit {
     ShapeId shape;
@@ -4587,8 +4589,9 @@ extern fn bool RecPlayer.is_at_end(&self) @cname("b3RecPlayer_IsAtEnd");
 extern fn bool RecPlayer.is_at_pre_step(&self) @cname("b3RecPlayer_IsAtPreStep");
 
 <*
- True once a replayed frame failed to reproduce a recorded state hash, which is what makes a
- recording a determinism test. restart() clears it, and diverge_frame() names the frame.
+ True once a replayed frame failed to reproduce the recording — a state hash that did not match,
+ or any re-issued query that answered differently. restart() clears it, diverge_frame() names the
+ frame, and box3d's own header names only the hash.
 *>
 extern fn bool RecPlayer.has_diverged(&self) @cname("b3RecPlayer_HasDiverged");
 
@@ -4633,10 +4636,11 @@ extern fn int RecPlayer.body_count(&self) @cname("b3RecPlayer_GetBodyCount");
 extern fn BodyId body_id_raw(RecPlayer* player, int index) @cname("b3RecPlayer_GetBodyId") @private;
 
 <*
- Wires a renderer's per-shape callbacks into the replay world. box3d reaches them from a draw of
- that world and from nowhere else, so replaying alone calls neither. It stands a new world up and
- rewinds to frame 0, which is why it belongs immediately after create_player() — read world_id()
- again afterwards.
+ Wires a renderer's per-shape callbacks into the replay world, which box3d reaches from a draw of
+ that world and nowhere else, so replaying alone calls neither. It stands a new world up and
+ rewinds to frame 0 — so it belongs immediately after create_player(), every id from the old world
+ still reads valid, and the pre-step pause and the frame's recorded queries survive the rewind
+ where the divergence latch and end flag do not.
 *>
 extern fn void RecPlayer.set_debug_shape_callbacks(
   &self,
@@ -4647,7 +4651,8 @@ extern fn void RecPlayer.set_debug_shape_callbacks(
 
 <*
  How many spatial queries the last replayed frame re-issued. A query is recorded ahead of the step
- it precedes, so it belongs to the frame that step completes and every other frame reports none.
+ it precedes, so it belongs to the frame that step completes; every other frame reports none,
+ except after set_debug_shape_callbacks(), which rewinds without clearing this store.
 *>
 extern fn int RecPlayer.frame_query_count(&self) @cname("b3RecPlayer_GetFrameQueryCount");
 

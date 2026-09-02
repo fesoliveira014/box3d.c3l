@@ -859,6 +859,8 @@ fn void a_keyframe_policy_round_trips_and_drops_the_ring_it_replaces() @test {
 struct WorkerCounts {
     int at_the_open;
     int in_the_replay_world;
+    int asked_for_at_the_open;
+    int stood_up_at_the_open;
     int above_the_ceiling;
     int in_the_world_above_the_ceiling;
     int at_zero;
@@ -882,6 +884,13 @@ fn WorkerCounts the_readings_around_a_worker_count() {
     counts.at_the_open = player.info().worker_count;
     counts.in_the_replay_world = player.world_id().worker_count();
 
+    b3::RecPlayer*? unclamped = b3::create_player(recording.data(), 4 * b3::MAX_WORKERS);
+    if (try unclamped) {
+        counts.asked_for_at_the_open = unclamped.info().worker_count;
+        counts.stood_up_at_the_open = unclamped.world_id().worker_count();
+        unclamped.destroy();
+    }
+
     player.set_worker_count(4 * b3::MAX_WORKERS);
     counts.above_the_ceiling = player.info().worker_count;
     counts.in_the_world_above_the_ceiling = player.world_id().worker_count();
@@ -902,6 +911,9 @@ fn void a_worker_count_outside_the_range_is_clamped_rather_than_refused() @test 
 
     assert(counts.at_the_open == 1 && counts.in_the_replay_world == 1,
         "a player opens at the count it was created with, and stands its world up on it");
+    assert(counts.asked_for_at_the_open == 4 * b3::MAX_WORKERS
+        && counts.stood_up_at_the_open == b3::MAX_WORKERS,
+        "but info() reports the count that was asked for, where only the world it drives is clamped");
     assert(counts.above_the_ceiling == b3::MAX_WORKERS
         && counts.in_the_world_above_the_ceiling == b3::MAX_WORKERS,
         "a count above the ceiling lands on it, in the player and in the world it drives");

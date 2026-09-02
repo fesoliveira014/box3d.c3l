@@ -653,7 +653,7 @@ fn void a_swept_probe_touches_a_sphere_before_a_ray_reaches_it() @test {
     assert(both.ray.hit && both.swept.hit, "the ray and the probe both find the sphere");
     assert(math::abs(both.ray.fraction - (3.0f - 0.5f) / 6.0f) < 0.00001, "the ray runs to the surface itself");
     assert(both.swept.fraction > touch, "the probe stops a radius earlier");
-    assert(both.swept.fraction < touch + 2.0f * a_linear_slop() / 6.0f, "and short of even that by a linear slop");
+    assert(both.swept.fraction < touch + 2.0f * a_linear_slop() / 6.0f, "and past it by no more than a linear slop");
     assert(math::abs(both.swept.point.y - 0.5f) < 0.00001, "touching the top of the sphere");
     assert(math::abs(both.swept.normal.y - 1.0f) < 0.00001, "along the normal there");
 
@@ -1036,9 +1036,9 @@ fn ProxyRefusals the_proxies_the_casts_refuse() {
     return refusals;
 }
 
-// box3d answers a proxy of no points with a hit at fraction zero and truncates one past its ceiling
-// without saying so, which is the same inversion the mesh ray cast's fraction guard exists for: a
-// miss arriving as a success is the answer no caller can test for.
+// box3d reads a proxy of no points as though it held its first point, and truncates one past its
+// ceiling in silence, so both answer plausibly about geometry the caller never named — the same
+// inversion the mesh ray cast's fraction guard exists for.
 fn void a_shape_cast_refuses_a_proxy_box3d_would_answer_wrongly() @test {
     ProxyRefusals refused = the_proxies_the_casts_refuse();
 

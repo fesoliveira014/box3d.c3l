@@ -119,7 +119,7 @@ fn CastOutput? HeightFieldData.ray_cast(&self, RayCastInput input) {
  translation at which the two first touch.
 
  The sphere lends its radius to the proxy's, and box3d closes on that sum less one linear slop, so
- the fraction arrives a slop short of true contact. A proxy that begins in contact reports
+ the fraction arrives a slop past true contact, the two radii summing past two slops. A proxy that begins in contact reports
  fraction 0 with a zero normal, which a caller normalises into a NaN, unless can_encroach is set.
 
  @return "where the proxy first touches the sphere, NO_HIT when it never does, or INVALID_DEFINITION when the proxy carries no points"
@@ -135,7 +135,7 @@ fn CastOutput? Sphere.shape_cast(&self, ShapeCastInput input) {
  Sweeps the input's proxy at this capsule in the capsule's own frame, reporting the fraction of
  the translation at which the two first touch.
 
- The capsule lends its radius the way a sphere does, so the fraction is a slop short of contact
+ The capsule lends its radius the way a sphere does, so the fraction is a slop past contact
  and a proxy of radius zero still reaches can_encroach's window. A proxy that begins in contact
  reports fraction 0 with a zero normal unless that flag is set.
 
@@ -169,7 +169,7 @@ fn CastOutput? HullData.shape_cast(&self, ShapeCastInput input) {
  Sweeps the input's proxy at this compound in the compound's own frame, reporting the nearest
  child it reaches in child_index and that child's material in material_index.
 
- Each child lends whatever radius it carries, so the fraction stops short of that child exactly as
+ Each child lends whatever radius it carries, so the fraction sits off that child's contact as
  casting at it alone would. A max_fraction above 1 is safe here where it is not on a ray: a child
  is a sphere, a capsule, a hull or a mesh, and none of those four sweeps answers a miss with one.
 

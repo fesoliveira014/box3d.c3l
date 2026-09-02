@@ -73,7 +73,8 @@ fn BodyCastResult? BodyId.cast_ray(
 <*
  Sweeps a convex proxy at this body alone using a transform the caller supplies. The proxy's
  points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. The reported fraction stops one linear slop short of true contact, so an
+ MAX_SHAPE_CAST_POINTS. The reported fraction sits one linear slop either side of true contact —
+ see ShapeCastInput for which side — so an
  exact geometric expectation will not match.
 
  @param can_encroach : "allows the cast to start touching; meaningful only where the proxy and the shape carry about three linear slops of radius between them"
@@ -150,7 +151,7 @@ fn CastHit[] WorldId.cast_ray_all(
  Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
  buffer. The proxy's points are borrowed for the call and its count must not exceed
  MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions stop one linear
- slop short of true contact.
+ slop from true contact, on the side ShapeCastInput names.
 
  @return "the prefix of buffer that was filled"
 *>
@@ -195,7 +196,7 @@ fn ShapeId[] WorldId.overlap_aabb_all(self, Aabb aabb, QueryFilter filter, Shape
 <*
  Collects the shapes that overlap a convex proxy placed at origin. The proxy's points are
  borrowed for the call and its count must not exceed MAX_SHAPE_CAST_POINTS. Buffer behaviour
- matches cast_ray_all.
+ matches cast_ray_all, and a distant compound-shaped body is missed as it is in overlap_shape.
 
  @return "the prefix of buffer that was filled"
 *>

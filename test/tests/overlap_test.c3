@@ -347,8 +347,9 @@ fn OverlapRefusals the_proxies_the_predicates_refuse() {
     return refusals;
 }
 
-// A proxy of no points is answered true by the mesh and the height field and false by the other
-// four, so leaving it to box3d would make the predicate's answer depend on the kind it was put to.
+// A proxy of no points is read as its first point by four kinds, and answered by the mesh and the
+// height field from a stack buffer nothing wrote, so leaving it to box3d makes the answer depend
+// on the caller's own stray memory.
 fn void an_overlap_refuses_a_proxy_that_carries_no_points() @test {
     OverlapRefusals refused = the_proxies_the_predicates_refuse();
 
@@ -444,4 +445,13 @@ fn void asking_geometry_whether_a_probe_touches_it_allocates_nothing() @test {
     assert(around.before > around.baseline, "the geometry three of them are put to is built and live");
     assert(around.after == around.before, "and answering every one of them allocates nothing");
     assert(b3::byte_count() == around.baseline, "and that geometry gives back every byte it took");
+}
+
+fn void a_proxy_naming_no_array_is_refused() @test {
+    b3::Sphere ball = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
+    b3::Transform here = { .p = { 0.0, 0.0, 0.0 }, .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 } };
+    b3::ShapeProxy nothing = { .points = null, .count = 1, .radius = 0.1 };
+    fault refusal;
+    if (catch err = ball.overlaps(here, nothing)) refusal = err;
+    assert(refusal == b3::INVALID_DEFINITION, "a proxy naming no array is refused before box3d reads it");
 }

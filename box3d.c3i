@@ -1621,6 +1621,10 @@ extern fn BodyCastResult body_cast_shape_raw(
   WorldTransform body_transform,
 ) @cname("b3Body_CastShape") @private;
 
+<*
+ True when any shape on this body overlaps the proxy placed at origin. A compound shape on a body
+ far from origin is missed without a signal — see CompoundData.overlaps for why.
+*>
 extern fn bool BodyId.overlap_shape(
   self,
   Pos origin,
@@ -1679,8 +1683,11 @@ extern fn TreeStats WorldId.cast_ray(
 
 <*
  Sweeps a convex proxy instead of a point, calling fcn once per shape it reaches. The proxy's
- points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. Reported fractions stop one linear slop short of true contact.
+ points are borrowed for the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
+
+ box3d closes when the core separation reaches the two radii less one linear slop, or one slop
+ where they sum to less than two — so a pair carrying radius between them reports contact a slop
+ past the geometric touch, and a pair carrying none reports it a slop short.
 *>
 extern fn TreeStats WorldId.cast_shape(
   self,
@@ -1707,6 +1714,9 @@ extern fn TreeStats WorldId.overlap_aabb(
 <*
  Calls fcn once per shape overlapping a convex proxy placed at origin. The proxy's points are
  borrowed for the duration of the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
+
+ A compound-shaped body far from origin is missed without a signal: box3d culls the compound's
+ own tree with a box it never carried into the compound's frame — see CompoundData.overlaps.
 *>
 extern fn TreeStats WorldId.overlap_shape(
   self,
@@ -1850,8 +1860,9 @@ extern fn CastOutput height_field_ray_cast_raw(HeightFieldData* shape, RayCastIn
 
 <*
  Raw local-space shape casts. Private for the reason the raw ray casts are, and for one more: a
- proxy holding no points is answered with a hit at fraction 0 rather than refused, and a null
- point array is read without a test, so the wrappers in box3d_cast.c3 check the proxy first.
+ proxy holding no points is read as though it held its first point rather than refused, so the
+ answer looks ordinary while describing geometry the caller never named. The wrappers in
+ box3d_cast.c3 check the proxy first.
 *>
 extern fn CastOutput sphere_shape_cast_raw(Sphere* shape, ShapeCastInput* input) @cname("b3ShapeCastSphere") @private;
 extern fn CastOutput capsule_shape_cast_raw(Capsule* shape, ShapeCastInput* input) @cname("b3ShapeCastCapsule") @private;
@@ -1861,9 +1872,9 @@ extern fn CastOutput mesh_shape_cast_raw(Mesh* shape, ShapeCastInput* input) @cn
 extern fn CastOutput height_field_shape_cast_raw(HeightFieldData* shape, ShapeCastInput* input) @cname("b3ShapeCastHeightField") @private;
 
 <*
- Raw overlap predicates. Private because a proxy holding no points is answered true by the mesh
- and the height field where the other four answer false, and because every one of them reads the
- point array without testing it; the wrappers in box3d_cast.c3 refuse both.
+ Raw overlap predicates. Private because a proxy holding no points is not refused: four kinds read
+ it as though it held its first point, and the mesh and the height field answer from a stack buffer
+ nothing wrote, so the result follows the caller's stray memory. The wrappers refuse it.
 *>
 extern fn bool sphere_overlap_raw(Sphere* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapSphere") @private;
 extern fn bool capsule_overlap_raw(Capsule* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCapsule") @private;

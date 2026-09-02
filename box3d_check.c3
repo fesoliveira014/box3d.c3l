@@ -87,10 +87,10 @@ macro checked_geometry(geometry, $fault) {
 
 <*
  The bounds box3d asserts on a cast or overlap proxy and this build compiles out. A count of none
- is answered with a hit or an overlap rather than refused, a count past the ceiling is truncated
- in silence by the mesh and the height field, and a null point array is read without a test.
+ is read as one point rather than refused, a count past the ceiling is truncated in silence by the
+ compound's sweep and by the mesh and height field overlaps, and a null array is dereferenced.
 
- @return "INVALID_DEFINITION when the proxy has no points, or more than MAX_SHAPE_CAST_POINTS of them"
+ @return "INVALID_DEFINITION when the proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS"
 *>
 fn void? check_shape_proxy(ShapeProxy proxy) @private {
     if (proxy.points == null) return INVALID_DEFINITION~;

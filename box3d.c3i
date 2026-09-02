@@ -1475,8 +1475,9 @@ struct ShapeProxy {
 }
 
 <*
- The result of a single-shape ray or shape cast. When hit is false every other field is
- undefined. material_index is -1 when the shape carries no material.
+ The result of a ray or shape cast. When hit is false every other field is undefined. A cast
+ against one shape leaves material_index at -1 where that shape carries no material, while the
+ proxy pair shape_cast() sweeps writes neither child_index nor material_index, so both read zero.
 *>
 struct CastOutput {
     Vec3 normal;
@@ -1685,9 +1686,9 @@ extern fn TreeStats WorldId.cast_ray(
  Sweeps a convex proxy instead of a point, calling fcn once per shape it reaches. The proxy's
  points are borrowed for the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
 
- box3d closes when the core separation reaches the two radii less one linear slop, or one slop
- where they sum to less than two — so a pair carrying radius between them reports contact a slop
- past the geometric touch, and a pair carrying none reports it a slop short.
+ box3d closes at a core separation of one linear slop or the two radii less that slop, whichever
+ is greater, so the stop lands short of the geometric touch below a total radius of one slop, on
+ it at one, and past above — a full slop past from two.
 *>
 extern fn TreeStats WorldId.cast_shape(
   self,
@@ -1826,9 +1827,9 @@ struct RayCastInput {
  A convex proxy swept along translation in a shape's own frame, the shape cast's counterpart to
  RayCastInput. The proxy's points are borrowed for the duration of the call — see ShapeProxy.
 
- can_encroach is read only on box3d's first iteration, and only while the radius the proxy and the
- shape carry between them exceeds about three linear slops. A sphere and a capsule lend their own
- radius to that sum where a hull, a mesh and a height field lend none.
+ can_encroach is read only on box3d's first iteration, and takes effect only past two and three
+ quarter linear slops of total radius. A sphere and a capsule lend their own radius to that sum
+ where a hull, a mesh and a height field lend none.
 *>
 struct ShapeCastInput {
     ShapeProxy proxy;
@@ -2131,6 +2132,162 @@ extern fn void collide_triangle_and_sphere_raw(
   Vec3* triangle_a,
   Sphere* sphere_b,
 ) @cname("b3CollideTriangleAndSphere") @private;
+
+<*
+ Two convex proxies and the pose of B in A's frame. The query runs in A's frame and is origin
+ independent, so each proxy keeps its points in its own shape's frame and transform alone relates
+ the two. use_radii subtracts both radii from the distance and moves each witness point out onto
+ its own proxy's perimeter; without it the answer is between the two cores.
+*>
+struct DistanceInput {
+    ShapeProxy proxy_a;
+    ShapeProxy proxy_b;
+    Transform transform;
+    bool use_radii;
+}
+
+<*
+ The closest points between two proxies, in shape A's frame, with distance clamped at zero. normal
+ runs from A to B and is zero where the cores overlap or box3d's search degenerates, which a
+ caller normalising it turns into a NaN. Where use_radii alone drove the distance to zero the
+ normal is real and the two points have crossed, point_b sitting behind point_a along it. Both
+ counters are diagnostics of a separated answer: see shape_distance() for what each reads when not.
+*>
+struct DistanceOutput {
+    Vec3 point_a;
+    Vec3 point_b;
+    Vec3 normal;
+    float distance;
+    int iterations;
+    int simplex_count;
+}
+
+<*
+ Two convex proxies, the pose of B in A's frame and B's translation in that frame — what
+ shape_cast() sweeps, each proxy keeping its points in its own shape's frame. can_encroach is read
+ only on box3d's first pass and takes effect only past two and three quarter linear slops of total
+ radius, where it lets a pair that begins overlapped close a further slop rather than answer zero.
+*>
+struct ShapeCastPairInput {
+    ShapeProxy proxy_a;
+    ShapeProxy proxy_b;
+    Transform transform;
+    Vec3 translation_b;
+    float max_fraction;
+    bool can_encroach;
+}
+
+<*
+ Raw proxy-pair distance. Private because box3d's warm-start cache and its diagnostic simplex
+ array are both the caller's to supply, and reusing a cache across pairs reads one pair's vertex
+ indices against another's arrays. shape_distance() owns both.
+*>
+extern fn DistanceOutput shape_distance_raw(
+  DistanceInput* input,
+  SimplexCache* cache,
+  void* simplexes,
+  int simplex_capacity,
+) @cname("b3ShapeDistance") @private;
+
+<*
+ Raw proxy-pair shape cast. Private for the reason the single-shape casts are — a miss comes back
+ as a struct whose remaining fields are undefined — and because a proxy of no points is read as
+ though it held its first. shape_cast() checks both proxies and turns a miss into a fault.
+*>
+extern fn CastOutput shape_cast_pair_raw(ShapeCastPairInput* input) @cname("b3ShapeCast") @private;
+
+<*
+ The motion of one shape over a time-of-impact interval. The centre of mass runs c1 to c2 and the
+ rotation q1 to q2, while local_center places the shape's own origin against that centre — so the
+ proxy points swept against this stay in the shape's frame and the sweep carries them.
+*>
+struct Sweep {
+    Vec3 local_center;
+    Vec3 c1;
+    Vec3 c2;
+    Quat q1;
+    Quat q2;
+}
+
+<*
+ Raw sweep evaluation. Private because box3d asserts the time lies inside the interval and this
+ build compiles that out, extrapolating both the centre and the rotation past either end instead.
+ Sweep.transform_at() restores the range.
+*>
+extern fn Transform sweep_transform_raw(Sweep* sweep, float time) @cname("b3GetSweepTransform") @private;
+
+struct ToiInput {
+    ShapeProxy proxy_a;
+    ShapeProxy proxy_b;
+    Sweep sweep_a;
+    Sweep sweep_b;
+    float max_fraction;
+}
+
+<*
+ How a time-of-impact query ended. HIT reports where the two first touch under a measured point and
+ normal; OVERLAPPED means the cores were found overlapping and answers fraction zero under a point
+ and normal of exactly zero; SEPARATED never reached the other and answers max_fraction over the
+ last witness pair; FAILED gave up — after twenty-five distance passes, or with the root finder's
+ bracket lost — and answers the last time it advanced to. UNKNOWN is overwritten before it returns.
+*>
+enum ToiState : int {
+    UNKNOWN,
+    FAILED,
+    OVERLAPPED,
+    HIT,
+    SEPARATED,
+}
+
+<*
+ What a time-of-impact query found. used_fallback is not written by the query at all — box3d's own
+ continuous solver sets it after re-running a zero-fraction result against a sphere around the fast
+ shape's centroid, so a call made here always reads it false. The three counts are diagnostics.
+*>
+struct ToiOutput {
+    ToiState state;
+    Vec3 point;
+    Vec3 normal;
+    float fraction;
+    float distance;
+    int distance_iterations;
+    int push_back_iterations;
+    int root_iterations;
+    bool used_fallback;
+}
+
+<*
+ Raw swept-pair time of impact. Private because a proxy of no points is read as though it held its
+ first, and because a max_fraction outside the interval is extrapolated or answered with a negative
+ fraction rather than refused. time_of_impact() checks both.
+*>
+extern fn ToiOutput time_of_impact_raw(ToiInput* input) @cname("b3TimeOfImpact") @private;
+
+<*
+ One plane a mover is solved against. push_limit caps how far this plane may move the mover, and
+ push is the solve's own output, zeroed on entry rather than read. A velocity clip passes over a
+ plane whose clip_velocity is false, and over one whose push is zero whatever that flag says, so a
+ plane the solve never leaned on is skipped either way.
+*>
+struct CollisionPlane {
+    Plane plane;
+    float push_limit;
+    float push;
+    bool clip_velocity;
+}
+
+struct PlaneSolverResult {
+    Vec3 delta;
+    int iteration_count;
+}
+
+<*
+ Raw plane solve and velocity clip. Private because each takes a pointer and a count where
+ box3d_mover.c3's wrappers take a slice, and because the solve writes push back through its array
+ while the clip only reads it.
+*>
+extern fn PlaneSolverResult solve_planes_raw(Vec3 target_delta, CollisionPlane* planes, int count) @cname("b3SolvePlanes") @private;
+extern fn Vec3 clip_vector_raw(Vec3 vector, CollisionPlane* planes, int count) @cname("b3ClipVector") @private;
 
 enum JointType : int {
     PARALLEL,

@@ -600,9 +600,9 @@ fn void a_cast_fraction_past_one_is_refused_where_the_solver_would_invent_a_hit(
     assert(guards.mesh_still_hits, "while a fraction of one still answers a real hit");
 }
 
-// box3d closes a shape cast on the two radii less one linear slop, so a pair carrying radius
-// between them lands that slop past the geometric touch and a pair carrying none lands short of it.
-// The slop follows the ambient length unit, so it is written out rather than quoted as a number.
+// box3d closes a shape cast at one linear slop or the two radii less that slop, whichever is
+// greater, so where the reported fraction lands relative to the geometric touch turns on the total
+// radius. The slop follows the ambient length unit, so it is written out rather than quoted.
 fn float a_linear_slop() {
     return 0.005f * b3::length_units_per_meter();
 }

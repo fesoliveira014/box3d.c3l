@@ -89,3 +89,12 @@ b3SATCache separation,type,indexA,indexB,hit
 b3FeaturePair owner1,index1,owner2,index2
 b3LocalManifoldPoint point,separation,pair,triangleIndex
 b3LocalManifold normal,triangleNormal,points,pointCount,triangleIndex,i1,i2,i3,squaredDistance,feature,triangleFlags
+b3DistanceInput proxyA,proxyB,transform,useRadii
+b3DistanceOutput pointA,pointB,normal,distance,iterations,simplexCount
+b3ShapeCastPairInput proxyA,proxyB,transform,translationB,maxFraction,canEncroach
+b3Sweep localCenter,c1,c2,q1,q2
+b3TOIInput proxyA,proxyB,sweepA,sweepB,maxFraction
+b3TOIState
+b3TOIOutput state,point,normal,fraction,distance,distanceIterations,pushBackIterations,rootIterations,usedFallback
+b3CollisionPlane plane,pushLimit,push,clipVelocity
+b3PlaneSolverResult delta,iterationCount

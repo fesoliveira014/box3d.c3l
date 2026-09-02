@@ -77,11 +77,11 @@ fn BodyCastResult? BodyId.cast_ray(
 <*
  Sweeps a convex proxy at this body alone using a transform the caller supplies. The proxy's
  points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. The reported fraction sits one linear slop from true contact, on the side
- WorldId.cast_shape names, so an exact geometric expectation will not match. A max_fraction above
- 1 is refused for the reason cast_ray gives.
+ MAX_SHAPE_CAST_POINTS. The reported fraction carries the closing slop WorldId.cast_shape derives
+ from the two radii, so an exact geometric expectation will not match. A max_fraction above 1 is
+ refused for the reason cast_ray gives.
 
- @param can_encroach : "allows the cast to start touching; meaningful only where the proxy and the shape carry about three linear slops of radius between them"
+ @param can_encroach : "allows the cast to start touching; takes effect only past two and three quarter linear slops of radius between the proxy and the shape"
  @return "the closest hit on this body, NO_HIT when the sweep missed it, or INVALID_DEFINITION when max_fraction is above 1"
 *>
 fn BodyCastResult? BodyId.cast_shape(
@@ -155,8 +155,8 @@ fn CastHit[] WorldId.cast_ray_all(
 <*
  Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
  buffer. The proxy's points are borrowed for the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions stop one linear
- slop from true contact, on the side WorldId.cast_shape names.
+ MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions carry the
+ closing slop WorldId.cast_shape derives from the two radii.
 
  @return "the prefix of buffer that was filled"
 *>

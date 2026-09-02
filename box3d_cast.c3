@@ -115,12 +115,11 @@ fn CastOutput? HeightFieldData.ray_cast(&self, RayCastInput input) {
 }
 
 <*
- Sweeps the input's proxy at this sphere in the sphere's own frame, reporting the fraction of the
- translation at which the two first touch.
-
- The sphere lends its radius to the proxy's, and box3d closes on that sum less one linear slop, so
- the fraction arrives a slop past true contact, the two radii summing past two slops. A proxy that begins in contact reports
- fraction 0 with a zero normal, which a caller normalises into a NaN, unless can_encroach is set.
+ Sweeps the input's proxy at this sphere in the sphere's own frame, reporting where the two first
+ touch. The sphere lends its radius to the proxy's and box3d closes at one linear slop or that sum
+ less the slop, whichever is greater — so the stop lands short of true contact below a total
+ radius of one slop, on it at one, and past above, a full slop past from two. A pair beginning in
+ contact reports fraction 0 under a zero normal, a NaN once normalised, unless can_encroach is set.
 
  @return "where the proxy first touches the sphere, NO_HIT when it never does, or INVALID_DEFINITION when the proxy carries no points"
 *>
@@ -132,12 +131,11 @@ fn CastOutput? Sphere.shape_cast(&self, ShapeCastInput input) {
 }
 
 <*
- Sweeps the input's proxy at this capsule in the capsule's own frame, reporting the fraction of
- the translation at which the two first touch.
-
- The capsule lends its radius the way a sphere does, so the fraction is a slop past contact
- and a proxy of radius zero still reaches can_encroach's window. A proxy that begins in contact
- reports fraction 0 with a zero normal unless that flag is set.
+ Sweeps the input's proxy at this capsule in the capsule's own frame, reporting where the two
+ first touch. The capsule lends its radius to the proxy's and box3d closes on the formula
+ Sphere.shape_cast states, so an ordinary capsule radius alone carries the stop a full slop past
+ true contact and reaches can_encroach's window with a proxy of no radius at all. A proxy that
+ begins in contact reports fraction 0 under a zero normal unless that flag is set.
 
  @return "where the proxy first touches the capsule, NO_HIT when it never does, or INVALID_DEFINITION when the proxy carries no points"
 *>

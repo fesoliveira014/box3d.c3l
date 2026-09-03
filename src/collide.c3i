@@ -126,7 +126,7 @@ struct CollisionManifoldView {
 <*
  Raw local collide entry points. Private because each writes through a manifold that borrows the
  caller's point buffer and takes a capacity below which it reports nothing rather than less. They
- belong to box3d_collide.c3, whose wrappers are the only way in.
+ belong to src/collide.c3, whose wrappers are the only way in.
 *>
 extern fn void collide_spheres_raw(
   LocalManifold* manifold,

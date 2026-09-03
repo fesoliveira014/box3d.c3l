@@ -129,12 +129,12 @@ extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");
 
 <*
  Raw world constructor. Bypasses create_world's definition-cookie guard, so it is private to the
- module — box3d_world.c3's create_world is the only caller and is the only public way to a live
+ module — src/world.c3's create_world is the only caller and is the only public way to a live
  world.
 *>
 extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld") @private;
-extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
-extern fn void WorldId.step(self, float time_step, int sub_step_count) @cname("b3World_Step");
+extern fn void destroy_world(WorldId world) @cname("b3DestroyWorld");
+extern fn void world_step(WorldId world, float time_step, int sub_step_count) @cname("b3World_Step");
 extern fn bool WorldId.is_valid(self) @cname("b3World_IsValid");
 extern fn int world_count() @cname("b3GetWorldCount");
 
@@ -178,7 +178,7 @@ extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetU
  for each pool, array, database and allocator it keeps, and the total in kilobytes last. The
  lines are one per store and never one per body or shape. A locked world writes nothing at all.
 *>
-extern fn void WorldId.dump_memory_stats(self) @cname("b3World_DumpMemoryStats");
+extern fn void world_dump_memory_stats(WorldId world) @cname("b3World_DumpMemoryStats");
 
 <*
  Replaces the world's friction mixing with fcn, and restores box3d's own when fcn is null. A
@@ -194,4 +194,4 @@ extern fn void WorldId.set_friction_callback(self, FrictionFn fcn) @cname("b3Wor
 *>
 extern fn void WorldId.set_restitution_callback(self, RestitutionFn fcn) @cname("b3World_SetRestitutionCallback");
 
-extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");
+extern fn void world_rebuild_static_tree(WorldId world) @cname("b3World_RebuildStaticTree");

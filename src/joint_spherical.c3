@@ -15,10 +15,10 @@ module b3;
  @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs during
    one`
 *>
-fn SphericalJointId? WorldId.create_spherical_joint(self, SphericalJointDef* def) {
+fn SphericalJointId? create_spherical_joint(WorldId world, SphericalJointDef* def) {
     if (def == null) return INVALID_DEFINITION~;
-    check_joint_def(self, &def.base)!;
-    JointId joint = create_spherical_joint_raw(self, def).checked()!;
+    check_joint_def(world, &def.base)!;
+    JointId joint = create_spherical_joint_raw(world, def).checked()!;
     return (SphericalJointId)joint;
 }
 

@@ -3,8 +3,8 @@ module b3::record;
 import b3::draw;
 
 <*
- A buffer of recorded world mutations: what a world writes between WorldId.start_recording() and
- WorldId.stop_recording(), and what create_player() and validate_replay() replay from. The caller
+ A buffer of recorded world mutations: what a world writes between world_start_recording() and
+ world_stop_recording(), and what create_player() and validate_replay() replay from. The caller
  owns it and must destroy() it exactly once; byte_count() carries it until then — 64 KiB at the
  default capacity — so a recording never destroyed shifts that count as a leaked world does.
 *>
@@ -21,21 +21,21 @@ extern fn Recording* create_recording(int byte_capacity) @cname("b3CreateRecordi
  Releases the recording and its buffer. The caller owns it and must call this exactly once — see
  Recording. Any slice data() handed out dangles from here.
 *>
-extern fn void Recording.destroy(&self) @cname("b3DestroyRecording");
+extern fn void destroy_recording(Recording* recording) @cname("b3DestroyRecording");
 
 extern fn char* recording_data_raw(Recording* recording) @cname("b3Recording_GetData") @private;
 extern fn int recording_size_raw(Recording* recording) @cname("b3Recording_GetSize") @private;
-extern fn void start_recording_raw(WorldId world_id, Recording* recording) @cname("b3World_StartRecording") @private;
+extern fn void world_start_recording_raw(WorldId world_id, Recording* recording) @cname("b3World_StartRecording") @private;
 
 <*
  Ends the session, writing the trailing geometry registry and backpatching the header, which is
  what leaves the buffer self-contained. Inert on a world that is not recording, and
- WorldId.destroy() does this itself, so a world torn down mid-session still leaves playable bytes.
+ destroy_world() does this itself, so a world torn down mid-session still leaves playable bytes.
 *>
-extern fn void WorldId.stop_recording(self) @cname("b3World_StopRecording");
+extern fn void world_stop_recording(WorldId world) @cname("b3World_StopRecording");
 
-extern fn bool save_recording_raw(Recording* recording, ZString path) @cname("b3SaveRecordingToFile") @private;
-extern fn Recording* load_recording_raw(ZString path) @cname("b3LoadRecordingFromFile") @private;
+extern fn bool save_recording_to_file_raw(Recording* recording, ZString path) @cname("b3SaveRecordingToFile") @private;
+extern fn Recording* load_recording_from_file_raw(ZString path) @cname("b3LoadRecordingFromFile") @private;
 extern fn bool validate_replay_raw(void* data, int size, int worker_count) @cname("b3ValidateReplay") @private;
 
 <*
@@ -50,7 +50,7 @@ typedef Player = void;
  length unit it took over — see create_player(). The caller owns the player and must call this
  exactly once.
 *>
-extern fn void Player.destroy(&self) @cname("b3DestroyPlayer");
+extern fn void destroy_player(Player* player) @cname("b3DestroyPlayer");
 
 extern fn Player* create_player_raw(void* data, int size, int worker_count) @cname("b3CreatePlayer") @private;
 
@@ -117,27 +117,27 @@ struct QueryHit {
  Replays every record up to and including the next step, then the state hash that closes it.
  False once the op stream is exhausted, which is what ends a replay loop.
 *>
-extern fn bool Player.step_frame(&self) @cname("b3RecPlayer_StepFrame");
+extern fn bool player_step_frame(Player* player) @cname("b3RecPlayer_StepFrame");
 
 <*
  Replays a frame that creates bodies in two calls, the first stopping at the pose those bodies
  were created in — see is_at_pre_step(). A frame that creates none is replayed whole by a single
  call, so this is not a fixed two calls per frame.
 *>
-extern fn void Player.sub_step_frame(&self) @cname("b3RecPlayer_SubStepFrame");
+extern fn void player_sub_step_frame(Player* player) @cname("b3RecPlayer_SubStepFrame");
 
 <*
  Rewinds to frame 0 in place, which is what keeps world_id() stable across it. Clears the
  divergence latch and the frame's recorded queries, and rolls the body list back to frame 0's.
 *>
-extern fn void Player.restart(&self) @cname("b3RecPlayer_Restart");
+extern fn void player_restart(Player* player) @cname("b3RecPlayer_Restart");
 
 <*
  Replays to target_frame, a backward seek restoring the nearest keyframe before it rather than
  replaying from the start. Neither end is refused: a negative target lands on frame 0, and one
  past the recording stops at its last frame with is_at_end() true.
 *>
-extern fn void Player.seek_frame(&self, int target_frame) @cname("b3RecPlayer_SeekFrame");
+extern fn void player_seek_frame(Player* player, int target_frame) @cname("b3RecPlayer_SeekFrame");
 
 <*
  The world this player drives. restart() and every seek keep it, but set_debug_shape_callbacks()
@@ -164,7 +164,7 @@ extern fn bool Player.is_at_pre_step(&self) @cname("b3RecPlayer_IsAtPreStep");
  or any re-issued query that answered differently. restart() clears it, diverge_frame() names the
  frame, and box3d's own header names only the hash.
 *>
-extern fn bool Player.has_diverged(&self) @cname("b3RecPlayer_HasDiverged");
+extern fn bool player_has_diverged(Player* player) @cname("b3RecPlayer_HasDiverged");
 
 extern fn PlayerInfo Player.info(&self) @cname("b3RecPlayer_GetInfo");
 extern fn int diverge_frame_raw(Player* player) @cname("b3RecPlayer_GetDivergeFrame") @private;
@@ -239,14 +239,13 @@ extern fn QueryHit frame_query_hit_raw(
  has just drawn: casts as segments with a point and a normal per hit, movers and cast proxies as
  capsules and spheres, overlaps as boxes around the shapes they found. It reads none of the
  definition's flags, and a null callback or a null definition draws nothing here where
- draw::WorldId.draw() would call or dereference it.
+ draw::world_draw() would call or dereference it.
 
  @param query_index : `which of the frame's queries to draw, or any negative value for all`
  @param selected_index : `which to draw in the reserved colour and label; an index no query
    holds draws none`
 *>
-extern fn void Player.draw_frame_queries(
-  &self,
+extern fn void player_draw_frame_queries(Player* player,
   DebugDraw* draw,
   int query_index,
   int selected_index,

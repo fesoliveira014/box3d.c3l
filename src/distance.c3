@@ -36,7 +36,7 @@ fn CastOutput? shape_cast(ShapeCastPairInput input) {
     check_shape_proxy(input.proxy_b)!;
     if (!(input.max_fraction >= 0.0f && input.max_fraction <= 1.0f)) return INVALID_DEFINITION~;
 
-    CastOutput result = shape_cast_pair_raw(&input);
+    CastOutput result = shape_cast_raw(&input);
     if (!result.hit) return NO_HIT~;
     return result;
 }

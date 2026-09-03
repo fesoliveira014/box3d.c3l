@@ -33,8 +33,7 @@ fn Vec3 clip_vector(Vec3 vector, CollisionPlane[] planes) {
 
  @return `the prefix of buffer that was filled`
 *>
-fn BodyPlaneResult[] BodyId.collide_mover(
-  self,
+fn BodyPlaneResult[] body_collide_mover(BodyId body,
   BodyPlaneResult[] buffer,
   Pos origin,
   Capsule* mover,
@@ -42,7 +41,7 @@ fn BodyPlaneResult[] BodyId.collide_mover(
   WorldTransform body_transform,
 ) {
     int written = body_collide_mover_raw(
-      body_id: self,
+      body_id: body,
       body_planes: buffer.ptr,
       plane_capacity: (int)buffer.len,
       origin: origin,
@@ -64,11 +63,11 @@ fn BodyPlaneResult[] BodyId.collide_mover(
    finite, or impulse_per_area is not finite — box3d asserts all four and this release build
    compiles those assertions out`
 *>
-fn void? WorldId.explode(self, ExplosionDef def) {
+fn void? world_explode(WorldId world, ExplosionDef def) {
     if (!is_valid_position(def.position)) return INVALID_DEFINITION~;
     if (!is_valid_float(def.radius) || !(def.radius >= 0.0f)) return INVALID_DEFINITION~;
     if (!is_valid_float(def.falloff) || !(def.falloff >= 0.0f)) return INVALID_DEFINITION~;
     if (!is_valid_float(def.impulse_per_area)) return INVALID_DEFINITION~;
 
-    world_explode_raw(self, &def);
+    world_explode_raw(world, &def);
 }

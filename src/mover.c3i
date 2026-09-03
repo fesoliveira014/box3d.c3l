@@ -14,7 +14,7 @@ struct ExplosionDef {
 }
 
 <*
- Raw explosion. Private because WorldId.explode() refuses the definitions box3d does no more than
+ Raw explosion. Private because world_explode() refuses the definitions box3d does no more than
  assert against, this release build compiling those assertions out.
 *>
 extern fn void world_explode_raw(WorldId world_id, ExplosionDef* def) @cname("b3World_Explode") @private;
@@ -58,7 +58,7 @@ struct PlaneSolverResult {
 
 <*
  Raw plane solve and velocity clip. Private because each takes a pointer and a count where
- box3d_mover.c3's wrappers take a slice, and because the solve writes push back through its array
+ src/mover.c3's wrappers take a slice, and because the solve writes push back through its array
  while the clip only reads it.
 *>
 extern fn PlaneSolverResult solve_planes_raw(Vec3 target_delta, CollisionPlane* planes, int count) @cname("b3SolvePlanes") @private;
@@ -94,8 +94,7 @@ alias MoverFilterFn = fn bool(ShapeId shape_id, void* context);
  stops reporting once the mover's core reaches its surface, so a mover sunk past its own radius has
  nothing to solve on. A locked world, or an origin past a compiled-out assertion, gives none.
 *>
-extern fn void WorldId.collide_mover(
-  self,
+extern fn void world_collide_mover(WorldId world,
   Pos origin,
   Capsule* mover,
   QueryFilter filter,
@@ -115,8 +114,7 @@ extern fn void WorldId.collide_mover(
    surface the mover's core starts within the closing band of is dropped from the sweep, which
    for a mover thinner than about a slop reaches past its own surface`
 *>
-extern fn float WorldId.cast_mover(
-  self,
+extern fn float world_cast_mover(WorldId world,
   Pos origin,
   Capsule* mover,
   Vec3 translation,
@@ -127,7 +125,7 @@ extern fn float WorldId.cast_mover(
 
 <*
  Raw body-local mover collide. Private because it takes a pointer and a capacity where
- BodyId.collide_mover() hands back the filled prefix of the caller's buffer as a slice.
+ body_collide_mover() hands back the filled prefix of the caller's buffer as a slice.
 *>
 extern fn int body_collide_mover_raw(
   BodyId body_id,

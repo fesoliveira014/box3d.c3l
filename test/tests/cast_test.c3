@@ -56,8 +56,8 @@ fn SphereReadings the_solid_sphere_a_ray_drops_onto() {
     b3::Sphere unit = a_half_metre_sphere_at_the_origin();
 
     return {
-      .through = @the_reading_of(unit.ray_cast(a_ray_dropped_from_three_metres())),
-      .beside = @the_reading_of(unit.ray_cast(a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .through = @the_reading_of(b3::ray_cast_sphere(&unit, a_ray_dropped_from_three_metres())),
+      .beside = @the_reading_of(b3::ray_cast_sphere(&unit, a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -85,8 +85,8 @@ fn SphereFromWithin the_solid_sphere_a_ray_starts_within() {
     b3::Sphere unit = a_half_metre_sphere_at_the_origin();
 
     return {
-      .from_inside = @the_reading_of(unit.ray_cast(a_ray({ 0.1, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
-      .off_the_surface = @the_reading_of(unit.ray_cast(a_ray({ 0.0, 0.5, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .from_inside = @the_reading_of(b3::ray_cast_sphere(&unit, a_ray({ 0.1, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .off_the_surface = @the_reading_of(b3::ray_cast_sphere(&unit, a_ray({ 0.0, 0.5, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -119,10 +119,10 @@ fn SphereContrast the_two_sphere_casts_put_to_the_same_rays() {
     b3::RayCastInput from_inside = a_ray({ 0.1, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0);
 
     return {
-      .solid_from_outside = @the_reading_of(unit.ray_cast(from_outside)),
-      .hollow_from_outside = @the_reading_of(unit.ray_cast_hollow(from_outside)),
-      .solid_from_inside = @the_reading_of(unit.ray_cast(from_inside)),
-      .hollow_from_inside = @the_reading_of(unit.ray_cast_hollow(from_inside)),
+      .solid_from_outside = @the_reading_of(b3::ray_cast_sphere(&unit, from_outside)),
+      .hollow_from_outside = @the_reading_of(b3::ray_cast_hollow_sphere(&unit, from_outside)),
+      .solid_from_inside = @the_reading_of(b3::ray_cast_sphere(&unit, from_inside)),
+      .hollow_from_inside = @the_reading_of(b3::ray_cast_hollow_sphere(&unit, from_inside)),
     };
 }
 
@@ -155,10 +155,10 @@ fn FractionUnits the_same_path_walked_by_two_translations() {
     b3::RayCastInput over_one = a_ray({ 0.0, 3.0, 0.0 }, { 0.0, -1.0, 0.0 }, 10.0);
 
     return {
-      .solid_over_six_metres = @the_reading_of(unit.ray_cast(over_six)),
-      .solid_over_one_metre = @the_reading_of(unit.ray_cast(over_one)),
-      .hollow_over_six_metres = @the_reading_of(unit.ray_cast_hollow(over_six)),
-      .hollow_over_one_metre = @the_reading_of(unit.ray_cast_hollow(over_one)),
+      .solid_over_six_metres = @the_reading_of(b3::ray_cast_sphere(&unit, over_six)),
+      .solid_over_one_metre = @the_reading_of(b3::ray_cast_sphere(&unit, over_one)),
+      .hollow_over_six_metres = @the_reading_of(b3::ray_cast_hollow_sphere(&unit, over_six)),
+      .hollow_over_one_metre = @the_reading_of(b3::ray_cast_hollow_sphere(&unit, over_one)),
     };
 }
 
@@ -188,9 +188,9 @@ fn CapsuleReadings the_capsule_a_ray_drops_onto() {
     b3::Capsule rod = { .center1 = { -1.0, 0.0, 0.0 }, .center2 = { 1.0, 0.0, 0.0 }, .radius = 0.25 };
 
     return {
-      .through = @the_reading_of(rod.ray_cast(a_ray_dropped_from_three_metres())),
-      .beside = @the_reading_of(rod.ray_cast(a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
-      .from_inside = @the_reading_of(rod.ray_cast(a_ray({ 0.5, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .through = @the_reading_of(b3::ray_cast_capsule(&rod, a_ray_dropped_from_three_metres())),
+      .beside = @the_reading_of(b3::ray_cast_capsule(&rod, a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .from_inside = @the_reading_of(b3::ray_cast_capsule(&rod, a_ray({ 0.5, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -224,9 +224,9 @@ fn HullReadings the_hull_a_ray_drops_onto() {
     b3::BoxHull cube = b3::make_cube_hull(0.5);
 
     return {
-      .through = @the_reading_of(cube.base.ray_cast(a_ray_dropped_from_three_metres())),
-      .beside = @the_reading_of(cube.base.ray_cast(a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
-      .from_inside = @the_reading_of(cube.base.ray_cast(a_ray({ 0.25, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .through = @the_reading_of(b3::ray_cast_hull(&cube.base, a_ray_dropped_from_three_metres())),
+      .beside = @the_reading_of(b3::ray_cast_hull(&cube.base, a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .from_inside = @the_reading_of(b3::ray_cast_hull(&cube.base, a_ray({ 0.25, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -267,14 +267,14 @@ fn MeshReadings the_grid_mesh_a_ray_drops_onto() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
 
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     return {
-      .onto_a_triangle = @the_reading_of(mesh.ray_cast(a_ray({ 1.5, 3.0, 1.5 }, { 0.0, -6.0, 0.0 }, 1.0))),
-      .from_underneath = @the_reading_of(mesh.ray_cast(a_ray({ 1.5, -3.0, 1.5 }, { 0.0, 6.0, 0.0 }, 1.0))),
-      .past_the_edge = @the_reading_of(mesh.ray_cast(a_ray({ 50.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .onto_a_triangle = @the_reading_of(b3::ray_cast_mesh(&mesh, a_ray({ 1.5, 3.0, 1.5 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .from_underneath = @the_reading_of(b3::ray_cast_mesh(&mesh, a_ray({ 1.5, -3.0, 1.5 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .past_the_edge = @the_reading_of(b3::ray_cast_mesh(&mesh, a_ray({ 50.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -316,7 +316,7 @@ fn HeightFieldReadings the_height_fields_a_ray_drops_onto() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::HeightFieldData* holed = b3::create_height_field_grid(
       row_count: 8,
@@ -324,13 +324,13 @@ fn HeightFieldReadings the_height_fields_a_ray_drops_onto() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: true,
     )!!;
-    defer holed.destroy();
+    defer b3::destroy_height_field(holed);
 
     return {
-      .onto_the_surface = @the_reading_of(flat.ray_cast(a_ray({ 3.0, 3.0, 3.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
-      .from_underneath = @the_reading_of(flat.ray_cast(a_ray({ 3.0, -3.0, 3.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
-      .over_a_hole = @the_reading_of(holed.ray_cast(a_ray({ 2.5, 3.0, 2.5 }, { 0.0, -6.0, 0.0 }, 1.0))),
-      .beside_a_hole = @the_reading_of(holed.ray_cast(a_ray({ 0.5, 3.0, 0.5 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .onto_the_surface = @the_reading_of(b3::ray_cast_height_field(flat, a_ray({ 3.0, 3.0, 3.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .from_underneath = @the_reading_of(b3::ray_cast_height_field(flat, a_ray({ 3.0, -3.0, 3.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .over_a_hole = @the_reading_of(b3::ray_cast_height_field(holed, a_ray({ 2.5, 3.0, 2.5 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .beside_a_hole = @the_reading_of(b3::ray_cast_height_field(holed, a_ray({ 0.5, 3.0, 0.5 }, { 0.0, -6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -384,12 +384,12 @@ fn CompoundReadings the_stacked_compound_a_ray_passes_through() {
     def.sphere_count = 2;
 
     b3::CompoundData* tower = b3::create_compound(&def)!!;
-    defer tower.destroy();
+    defer b3::destroy_compound(tower);
 
     return {
-      .from_above = @the_reading_of(tower.ray_cast(a_ray_dropped_from_three_metres())),
-      .from_below = @the_reading_of(tower.ray_cast(a_ray({ 0.0, -3.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
-      .beside = @the_reading_of(tower.ray_cast(a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      .from_above = @the_reading_of(b3::ray_cast_compound(tower, a_ray_dropped_from_three_metres())),
+      .from_below = @the_reading_of(b3::ray_cast_compound(tower, a_ray({ 0.0, -3.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .beside = @the_reading_of(b3::ray_cast_compound(tower, a_ray({ 5.0, 3.0, 0.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
     };
 }
 
@@ -472,7 +472,7 @@ fn CastAllocation the_byte_count_around_every_ray_cast() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
       row_count: 8,
@@ -480,7 +480,7 @@ fn CastAllocation the_byte_count_around_every_ray_cast() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -491,7 +491,7 @@ fn CastAllocation the_byte_count_around_every_ray_cast() {
     def.sphere_count = 1;
 
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Sphere unit = a_half_metre_sphere_at_the_origin();
     b3::Capsule rod = { .center1 = { -1.0, 0.0, 0.0 }, .center2 = { 1.0, 0.0, 0.0 }, .radius = 0.25 };
@@ -502,13 +502,13 @@ fn CastAllocation the_byte_count_around_every_ray_cast() {
     int before = b3::byte_count();
 
     CastReading[7] every = {
-      @the_reading_of(unit.ray_cast(drop)),
-      @the_reading_of(unit.ray_cast_hollow(a_ray({ 0.0, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
-      @the_reading_of(rod.ray_cast(drop)),
-      @the_reading_of(cube.base.ray_cast(drop)),
-      @the_reading_of(mesh.ray_cast(drop)),
-      @the_reading_of(flat.ray_cast(a_ray({ 3.0, 3.0, 3.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
-      @the_reading_of(one_sphere.ray_cast(drop)),
+      @the_reading_of(b3::ray_cast_sphere(&unit, drop)),
+      @the_reading_of(b3::ray_cast_hollow_sphere(&unit, a_ray({ 0.0, 0.0, 0.0 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      @the_reading_of(b3::ray_cast_capsule(&rod, drop)),
+      @the_reading_of(b3::ray_cast_hull(&cube.base, drop)),
+      @the_reading_of(b3::ray_cast_mesh(&mesh, drop)),
+      @the_reading_of(b3::ray_cast_height_field(flat, a_ray({ 3.0, 3.0, 3.0 }, { 0.0, -6.0, 0.0 }, 1.0))),
+      @the_reading_of(b3::ray_cast_compound(one_sphere, drop)),
     };
 
     int after = b3::byte_count();
@@ -545,7 +545,7 @@ fn PhantomGuards the_refusals_of_a_fraction_past_one() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
@@ -554,7 +554,7 @@ fn PhantomGuards the_refusals_of_a_fraction_past_one() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 1.5, 0.0, 1.5 }, .radius = 0.5 },
@@ -564,7 +564,7 @@ fn PhantomGuards the_refusals_of_a_fraction_past_one() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* compound = b3::create_compound(&def)!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     b3::RayCastInput past_one = {
       .origin = { 1.5, -3.0, 1.5 },
@@ -573,16 +573,16 @@ fn PhantomGuards the_refusals_of_a_fraction_past_one() {
     };
 
     PhantomGuards guards;
-    if (catch err = mesh.ray_cast(past_one)) guards.mesh = err;
-    if (catch err = field.ray_cast(past_one)) guards.height_field = err;
-    if (catch err = compound.ray_cast(past_one)) guards.compound = err;
+    if (catch err = b3::ray_cast_mesh(&mesh, past_one)) guards.mesh = err;
+    if (catch err = b3::ray_cast_height_field(field, past_one)) guards.height_field = err;
+    if (catch err = b3::ray_cast_compound(compound, past_one)) guards.compound = err;
 
     b3::RayCastInput from_above = {
       .origin = { 1.5, 3.0, 1.5 },
       .translation = { 0.0, -6.0, 0.0 },
       .max_fraction = 1.0,
     };
-    if (try hit = mesh.ray_cast(from_above)) guards.mesh_still_hits = hit.hit;
+    if (try hit = b3::ray_cast_mesh(&mesh, from_above)) guards.mesh_still_hits = hit.hit;
 
     return guards;
 }
@@ -641,8 +641,8 @@ fn SweepContrast the_ray_and_the_probe_put_to_the_same_sphere() {
     b3::Vec3[1] tip = { { 0.0, 3.0, 0.0 } };
 
     return {
-      .ray = @the_reading_of(unit.ray_cast(a_ray_dropped_from_three_metres())),
-      .swept = @the_reading_of(unit.shape_cast(a_probe_dropped_from_three_metres(tip[..], 0.25))),
+      .ray = @the_reading_of(b3::ray_cast_sphere(&unit, a_ray_dropped_from_three_metres())),
+      .swept = @the_reading_of(b3::shape_cast_sphere(&unit, a_probe_dropped_from_three_metres(tip[..], 0.25))),
     };
 }
 
@@ -693,7 +693,7 @@ fn SweptReadings the_shapes_a_probe_is_swept_at() {
     def.sphere_count = 2;
 
     b3::CompoundData* tower = b3::create_compound(&def)!!;
-    defer tower.destroy();
+    defer b3::destroy_compound(tower);
 
     b3::Vec3[1] tip = { { 0.0, 3.0, 0.0 } };
     b3::Vec3[1] aside = { { 5.0, 3.0, 0.0 } };
@@ -706,15 +706,15 @@ fn SweptReadings the_shapes_a_probe_is_swept_at() {
     );
 
     return {
-      .sphere = @the_reading_of(unit.shape_cast(dropped)),
-      .capsule = @the_reading_of(rod.shape_cast(dropped)),
-      .hull = @the_reading_of(cube.base.shape_cast(dropped)),
-      .compound = @the_reading_of(tower.shape_cast(dropped)),
-      .sphere_beside = @the_reading_of(unit.shape_cast(a_probe_dropped_from_three_metres(aside[..], 0.25))),
-      .capsule_beside = @the_reading_of(rod.shape_cast(a_probe_dropped_from_three_metres(aside[..], 0.25))),
-      .hull_beside = @the_reading_of(cube.base.shape_cast(a_probe_dropped_from_three_metres(aside[..], 0.25))),
-      .compound_beside = @the_reading_of(tower.shape_cast(a_probe_dropped_from_three_metres(aside[..], 0.25))),
-      .receding = @the_reading_of(unit.shape_cast(lifted)),
+      .sphere = @the_reading_of(b3::shape_cast_sphere(&unit, dropped)),
+      .capsule = @the_reading_of(b3::shape_cast_capsule(&rod, dropped)),
+      .hull = @the_reading_of(b3::shape_cast_hull(&cube.base, dropped)),
+      .compound = @the_reading_of(b3::shape_cast_compound(tower, dropped)),
+      .sphere_beside = @the_reading_of(b3::shape_cast_sphere(&unit, a_probe_dropped_from_three_metres(aside[..], 0.25))),
+      .capsule_beside = @the_reading_of(b3::shape_cast_capsule(&rod, a_probe_dropped_from_three_metres(aside[..], 0.25))),
+      .hull_beside = @the_reading_of(b3::shape_cast_hull(&cube.base, a_probe_dropped_from_three_metres(aside[..], 0.25))),
+      .compound_beside = @the_reading_of(b3::shape_cast_compound(tower, a_probe_dropped_from_three_metres(aside[..], 0.25))),
+      .receding = @the_reading_of(b3::shape_cast_sphere(&unit, lifted)),
     };
 }
 
@@ -777,10 +777,10 @@ fn EncroachReadings the_probe_that_starts_inside_two_shapes() {
     encroaching.can_encroach = true;
 
     return {
-      .sphere_plain = @the_reading_of(unit.shape_cast(plain)),
-      .sphere_encroaching = @the_reading_of(unit.shape_cast(encroaching)),
-      .hull_plain = @the_reading_of(cube.base.shape_cast(plain)),
-      .hull_encroaching = @the_reading_of(cube.base.shape_cast(encroaching)),
+      .sphere_plain = @the_reading_of(b3::shape_cast_sphere(&unit, plain)),
+      .sphere_encroaching = @the_reading_of(b3::shape_cast_sphere(&unit, encroaching)),
+      .hull_plain = @the_reading_of(b3::shape_cast_hull(&cube.base, plain)),
+      .hull_encroaching = @the_reading_of(b3::shape_cast_hull(&cube.base, encroaching)),
     };
 }
 
@@ -818,7 +818,7 @@ fn MeshSweepReadings the_grid_mesh_a_probe_is_swept_at() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
 
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
     b3::Vec3[1] above = { { 1.5, 3.0, 1.5 } };
@@ -833,10 +833,10 @@ fn MeshSweepReadings the_grid_mesh_a_probe_is_swept_at() {
     );
 
     return {
-      .swept_from_above = @the_reading_of(mesh.shape_cast(a_probe_dropped_from_three_metres(above[..], 0.25))),
-      .swept_from_below = @the_reading_of(mesh.shape_cast(upward)),
-      .ray_from_below = @the_reading_of(mesh.ray_cast(a_ray({ 1.5, -3.0, 1.5 }, { 0.0, 6.0, 0.0 }, 1.0))),
-      .swept_past_the_edge = @the_reading_of(mesh.shape_cast(a_probe_dropped_from_three_metres(aside[..], 0.25))),
+      .swept_from_above = @the_reading_of(b3::shape_cast_mesh(&mesh, a_probe_dropped_from_three_metres(above[..], 0.25))),
+      .swept_from_below = @the_reading_of(b3::shape_cast_mesh(&mesh, upward)),
+      .ray_from_below = @the_reading_of(b3::ray_cast_mesh(&mesh, a_ray({ 1.5, -3.0, 1.5 }, { 0.0, 6.0, 0.0 }, 1.0))),
+      .swept_past_the_edge = @the_reading_of(b3::shape_cast_mesh(&mesh, a_probe_dropped_from_three_metres(aside[..], 0.25))),
     };
 }
 
@@ -876,7 +876,7 @@ fn FieldSweepReadings the_height_field_a_probe_is_swept_at() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::Vec3[1] above = { { 3.0, 3.0, 3.0 } };
     b3::Vec3[1] below = { { 3.0, -3.0, 3.0 } };
@@ -914,13 +914,13 @@ fn FieldSweepReadings the_height_field_a_probe_is_swept_at() {
     );
 
     FieldSweepReadings readings = {
-      .probe_from_above = @the_reading_of(flat.shape_cast(a_probe_dropped_from_three_metres(above[..], 0.25))),
-      .probe_from_below = @the_reading_of(flat.shape_cast(upward)),
-      .probe_past_one = @the_reading_of(flat.shape_cast(upward_past_one)),
-      .pair_of_points_past_one = @the_reading_of(flat.shape_cast(a_pair_past_one)),
+      .probe_from_above = @the_reading_of(b3::shape_cast_height_field(flat, a_probe_dropped_from_three_metres(above[..], 0.25))),
+      .probe_from_below = @the_reading_of(b3::shape_cast_height_field(flat, upward)),
+      .probe_past_one = @the_reading_of(b3::shape_cast_height_field(flat, upward_past_one)),
+      .pair_of_points_past_one = @the_reading_of(b3::shape_cast_height_field(flat, a_pair_past_one)),
     };
-    if (catch err = flat.shape_cast(a_point_upward)) readings.point_at_one = err;
-    if (catch err = flat.shape_cast(a_point_past_one)) readings.point_past_one = err;
+    if (catch err = b3::shape_cast_height_field(flat, a_point_upward)) readings.point_at_one = err;
+    if (catch err = b3::shape_cast_height_field(flat, a_point_past_one)) readings.point_past_one = err;
     return readings;
 }
 
@@ -983,7 +983,7 @@ fn ProxyRefusals the_proxies_the_casts_refuse() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
@@ -992,7 +992,7 @@ fn ProxyRefusals the_proxies_the_casts_refuse() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -1002,7 +1002,7 @@ fn ProxyRefusals the_proxies_the_casts_refuse() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Sphere unit = a_half_metre_sphere_at_the_origin();
     b3::Capsule rod = { .center1 = { -1.0, 0.0, 0.0 }, .center2 = { 1.0, 0.0, 0.0 }, .radius = 0.25 };
@@ -1017,19 +1017,19 @@ fn ProxyRefusals the_proxies_the_casts_refuse() {
     }
 
     ProxyRefusals refusals;
-    if (catch err = unit.shape_cast(empty)) refusals.sphere = err;
-    if (catch err = rod.shape_cast(empty)) refusals.capsule = err;
-    if (catch err = cube.base.shape_cast(empty)) refusals.hull = err;
-    if (catch err = one_sphere.shape_cast(empty)) refusals.compound = err;
-    if (catch err = mesh.shape_cast(empty)) refusals.mesh = err;
-    if (catch err = flat.shape_cast(empty)) refusals.height_field = err;
+    if (catch err = b3::shape_cast_sphere(&unit, empty)) refusals.sphere = err;
+    if (catch err = b3::shape_cast_capsule(&rod, empty)) refusals.capsule = err;
+    if (catch err = b3::shape_cast_hull(&cube.base, empty)) refusals.hull = err;
+    if (catch err = b3::shape_cast_compound(one_sphere, empty)) refusals.compound = err;
+    if (catch err = b3::shape_cast_mesh(&mesh, empty)) refusals.mesh = err;
+    if (catch err = b3::shape_cast_height_field(flat, empty)) refusals.height_field = err;
 
     b3::ShapeCastInput crowded = a_probe_dropped_from_three_metres(crowd[..], 0.0);
-    if (catch err = mesh.shape_cast(crowded)) refusals.one_point_too_many = err;
+    if (catch err = b3::shape_cast_mesh(&mesh, crowded)) refusals.one_point_too_many = err;
 
     b3::ShapeCastInput full = a_probe_dropped_from_three_metres(crowd[1..], 0.0);
-    if (try out = mesh.shape_cast(full)) refusals.a_full_proxy_still_answers = out.hit;
-    if (try out = unit.shape_cast(a_probe_dropped_from_three_metres(tip[..], 0.25))) {
+    if (try out = b3::shape_cast_mesh(&mesh, full)) refusals.a_full_proxy_still_answers = out.hit;
+    if (try out = b3::shape_cast_sphere(&unit, a_probe_dropped_from_three_metres(tip[..], 0.25))) {
         refusals.an_ordinary_proxy_still_answers = out.hit;
     }
 
@@ -1074,7 +1074,7 @@ fn SweepAllocation the_byte_count_around_every_shape_cast() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
       row_count: 8,
@@ -1082,7 +1082,7 @@ fn SweepAllocation the_byte_count_around_every_shape_cast() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -1092,7 +1092,7 @@ fn SweepAllocation the_byte_count_around_every_shape_cast() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Sphere unit = a_half_metre_sphere_at_the_origin();
     b3::Capsule rod = { .center1 = { -1.0, 0.0, 0.0 }, .center2 = { 1.0, 0.0, 0.0 }, .radius = 0.25 };
@@ -1107,12 +1107,12 @@ fn SweepAllocation the_byte_count_around_every_shape_cast() {
     int before = b3::byte_count();
 
     CastReading[6] every = {
-      @the_reading_of(unit.shape_cast(dropped)),
-      @the_reading_of(rod.shape_cast(dropped)),
-      @the_reading_of(cube.base.shape_cast(dropped)),
-      @the_reading_of(one_sphere.shape_cast(dropped)),
-      @the_reading_of(mesh.shape_cast(a_probe_dropped_from_three_metres(over_the_grid[..], 0.25))),
-      @the_reading_of(flat.shape_cast(a_probe_dropped_from_three_metres(over_the_field[..], 0.25))),
+      @the_reading_of(b3::shape_cast_sphere(&unit, dropped)),
+      @the_reading_of(b3::shape_cast_capsule(&rod, dropped)),
+      @the_reading_of(b3::shape_cast_hull(&cube.base, dropped)),
+      @the_reading_of(b3::shape_cast_compound(one_sphere, dropped)),
+      @the_reading_of(b3::shape_cast_mesh(&mesh, a_probe_dropped_from_three_metres(over_the_grid[..], 0.25))),
+      @the_reading_of(b3::shape_cast_height_field(flat, a_probe_dropped_from_three_metres(over_the_field[..], 0.25))),
     };
 
     int after = b3::byte_count();

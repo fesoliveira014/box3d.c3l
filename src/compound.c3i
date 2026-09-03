@@ -174,7 +174,7 @@ struct ChildShape {
 <*
  Raw compound constructor. Exactly one definition makes it return a null pointer — one naming
  MAX_CHILD_SHAPES children or more — and it reads the four child arrays, and the hull and mesh
- each child names, without testing any of them for null. The wrapper in box3d_compound.c3 carries
+ each child names, without testing any of them for null. The wrapper in src/compound.c3 carries
  the guards for all of it and is the only public way in.
 *>
 extern fn CompoundData* create_compound_raw(CompoundDef* def) @cname("b3CreateCompound") @private;
@@ -182,21 +182,21 @@ extern fn CompoundData* create_compound_raw(CompoundDef* def) @cname("b3CreateCo
 <*
  Releases the compound. The caller owns it and must call this exactly once — see MeshData.
 *>
-extern fn void CompoundData.destroy(&self) @cname("b3DestroyCompound");
+extern fn void destroy_compound(CompoundData* compound) @cname("b3DestroyCompound");
 
 <*
  Raw byte conversions. Neither allocates nor copies: both hand back the address they were given,
  the first having nulled the compound's tree pointer and the second having pointed it back into
  the bytes. box3d reads the header through the pointer before it checks any length, so the
- wrappers in box3d_compound.c3 carry the size guard and are the only public way in.
+ wrappers in src/compound.c3 carry the size guard and are the only public way in.
 *>
-extern fn char* compound_to_bytes_raw(CompoundData* compound) @cname("b3ConvertCompoundToBytes") @private;
-extern fn CompoundData* compound_from_bytes_raw(char* bytes, int byte_count) @cname("b3ConvertBytesToCompound") @private;
+extern fn char* convert_compound_to_bytes_raw(CompoundData* compound) @cname("b3ConvertCompoundToBytes") @private;
+extern fn CompoundData* convert_bytes_to_compound_raw(char* bytes, int byte_count) @cname("b3ConvertBytesToCompound") @private;
 
 <*
  Raw child accessors. Every one of them asserts its index and this release build compiles the
  assertion out, so each reads its array unconditionally and an index outside the count reaches
- memory that is not a child. The wrappers in box3d_compound.c3 restore the bound and are the only
+ memory that is not a child. The wrappers in src/compound.c3 restore the bound and are the only
  public way in.
 *>
 extern fn ChildShape compound_child_raw(CompoundData* compound, int child_index) @cname("b3GetCompoundChild") @private;
@@ -208,13 +208,13 @@ extern fn CompoundSphere compound_sphere_raw(CompoundData* compound, int index) 
 <*
  Raw material accessor. It carries no count, and the pointer it returns is non-null even for a
  compound with no materials at all — it then addresses the first byte past the allocation — so the
- wrapper in box3d_compound.c3 pairs it with the count and is the only public way in.
+ wrapper in src/compound.c3 pairs it with the count and is the only public way in.
 *>
 extern fn SurfaceMaterial* compound_materials_raw(CompoundData* compound) @cname("b3GetCompoundMaterials") @private;
 
 <*
  Raw compound bounds. box3d indexes the compound's node array at the tree's root without testing
- it, and a compound with no children carries the root -1, so the wrapper in box3d_compound.c3
+ it, and a compound with no children carries the root -1, so the wrapper in src/compound.c3
  refuses that one case and is the only public way in.
 *>
 extern fn Aabb compute_compound_aabb_raw(CompoundData* compound, Transform transform) @cname("b3ComputeCompoundAABB") @private;
@@ -233,4 +233,4 @@ alias CompoundQueryFn = fn bool(CompoundData* compound, int child_index, void* c
  The order is the compound's own tree order, which is neither the index CompoundData.child()
  takes nor the order create_compound() was given the children in.
 *>
-extern fn void CompoundData.query(&self, Aabb aabb, CompoundQueryFn fcn, void* context) @cname("b3QueryCompound");
+extern fn void query_compound(CompoundData* compound, Aabb aabb, CompoundQueryFn fcn, void* context) @cname("b3QueryCompound");

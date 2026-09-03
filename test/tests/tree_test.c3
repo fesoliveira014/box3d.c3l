@@ -19,8 +19,8 @@ fn void the_tree_types_match_the_c_layout() @test {
 fn int[2] the_byte_count_around_a_live_tree() {
     int baseline = b3::byte_count();
 
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     return { baseline, b3::byte_count() };
 }
@@ -35,11 +35,11 @@ fn void a_destroyed_tree_gives_back_every_byte_it_took() @test {
 fn int[4] the_byte_count_around_a_tree_destroyed_twice() {
     int baseline = b3::byte_count();
 
-    b3::DynamicTree tree = b3::create_tree(16);
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
     int while_alive = b3::byte_count();
-    tree.destroy();
+    b3::dynamic_tree_destroy(&tree);
     int after_one = b3::byte_count();
-    tree.destroy();
+    b3::dynamic_tree_destroy(&tree);
 
     return { baseline, while_alive, after_one, b3::byte_count() };
 }
@@ -63,17 +63,17 @@ struct TreeCapacities {
 }
 
 fn TreeCapacities the_node_capacities_of_four_trees() {
-    b3::DynamicTree nonsense = b3::create_tree(-1);
-    defer nonsense.destroy();
+    b3::DynamicTree nonsense = b3::dynamic_tree_create(-1);
+    defer b3::dynamic_tree_destroy(&nonsense);
 
-    b3::DynamicTree small = b3::create_tree(8);
-    defer small.destroy();
+    b3::DynamicTree small = b3::dynamic_tree_create(8);
+    defer b3::dynamic_tree_destroy(&small);
 
-    b3::DynamicTree floored = b3::create_tree(16);
-    defer floored.destroy();
+    b3::DynamicTree floored = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&floored);
 
-    b3::DynamicTree large = b3::create_tree(64);
-    defer large.destroy();
+    b3::DynamicTree large = b3::dynamic_tree_create(64);
+    defer b3::dynamic_tree_destroy(&large);
 
     return {
         .negative = nonsense.node_capacity,
@@ -103,8 +103,8 @@ struct ProxyReadings {
 }
 
 fn ProxyReadings the_readings_of_two_proxies() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     b3::Aabb[2] boxes = {
         {
@@ -123,11 +123,9 @@ fn ProxyReadings the_readings_of_two_proxies() {
 
     ProxyReadings read;
     for (int i = 0; i < 2; i++) {
-        int proxy = tree.create_proxy(
-          aabb: boxes[i],
+        int proxy = b3::dynamic_tree_create_proxy(&tree, aabb: boxes[i],
           category_bits: ulong::max,
-          user_data: payloads[i],
-        )!!;
+          user_data: payloads[i],)!!;
         if (try user_data = tree.user_data(proxy)) read.user_data[i] = user_data;
         if (try box = tree.aabb(proxy)) read.box[i] = box;
     }
@@ -169,14 +167,12 @@ struct IdGuards {
 }
 
 fn IdGuards the_guards_on_a_proxy_id() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
-    int live = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+    int live = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
       category_bits: ulong::max,
-      user_data: 7,
-    )!!;
+      user_data: 7,)!!;
 
     IdGuards guards;
     if (catch err = tree.user_data(-1)) guards.user_data_negative = err;
@@ -214,33 +210,25 @@ struct BoxGuards {
 }
 
 fn BoxGuards the_boxes_a_proxy_is_refused_for() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     float infinity = (float)1.0e40;
     float nan = infinity - infinity;
 
     BoxGuards guards;
-    if (catch err = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { 5.0, 5.0, 5.0 }, .upper_bound = { -5.0, -5.0, -5.0 } },
+    if (catch err = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { 5.0, 5.0, 5.0 }, .upper_bound = { -5.0, -5.0, -5.0 } },
       category_bits: 1,
-      user_data: 1,
-    )) guards.inverted = err;
-    if (catch err = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { -infinity, 0.0, 0.0 }, .upper_bound = { infinity, 1.0, 1.0 } },
+      user_data: 1,)) guards.inverted = err;
+    if (catch err = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { -infinity, 0.0, 0.0 }, .upper_bound = { infinity, 1.0, 1.0 } },
       category_bits: 1,
-      user_data: 2,
-    )) guards.infinite = err;
-    if (catch err = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { nan, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+      user_data: 2,)) guards.infinite = err;
+    if (catch err = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { nan, 0.0, 0.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
       category_bits: 1,
-      user_data: 3,
-    )) guards.not_a_number = err;
-    if (catch err = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 0.0, 0.0, 0.0 } },
+      user_data: 3,)) guards.not_a_number = err;
+    if (catch err = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { 0.0, 0.0, 0.0 }, .upper_bound = { 0.0, 0.0, 0.0 } },
       category_bits: 1,
-      user_data: 4,
-    )) guards.zero = err;
+      user_data: 4,)) guards.zero = err;
 
     return guards;
 }
@@ -270,8 +258,8 @@ struct MutatorReadings {
 }
 
 fn MutatorReadings the_readings_after_moving_and_enlarging_one_proxy() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     b3::Aabb elsewhere = {
         .lower_bound = { 6.5, -3.25, 12.75 },
@@ -282,19 +270,17 @@ fn MutatorReadings the_readings_after_moving_and_enlarging_one_proxy() {
         .upper_bound = { 9.5, -0.25, 15.75 },
     };
 
-    int proxy = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+    int proxy = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
       category_bits: 2,
-      user_data: 11,
-    )!!;
+      user_data: 11,)!!;
 
     MutatorReadings read;
     if (try bits = tree.category_bits(proxy)) read.category_at_creation = bits;
 
-    if (catch err = tree.move_proxy(proxy, elsewhere)) read.move_refused = err;
+    if (catch err = b3::dynamic_tree_move_proxy(&tree, proxy, elsewhere)) read.move_refused = err;
     if (try box = tree.aabb(proxy)) read.moved = box;
 
-    if (catch err = tree.enlarge_proxy(proxy, wider)) read.enlarge_refused = err;
+    if (catch err = b3::dynamic_tree_enlarge_proxy(&tree, proxy, wider)) read.enlarge_refused = err;
     if (try box = tree.aabb(proxy)) read.enlarged = box;
 
     if (catch err = tree.set_category_bits(proxy, 0xF0)) read.set_refused = err;
@@ -348,8 +334,8 @@ struct ProxyLifetimes {
 }
 
 fn ProxyLifetimes the_counts_around_a_destroyed_proxy() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     b3::Aabb unit = {
         .lower_bound = { -1.0, -1.0, -1.0 },
@@ -359,25 +345,21 @@ fn ProxyLifetimes the_counts_around_a_destroyed_proxy() {
     ProxyLifetimes lifetimes;
     int[4] created;
     for (int i = 0; i < 4; i++) {
-        created[i] = tree.create_proxy(
-          aabb: unit,
+        created[i] = b3::dynamic_tree_create_proxy(&tree, aabb: unit,
           category_bits: 1,
-          user_data: (ulong)i,
-        )!!;
+          user_data: (ulong)i,)!!;
     }
     lifetimes.proxy_count[0] = tree.proxy_count;
 
     lifetimes.destroyed_id = created[1];
-    if (catch err = tree.destroy_proxy(created[1])) lifetimes.destroy_refused = err;
+    if (catch err = b3::dynamic_tree_destroy_proxy(&tree, created[1])) lifetimes.destroy_refused = err;
     lifetimes.proxy_count[1] = tree.proxy_count;
-    if (catch err = tree.destroy_proxy(created[1])) lifetimes.repeated_destroy = err;
+    if (catch err = b3::dynamic_tree_destroy_proxy(&tree, created[1])) lifetimes.repeated_destroy = err;
     if (catch err = tree.user_data(created[1])) lifetimes.read_of_a_destroyed_proxy = err;
 
-    lifetimes.reused_id = tree.create_proxy(
-      aabb: unit,
+    lifetimes.reused_id = b3::dynamic_tree_create_proxy(&tree, aabb: unit,
       category_bits: 1,
-      user_data: 99,
-    )!!;
+      user_data: 99,)!!;
     lifetimes.proxy_count[2] = tree.proxy_count;
 
     return lifetimes;
@@ -408,8 +390,8 @@ struct TreeReports {
 }
 
 fn TreeReports the_reports_of_a_growing_tree() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     TreeReports reports;
     reports.height[0] = tree.height();
@@ -418,14 +400,12 @@ fn TreeReports the_reports_of_a_growing_tree() {
     reports.empty_bounds = tree.root_bounds();
 
     for (int i = 0; i < 6; i++) {
-        tree.create_proxy(
-          aabb: (b3::Aabb){
+        b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){
             .lower_bound = { i * 4.0f - 1.0f, -1.0, -1.0 },
             .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
           },
           category_bits: 1ul << i,
-          user_data: (ulong)i,
-        )!!;
+          user_data: (ulong)i,)!!;
         if (i == 1) {
             reports.height[1] = tree.height();
             reports.area_ratio[1] = tree.area_ratio();
@@ -498,28 +478,26 @@ fn RebuildCounts the_counts_around_a_rebuild() {
     RebuildCounts counts;
     counts.baseline = b3::byte_count();
 
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     counts.live = b3::byte_count();
     counts.tree_bytes = tree.byte_count();
 
-    counts.sorted[0] = tree.rebuild(false);
+    counts.sorted[0] = b3::dynamic_tree_rebuild(&tree, false);
     counts.after_an_empty_rebuild = b3::byte_count();
 
     for (int i = 0; i < 6; i++) {
-        tree.create_proxy(
-          aabb: (b3::Aabb){
+        b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){
             .lower_bound = { i * 4.0f - 1.0f, -1.0, -1.0 },
             .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
           },
           category_bits: 1ul << i,
-          user_data: (ulong)i,
-        )!!;
+          user_data: (ulong)i,)!!;
     }
     counts.height[0] = tree.height();
-    counts.sorted[1] = tree.rebuild(false);
-    counts.sorted[2] = tree.rebuild(true);
+    counts.sorted[1] = b3::dynamic_tree_rebuild(&tree, false);
+    counts.sorted[2] = b3::dynamic_tree_rebuild(&tree, true);
     counts.height[1] = tree.height();
     counts.after_a_rebuild = b3::byte_count();
 
@@ -563,33 +541,29 @@ struct ProxyIdGuards {
 }
 
 fn ProxyIdGuards the_guards_on_every_call_that_names_a_proxy() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     b3::Aabb unit = {
         .lower_bound = { -1.0, -1.0, -1.0 },
         .upper_bound = { 1.0, 1.0, 1.0 },
     };
 
-    int live = tree.create_proxy(
-      aabb: unit,
+    int live = b3::dynamic_tree_create_proxy(&tree, aabb: unit,
       category_bits: 1,
-      user_data: 1,
-    )!!;
-    int freed = tree.create_proxy(
-      aabb: unit,
+      user_data: 1,)!!;
+    int freed = b3::dynamic_tree_create_proxy(&tree, aabb: unit,
       category_bits: 1,
-      user_data: 2,
-    )!!;
+      user_data: 2,)!!;
 
     ProxyIdGuards guards;
-    if (catch err = tree.destroy_proxy(freed)) guards.destroy_of_a_live_proxy = err;
+    if (catch err = b3::dynamic_tree_destroy_proxy(&tree, freed)) guards.destroy_of_a_live_proxy = err;
 
     int[3] bad = { -1, tree.node_capacity, freed };
     for (int i = 0; i < 3; i++) {
-        if (catch err = tree.destroy_proxy(bad[i])) guards.destroyed[i] = err;
-        if (catch err = tree.move_proxy(bad[i], unit)) guards.moved[i] = err;
-        if (catch err = tree.enlarge_proxy(bad[i], unit)) guards.enlarged[i] = err;
+        if (catch err = b3::dynamic_tree_destroy_proxy(&tree, bad[i])) guards.destroyed[i] = err;
+        if (catch err = b3::dynamic_tree_move_proxy(&tree, bad[i], unit)) guards.moved[i] = err;
+        if (catch err = b3::dynamic_tree_enlarge_proxy(&tree, bad[i], unit)) guards.enlarged[i] = err;
         if (catch err = tree.set_category_bits(bad[i], 0xF0)) guards.set_category[i] = err;
         if (catch err = tree.category_bits(bad[i])) guards.read_category[i] = err;
     }
@@ -634,14 +608,12 @@ struct ProxyBoxGuards {
 }
 
 fn ProxyBoxGuards the_boxes_a_move_and_an_enlarge_are_refused_for() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
-    int proxy = tree.create_proxy(
-      aabb: (b3::Aabb){ .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
+    int proxy = b3::dynamic_tree_create_proxy(&tree, aabb: (b3::Aabb){ .lower_bound = { -1.0, -1.0, -1.0 }, .upper_bound = { 1.0, 1.0, 1.0 } },
       category_bits: 1,
-      user_data: 1,
-    )!!;
+      user_data: 1,)!!;
 
     float infinity = (float)1.0e40;
     float nan = infinity - infinity;
@@ -654,8 +626,8 @@ fn ProxyBoxGuards the_boxes_a_move_and_an_enlarge_are_refused_for() {
 
     ProxyBoxGuards guards;
     for (int i = 0; i < 4; i++) {
-        if (catch err = tree.move_proxy(proxy, boxes[i])) guards.moved[i] = err;
-        if (catch err = tree.enlarge_proxy(proxy, boxes[i])) guards.enlarged[i] = err;
+        if (catch err = b3::dynamic_tree_move_proxy(&tree, proxy, boxes[i])) guards.moved[i] = err;
+        if (catch err = b3::dynamic_tree_enlarge_proxy(&tree, proxy, boxes[i])) guards.enlarged[i] = err;
     }
 
     return guards;
@@ -719,14 +691,12 @@ fn bool hits_carry_exactly_ulongs(ClosestVisits visits, ulong[] expected) {
 
 fn void fill_with_six_proxies(b3::DynamicTree* tree) {
     for (int i = 0; i < 6; i++) {
-        tree.create_proxy(
-          aabb: (b3::Aabb){
+        b3::dynamic_tree_create_proxy(tree, aabb: (b3::Aabb){
             .lower_bound = { i * 4.0f - 1.0f, -1.0, -1.0 },
             .upper_bound = { i * 4.0f + 1.0f, 1.0, 1.0 },
           },
           category_bits: 1ul << i,
-          user_data: (ulong)(i + 1),
-        )!!;
+          user_data: (ulong)(i + 1),)!!;
     }
 }
 
@@ -738,8 +708,8 @@ struct MovedProxyHits {
 }
 
 fn MovedProxyHits the_hits_before_and_after_one_proxy_moves() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     b3::Aabb here = {
         .lower_bound = { -1.0, -1.0, -1.0 },
@@ -754,37 +724,29 @@ fn MovedProxyHits the_hits_before_and_after_one_proxy_moves() {
         .upper_bound = { 2.0, 2.0, 2.0 },
     };
 
-    tree.create_proxy(
-      aabb: here,
+    b3::dynamic_tree_create_proxy(&tree, aabb: here,
       category_bits: ulong::max,
-      user_data: 111,
-    )!!;
-    int moved = tree.create_proxy(
-      aabb: away,
+      user_data: 111,)!!;
+    int moved = b3::dynamic_tree_create_proxy(&tree, aabb: away,
       category_bits: ulong::max,
-      user_data: 222,
-    )!!;
+      user_data: 222,)!!;
 
     QueryHits before;
-    b3::TreeStats stats = tree.query(
-      aabb: window,
+    b3::TreeStats stats = b3::dynamic_tree_query(&tree, aabb: window,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &before,
-    );
+      context: &before,);
     int count_before = tree.proxy_count;
 
-    tree.move_proxy(moved, here)!!;
+    b3::dynamic_tree_move_proxy(&tree, moved, here)!!;
 
     QueryHits after;
-    tree.query(
-      aabb: window,
+    b3::dynamic_tree_query(&tree, aabb: window,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &after,
-    );
+      context: &after,);
 
     return {
         .before = before,
@@ -816,8 +778,8 @@ struct MaskedHits {
 }
 
 fn MaskedHits the_hits_of_six_proxies_under_one_mask() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
     fill_with_six_proxies(&tree);
 
     b3::Aabb everywhere = {
@@ -826,27 +788,21 @@ fn MaskedHits the_hits_of_six_proxies_under_one_mask() {
     };
 
     MaskedHits hits;
-    tree.query(
-      aabb: everywhere,
+    b3::dynamic_tree_query(&tree, aabb: everywhere,
       mask_bits: 0b101,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &hits.loose,
-    );
-    tree.query(
-      aabb: everywhere,
+      context: &hits.loose,);
+    b3::dynamic_tree_query(&tree, aabb: everywhere,
       mask_bits: 0b101,
       require_all_bits: true,
       fcn: &collect_proxy_user_data,
-      context: &hits.strict,
-    );
-    tree.query(
-      aabb: everywhere,
+      context: &hits.strict,);
+    b3::dynamic_tree_query(&tree, aabb: everywhere,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &hits.unfiltered,
-    );
+      context: &hits.unfiltered,);
 
     return hits;
 }
@@ -871,8 +827,8 @@ struct StoppedHits {
 }
 
 fn StoppedHits the_hits_when_a_callback_stops_the_traversal() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
     fill_with_six_proxies(&tree);
 
     b3::Aabb everywhere = {
@@ -881,22 +837,18 @@ fn StoppedHits the_hits_when_a_callback_stops_the_traversal() {
     };
 
     QueryHits stopped = { .stop_after = 1 };
-    b3::TreeStats stopped_stats = tree.query(
-      aabb: everywhere,
+    b3::TreeStats stopped_stats = b3::dynamic_tree_query(&tree, aabb: everywhere,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &stopped,
-    );
+      context: &stopped,);
 
     QueryHits every;
-    b3::TreeStats every_stats = tree.query(
-      aabb: everywhere,
+    b3::TreeStats every_stats = b3::dynamic_tree_query(&tree, aabb: everywhere,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &every,
-    );
+      context: &every,);
 
     return {
         .stopped = stopped,
@@ -958,63 +910,53 @@ struct ClosestReadings {
 }
 
 fn ClosestReadings the_visits_of_two_closest_queries() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
     fill_with_six_proxies(&tree);
 
     float initial = 1.0e9f;
 
     ClosestVisits wide;
-    b3::ClosestSearch wide_result = tree.query_closest(
-      point: { 0.0, 0.0, 0.0 },
+    b3::ClosestSearch wide_result = b3::dynamic_tree_query_closest(&tree, point: { 0.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_without_narrowing,
       context: &wide,
-      search_bound: initial,
-    );
+      search_bound: initial,);
 
     ClosestVisits narrowed;
-    b3::ClosestSearch narrowed_result = tree.query_closest(
-      point: { 0.0, 0.0, 0.0 },
+    b3::ClosestSearch narrowed_result = b3::dynamic_tree_query_closest(&tree, point: { 0.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_and_narrow_to_half,
       context: &narrowed,
-      search_bound: initial,
-    );
+      search_bound: initial,);
 
     // A bound this tight admits only the proxies within it of the point, so the point itself is
     // what decides the answer rather than merely the order.
     ClosestVisits near_the_far_end;
-    tree.query_closest(
-      point: { 20.0, 0.0, 0.0 },
+    b3::dynamic_tree_query_closest(&tree, point: { 20.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_without_narrowing,
       context: &near_the_far_end,
-      search_bound: 20.0,
-    );
+      search_bound: 20.0,);
 
     ClosestVisits masked;
-    b3::ClosestSearch masked_result = tree.query_closest(
-      point: { 20.0, 0.0, 0.0 },
+    b3::ClosestSearch masked_result = b3::dynamic_tree_query_closest(&tree, point: { 20.0, 0.0, 0.0 },
       mask_bits: 0x5,
       require_all_bits: false,
       fcn: &visit_without_narrowing,
       context: &masked,
-      search_bound: initial,
-    );
+      search_bound: initial,);
 
     ClosestVisits strict;
-    b3::ClosestSearch strict_result = tree.query_closest(
-      point: { 20.0, 0.0, 0.0 },
+    b3::ClosestSearch strict_result = b3::dynamic_tree_query_closest(&tree, point: { 20.0, 0.0, 0.0 },
       mask_bits: 0x5,
       require_all_bits: true,
       fcn: &visit_without_narrowing,
       context: &strict,
-      search_bound: initial,
-    );
+      search_bound: initial,);
 
     return {
         .near_the_far_end = near_the_far_end,
@@ -1062,8 +1004,8 @@ struct EmptyTreeAnswers {
 }
 
 fn EmptyTreeAnswers the_answers_an_empty_tree_gives() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
 
     b3::Aabb everywhere = {
         .lower_bound = { -100.0, -100.0, -100.0 },
@@ -1073,23 +1015,19 @@ fn EmptyTreeAnswers the_answers_an_empty_tree_gives() {
     float initial = 1.0e9f;
 
     QueryHits hits;
-    b3::TreeStats stats = tree.query(
-      aabb: everywhere,
+    b3::TreeStats stats = b3::dynamic_tree_query(&tree, aabb: everywhere,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &collect_proxy_user_data,
-      context: &hits,
-    );
+      context: &hits,);
 
     ClosestVisits visits;
-    b3::ClosestSearch closest = tree.query_closest(
-      point: { 0.0, 0.0, 0.0 },
+    b3::ClosestSearch closest = b3::dynamic_tree_query_closest(&tree, point: { 0.0, 0.0, 0.0 },
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_and_narrow_to_half,
       context: &visits,
-      search_bound: initial,
-    );
+      search_bound: initial,);
 
     return {
         .hits = hits.count,
@@ -1192,14 +1130,12 @@ fn void fill_with_three_stepped_proxies(b3::DynamicTree* tree) {
     float[3] centre_x = { 0.0, 2.0, 4.0 };
     float[3] centre_y = { 0.0, 1.0, 2.0 };
     for (int i = 0; i < 3; i++) {
-        tree.create_proxy(
-          aabb: (b3::Aabb){
+        b3::dynamic_tree_create_proxy(tree, aabb: (b3::Aabb){
             .lower_bound = { centre_x[i] - 0.5f, centre_y[i] - 0.5f, -0.5 },
             .upper_bound = { centre_x[i] + 0.5f, centre_y[i] + 0.5f, 0.5 },
           },
           category_bits: 1ul << i,
-          user_data: (ulong)(0x11 * (i + 1)),
-        )!!;
+          user_data: (ulong)(0x11 * (i + 1)),)!!;
     }
 }
 
@@ -1245,12 +1181,12 @@ struct RayCastReadings {
 }
 
 fn RayCastReadings the_ray_cast_readings_of_three_proxies() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
     fill_with_three_stepped_proxies(&tree);
 
-    b3::DynamicTree empty = b3::create_tree(16);
-    defer empty.destroy();
+    b3::DynamicTree empty = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&empty);
 
     b3::RayCastInput diagonal = the_diagonal_ray(1.0f);
     b3::RayCastInput along_x = the_ray_along_x(0.0f);
@@ -1258,56 +1194,42 @@ fn RayCastReadings the_ray_cast_readings_of_three_proxies() {
     b3::RayCastInput along_x_at_two = the_ray_along_x(2.0f);
 
     RayCastReadings read;
-    read.diagonal_stats = tree.ray_cast(
-      input: &diagonal,
+    read.diagonal_stats = b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.diagonal,
-    );
-    read.along_x_stats = tree.ray_cast(
-      input: &along_x,
+      context: &read.diagonal,);
+    read.along_x_stats = b3::dynamic_tree_ray_cast(&tree, input: &along_x,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.along_x,
-    );
-    tree.ray_cast(
-      input: &along_x_at_one,
+      context: &read.along_x,);
+    b3::dynamic_tree_ray_cast(&tree, input: &along_x_at_one,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.along_x_at_one,
-    );
-    tree.ray_cast(
-      input: &along_x_at_two,
+      context: &read.along_x_at_one,);
+    b3::dynamic_tree_ray_cast(&tree, input: &along_x_at_two,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.along_x_at_two,
-    );
-    tree.ray_cast(
-      input: &diagonal,
+      context: &read.along_x_at_two,);
+    b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: 1,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.masked,
-    );
-    read.strict_stats = tree.ray_cast(
-      input: &diagonal,
+      context: &read.masked,);
+    read.strict_stats = b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: 0b011,
       require_all_bits: true,
       fcn: &visit_ray_proxy,
-      context: &read.strict,
-    );
+      context: &read.strict,);
     read.empty_stats = { .node_visits = -1, .leaf_visits = -1 };
-    read.empty_stats = empty.ray_cast(
-      input: &diagonal,
+    read.empty_stats = b3::dynamic_tree_ray_cast(&empty, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.empty_tree,
-    );
+      context: &read.empty_tree,);
 
     return read;
 }
@@ -1381,8 +1303,8 @@ struct CastAnswerReadings {
 }
 
 fn CastAnswerReadings the_readings_of_five_callback_answers() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
     fill_with_three_stepped_proxies(&tree);
 
     b3::RayCastInput diagonal = the_diagonal_ray(1.0f);
@@ -1396,56 +1318,41 @@ fn CastAnswerReadings the_readings_of_five_callback_answers() {
     read.box_clipped.clip_to = 0.3f;
     read.box_stopped.stop = true;
 
-    tree.ray_cast(
-      input: &diagonal,
+    b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.ray_unclipped,
-
-    );
-    tree.ray_cast(
-      input: &diagonal,
+      context: &read.ray_unclipped,);
+    b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.ray_clipped,
-    );
-    read.ray_stopped_stats = tree.ray_cast(
-      input: &diagonal,
+      context: &read.ray_clipped,);
+    read.ray_stopped_stats = b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.ray_stopped,
-    );
-    tree.ray_cast(
-      input: &diagonal,
+      context: &read.ray_stopped,);
+    b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.ray_negative,
-    );
-    tree.ray_cast(
-      input: &half_way,
+      context: &read.ray_negative,);
+    b3::dynamic_tree_ray_cast(&tree, input: &half_way,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_ray_proxy,
-      context: &read.ray_bounded,
-    );
-    tree.box_cast(
-      input: &box,
+      context: &read.ray_bounded,);
+    b3::dynamic_tree_box_cast(&tree, input: &box,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.box_clipped,
-    );
-    tree.box_cast(
-      input: &box,
+      context: &read.box_clipped,);
+    b3::dynamic_tree_box_cast(&tree, input: &box,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.box_stopped,
-    );
+      context: &read.box_stopped,);
 
     return read;
 }
@@ -1510,8 +1417,8 @@ fn b3::BoxCastInput a_box_swept_along_x(float lower_y, float upper_y) {
 }
 
 fn BoxCastReadings the_box_cast_readings_of_three_proxies() {
-    b3::DynamicTree tree = b3::create_tree(16);
-    defer tree.destroy();
+    b3::DynamicTree tree = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&tree);
     fill_with_three_stepped_proxies(&tree);
 
     b3::BoxCastInput diagonal = the_diagonal_box_cast(1.0f);
@@ -1523,62 +1430,46 @@ fn BoxCastReadings the_box_cast_readings_of_three_proxies() {
     b3::BoxCastInput lowered = a_box_swept_along_x(-1.6f, 0.1f);
 
     BoxCastReadings read;
-    read.diagonal_stats = tree.box_cast(
-      input: &diagonal,
+    read.diagonal_stats = b3::dynamic_tree_box_cast(&tree, input: &diagonal,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.diagonal,
-    );
-    tree.box_cast(
-      input: &thin,
+      context: &read.diagonal,);
+    b3::dynamic_tree_box_cast(&tree, input: &thin,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.thin_along_x,
-    );
-    tree.box_cast(
-      input: &thin_at_two,
+      context: &read.thin_along_x,);
+    b3::dynamic_tree_box_cast(&tree, input: &thin_at_two,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.thin_along_x_at_two,
-    );
-    tree.box_cast(
-      input: &wide,
+      context: &read.thin_along_x_at_two,);
+    b3::dynamic_tree_box_cast(&tree, input: &wide,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.wide_along_x,
-    );
-    tree.box_cast(
-      input: &wider,
+      context: &read.wide_along_x,);
+    b3::dynamic_tree_box_cast(&tree, input: &wider,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.wider_along_x,
-    );
-    tree.box_cast(
-      input: &lifted,
+      context: &read.wider_along_x,);
+    b3::dynamic_tree_box_cast(&tree, input: &lifted,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.lifted_along_x,
-    );
-    tree.box_cast(
-      input: &lowered,
+      context: &read.lifted_along_x,);
+    b3::dynamic_tree_box_cast(&tree, input: &lowered,
       mask_bits: ulong::max,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.lowered_along_x,
-    );
-    tree.box_cast(
-      input: &diagonal,
+      context: &read.lowered_along_x,);
+    b3::dynamic_tree_box_cast(&tree, input: &diagonal,
       mask_bits: 1,
       require_all_bits: false,
       fcn: &visit_box_proxy,
-      context: &read.masked,
-    );
+      context: &read.masked,);
 
     return read;
 }
@@ -1669,8 +1560,8 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
     TreeThroughAFile trip;
     trip.baseline = b3::byte_count();
 
-    b3::DynamicTree written = b3::create_tree(16);
-    defer written.destroy();
+    b3::DynamicTree written = b3::dynamic_tree_create(16);
+    defer b3::dynamic_tree_destroy(&written);
 
     b3::Aabb[A_SAVED_PROXY_COUNT] boxes = {
         { .lower_bound = { -1.5, -2.25, -3.75 }, .upper_bound = { 4.5, 5.25, 6.75 } },
@@ -1681,11 +1572,9 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
 
     int[A_SAVED_PROXY_COUNT] proxies;
     for (int i = 0; i < A_SAVED_PROXY_COUNT; i++) {
-        int? proxy = written.create_proxy(
-          aabb: boxes[i],
+        int? proxy = b3::dynamic_tree_create_proxy(&written, aabb: boxes[i],
           category_bits: ulong::max,
-          user_data: payloads[i],
-        );
+          user_data: payloads[i],);
         if (catch proxy) return trip;
         proxies[i] = proxy;
         trip.boxes_written[i] = boxes[i];
@@ -1695,7 +1584,7 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
     trip.height_written = written.height();
     trip.root_written = written.root_bounds();
 
-    written.save(file.zstr_tcopy());
+    b3::dynamic_tree_save(&written, file.zstr_tcopy());
 
     b3::DynamicTree? reread = b3::load_tree(file.zstr_tcopy(), 1.0);
     if (catch reread) return trip;
@@ -1708,13 +1597,13 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
         if (try box = read.aabb(proxies[i])) trip.boxes_read[i] = box;
         if (try payload = read.user_data(proxies[i])) trip.payloads_read[i] = payload;
     }
-    read.destroy();
+    b3::dynamic_tree_destroy(&read);
 
     b3::DynamicTree? rescaled = b3::load_tree(file.zstr_tcopy(), 2.0);
     if (catch rescaled) return trip;
     b3::DynamicTree doubled = rescaled;
     trip.root_at_double_scale = doubled.root_bounds();
-    doubled.destroy();
+    b3::dynamic_tree_destroy(&doubled);
 
     if (catch err = b3::load_tree("box3d_no_such_directory/tree.bin", 1.0)) trip.a_path_that_holds_nothing = err;
 

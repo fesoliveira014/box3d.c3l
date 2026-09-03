@@ -6,7 +6,7 @@ module b3;
  carries the allocation, so a mesh never destroyed shifts that count for the rest of the process
  exactly as a leaked world does. The triangles, vertices and hierarchy hang off the end of that
  one allocation at byte offsets from its own address, so the mesh is opaque here and could not be
- copied anyway. Build one with create_grid_mesh() and its siblings in box3d_mesh.c3.
+ copied anyway. Build one with create_grid_mesh() and its siblings in src/mesh.c3.
 *>
 typedef MeshData = void;
 
@@ -47,7 +47,7 @@ struct Mesh {
  The collision data behind a height field shape. Ownership, the byte count and the trailing
  arrays all work exactly as they do for MeshData — see there.
 
- Build one with create_height_field_grid() and its siblings in box3d_mesh.c3.
+ Build one with create_height_field_grid() and its siblings in src/mesh.c3.
 *>
 typedef HeightFieldData = void;
 
@@ -72,7 +72,7 @@ struct HeightFieldDef {
 
 <*
  Raw mesh constructors. Every one of them builds a b3MeshDef and hands it to b3CreateMesh, so
- every one returns a null pointer for geometry box3d cannot use; the wrappers in box3d_mesh.c3
+ every one returns a null pointer for geometry box3d cannot use; the wrappers in src/mesh.c3
  turn that into a fault and are the only public way in.
 *>
 extern fn MeshData* create_grid_mesh_raw(int x_count, int z_count, float cell_width, int material_count, bool identify_edges) @cname("b3CreateGridMesh") @private;
@@ -86,7 +86,7 @@ extern fn MeshData* create_mesh_raw(MeshDef* def, int* degenerate_triangle_indic
 <*
  Releases the mesh. The caller owns it and must call this exactly once — see MeshData.
 *>
-extern fn void MeshData.destroy(&self) @cname("b3DestroyMesh");
+extern fn void destroy_mesh(MeshData* mesh_data) @cname("b3DestroyMesh");
 
 <*
  The height of the mesh's bounding volume hierarchy, not any dimension of the mesh itself: it
@@ -106,7 +106,7 @@ extern fn Aabb MeshData.compute_aabb(&self, Transform transform, Vec3 scale) @cn
 <*
  Raw height field constructors. None of them can return a null pointer — box3d allocates
  whatever it is asked for, including a grid with no cells at all — so the wrappers in
- box3d_mesh.c3 carry the guards instead and are the only public way in.
+ src/mesh.c3 carry the guards instead and are the only public way in.
 *>
 extern fn HeightFieldData* create_height_field_raw(HeightFieldDef* def) @cname("b3CreateHeightField") @private;
 extern fn HeightFieldData* create_grid_raw(int row_count, int column_count, Vec3 scale, bool make_holes) @cname("b3CreateGrid") @private;
@@ -115,7 +115,7 @@ extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3
 <*
  Raw height field file calls. The first reads both of the definition's arrays without testing
  either for null, where create_height_field_raw() reads only the heights, and the second answers
- every refusal with a null pointer. The wrappers in box3d_mesh.c3 carry both guards and are the
+ every refusal with a null pointer. The wrappers in src/mesh.c3 carry both guards and are the
  only public way in.
 *>
 extern fn void dump_height_data_raw(HeightFieldDef* def, ZString path) @cname("b3DumpHeightData") @private;
@@ -124,7 +124,7 @@ extern fn HeightFieldData* load_height_field_raw(ZString path) @cname("b3LoadHei
 <*
  Releases the height field. The caller owns it and must call this exactly once — see MeshData.
 *>
-extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
+extern fn void destroy_height_field(HeightFieldData* height_field) @cname("b3DestroyHeightField");
 
 <*
  The bounds of the height field placed by this transform. The scale the field was built with is
@@ -137,7 +137,7 @@ extern fn Aabb HeightFieldData.compute_aabb(&self, Transform transform) @cname("
 <*
  Called once for each triangle a mesh or height field query finds, with the triangle's vertices
  in the shape's own frame and the index a cast on that shape reports. Returning false ends a
- Mesh.query; HeightFieldData.query reads nothing back and cannot be stopped.
+ query_mesh; query_height_field reads nothing back and cannot be stopped.
 *>
 alias MeshQueryFn = fn bool(Vec3 a, Vec3 b, Vec3 c, int triangle_index, void* context);
 
@@ -149,7 +149,7 @@ alias MeshQueryFn = fn bool(Vec3 a, Vec3 b, Vec3 c, int triangle_index, void* co
  An inverted box is repaired into the box it spans rather than answering nothing, and a mirroring
  scale swaps the second and third vertex so the scaled triangle keeps its winding.
 *>
-extern fn void Mesh.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryMesh");
+extern fn void query_mesh(Mesh* mesh, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryMesh");
 
 <*
  Reports the triangles whose cell meets bounds, a box in the field's own frame and scale. The test
@@ -159,4 +159,4 @@ extern fn void Mesh.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @c
  The work follows the box, not the field: box3d spans it in unclamped cell indices, so a billion
  cells costs seconds and a span past a signed int reports nothing. Intersect with compute_aabb().
 *>
-extern fn void HeightFieldData.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryHeightField");
+extern fn void query_height_field(HeightFieldData* height_field, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryHeightField");

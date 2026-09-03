@@ -13,10 +13,10 @@ module b3;
  @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs during
    one`
 *>
-fn RevoluteJointId? WorldId.create_revolute_joint(self, RevoluteJointDef* def) {
+fn RevoluteJointId? create_revolute_joint(WorldId world, RevoluteJointDef* def) {
     if (def == null) return INVALID_DEFINITION~;
-    check_joint_def(self, &def.base)!;
-    JointId joint = create_revolute_joint_raw(self, def).checked()!;
+    check_joint_def(world, &def.base)!;
+    JointId joint = create_revolute_joint_raw(world, def).checked()!;
     return (RevoluteJointId)joint;
 }
 

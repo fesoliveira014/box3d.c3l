@@ -10,11 +10,11 @@ fn b3::WorldId a_world_holding_one_sphere(b3::ShapeId* out_shape) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, 0.0, 0.0};
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    *out_shape = body.create_sphere_shape(&shape_def, &sphere)!!;
+    *out_shape = b3::create_sphere_shape(body, &shape_def, &sphere)!!;
 
     return world;
 }
@@ -29,10 +29,10 @@ fn void a_default_query_filter_considers_every_shape() @test {
 fn void a_ray_fired_at_a_sphere_reports_where_it_hit() @test {
     b3::ShapeId sphere_shape;
     b3::WorldId world = a_world_holding_one_sphere(&sphere_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
-    b3::RayResult hit = world.cast_ray_closest({0.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, filter)!!;
+    b3::RayResult hit = b3::world_cast_ray_closest(world, {0.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, filter)!!;
 
     assert(hit.shape_id.index1 == sphere_shape.index1, "the ray hit the sphere");
     assert(hit.fraction > 0.4374f && hit.fraction < 0.4376f, "the ray travelled 3.5 of its 8 units");
@@ -48,10 +48,10 @@ fn void a_ray_fired_at_a_sphere_reports_where_it_hit() @test {
 fn void a_ray_that_hits_nothing_reports_no_hit() @test {
     b3::ShapeId sphere_shape;
     b3::WorldId world = a_world_holding_one_sphere(&sphere_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
-    if (catch err = world.cast_ray_closest({10.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, filter)) {
+    if (catch err = b3::world_cast_ray_closest(world, {10.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, filter)) {
         assert(err == b3::NO_HIT, "a ray past everything reports NO_HIT");
         return;
     }
@@ -61,39 +61,39 @@ fn void a_ray_that_hits_nothing_reports_no_hit() @test {
 fn void a_query_mask_excludes_a_shape() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, 0.0, 0.0};
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.filter.category_bits = 0x2;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
 
     b3::QueryFilter accepting = b3::default_query_filter();
     accepting.mask_bits = 0x2;
-    assert(@ok(world.cast_ray_closest({0.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, accepting)),
+    assert(@ok(b3::world_cast_ray_closest(world, {0.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, accepting)),
         "a query whose mask covers the shape category hits it");
 
     b3::QueryFilter rejecting = b3::default_query_filter();
     rejecting.mask_bits = 0x4;
-    assert(!@ok(world.cast_ray_closest({0.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, rejecting)),
+    assert(!@ok(b3::world_cast_ray_closest(world, {0.0, 4.0, 0.0}, {0.0, -8.0, 0.0}, rejecting)),
         "a query whose mask misses the shape category does not");
 }
 
 fn void a_ray_cast_at_one_shape_agrees_with_the_world_cast() @test {
     b3::ShapeId sphere_shape;
     b3::WorldId world = a_world_holding_one_sphere(&sphere_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
-    b3::CastOutput hit = sphere_shape.ray_cast({0.0, 4.0, 0.0}, {0.0, -8.0, 0.0})!!;
+    b3::CastOutput hit = b3::shape_ray_cast(sphere_shape, {0.0, 4.0, 0.0}, {0.0, -8.0, 0.0})!!;
     assert(hit.fraction > 0.4374f && hit.fraction < 0.4376f, "the same 3.5 of 8 units");
     assert(hit.point.y > 0.499f && hit.point.y < 0.501f, "reaching the sphere surface");
 
-    if (catch err = sphere_shape.ray_cast({10.0, 4.0, 0.0}, {0.0, -8.0, 0.0})) {
+    if (catch err = b3::shape_ray_cast(sphere_shape, {10.0, 4.0, 0.0}, {0.0, -8.0, 0.0})) {
         assert(err == b3::NO_HIT, "a shape a ray passes wide of reports NO_HIT");
         return;
     }
@@ -103,26 +103,24 @@ fn void a_ray_cast_at_one_shape_agrees_with_the_world_cast() @test {
 fn void a_cast_at_one_body_reports_the_hit() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, 0.0, 0.0};
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
 
     b3::QueryFilter filter = b3::default_query_filter();
     b3::WorldTransform transform = body.transform();
 
-    b3::BodyCastResult hit = body.cast_ray(
-      origin: {0.0, 4.0, 0.0},
+    b3::BodyCastResult hit = b3::body_cast_ray(body, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -8.0, 0.0},
       filter: filter,
       max_fraction: 1.0f,
-      body_transform: transform,
-    )!!;
+      body_transform: transform,)!!;
     assert(hit.fraction > 0.4374f && hit.fraction < 0.4376f, "the body cast agrees with the world cast");
     assert(hit.point.y > 0.499f && hit.point.y < 0.501f, "at the sphere surface");
 
@@ -133,39 +131,33 @@ fn void a_cast_at_one_body_reports_the_hit() @test {
       .radius = 0.25,
     };
 
-    b3::BodyCastResult swept = body.cast_shape(
-      origin: {0.0, 4.0, 0.0},
+    b3::BodyCastResult swept = b3::body_cast_shape(body, origin: {0.0, 4.0, 0.0},
       proxy: &proxy,
       translation: {0.0, -8.0, 0.0},
       filter: filter,
       max_fraction: 1.0f,
       can_encroach: false,
-      body_transform: transform,
-    )!!;
+      body_transform: transform,)!!;
     assert(swept.fraction > 0.4055f && swept.fraction < 0.4075f,
         "a sphere of radius 0.25 stops a quarter unit sooner, plus the linear slop box3d closes past contact");
 
-    bool at_the_centre = body.overlap_shape(
-      origin: {0.0, 0.0, 0.0},
+    bool at_the_centre = b3::body_overlap_shape(body, origin: {0.0, 0.0, 0.0},
       proxy: &proxy,
       filter: filter,
-      body_transform: transform,
-    );
+      body_transform: transform,);
     assert(at_the_centre, "a probe at the sphere centre overlaps it");
 
-    bool well_above = body.overlap_shape(
-      origin: {0.0, 9.0, 0.0},
+    bool well_above = b3::body_overlap_shape(body, origin: {0.0, 9.0, 0.0},
       proxy: &proxy,
       filter: filter,
-      body_transform: transform,
-    );
+      body_transform: transform,);
     assert(!well_above, "and a probe nine units above it does not");
 }
 
 fn void the_closest_point_on_a_body_ignores_the_shape_radius() @test {
     b3::ShapeId sphere_shape;
     b3::WorldId world = a_world_holding_one_sphere(&sphere_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId body = sphere_shape.body();
     b3::ClosestPoint closest = body.closest_point({0.0, 4.0, 0.0});
@@ -243,57 +235,51 @@ fn b3::WorldId a_world_holding_three_spheres_in_a_line() {
         b3::BodyDef body_def = b3::default_body_def();
         body_def.type = b3::BodyType.STATIC;
         body_def.position = {0.0, heights[i], 0.0};
-        b3::BodyId body = world.create_body(&body_def)!!;
+        b3::BodyId body = b3::create_body(world, &body_def)!!;
 
         b3::ShapeDef shape_def = b3::default_shape_def();
         b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-        body.create_sphere_shape(&shape_def, &sphere)!!;
+        b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     }
     return world;
 }
 
 fn void a_cast_callback_controls_how_far_the_ray_goes() @test {
     b3::WorldId world = a_world_holding_three_spheres_in_a_line();
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
 
     RayVisitLog every = { .calls = 0, .stop_after = 0 };
-    b3::TreeStats stats = world.cast_ray(
-      origin: {0.0, 4.0, 0.0},
+    b3::TreeStats stats = b3::world_cast_ray(world, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -12.0, 0.0},
       filter: filter,
       fcn: &log_visit_and_continue,
-      context: &every,
-    );
+      context: &every,);
     assert(every.calls == 3, "returning one visits every sphere along the ray");
     assert(stats.node_visits > 0, "the node traversal counter is reported");
     assert(stats.leaf_visits == 3, "one leaf per sphere along the unclipped ray");
 
     RayVisitLog stopped = { .calls = 0, .stop_after = 1 };
-    world.cast_ray(
-      origin: {0.0, 4.0, 0.0},
+    b3::world_cast_ray(world, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -12.0, 0.0},
       filter: filter,
       fcn: &log_visit_and_continue,
-      context: &stopped,
-    );
+      context: &stopped,);
     assert(stopped.calls == 1, "returning zero terminates the cast at the first shape");
 
     RayVisitLog filtered = { .calls = 0, .stop_after = 0 };
-    world.cast_ray(
-      origin: {0.0, 4.0, 0.0},
+    b3::world_cast_ray(world, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -12.0, 0.0},
       filter: filter,
       fcn: &log_visit_and_filter,
-      context: &filtered,
-    );
+      context: &filtered,);
     assert(filtered.calls == 3, "returning minus one rejects a shape without ending the cast");
 }
 
 fn void an_overlap_callback_sees_the_shapes_in_the_box() @test {
     b3::WorldId world = a_world_holding_three_spheres_in_a_line();
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
     b3::Aabb box = {
@@ -302,12 +288,10 @@ fn void an_overlap_callback_sees_the_shapes_in_the_box() @test {
     };
 
     RayVisitLog log = { .calls = 0, .stop_after = 0 };
-    world.overlap_aabb(
-      aabb: box,
+    b3::world_overlap_aabb(world, aabb: box,
       filter: filter,
       fcn: &log_overlap,
-      context: &log,
-    );
+      context: &log,);
     assert(log.calls == 3, "all three spheres fall inside the box");
 
     b3::Vec3[1] proxy_points = { {0.0, 0.0, 0.0} };
@@ -318,55 +302,47 @@ fn void an_overlap_callback_sees_the_shapes_in_the_box() @test {
     };
 
     RayVisitLog probe = { .calls = 0, .stop_after = 0 };
-    world.overlap_shape(
-      origin: {0.0, 0.0, 0.0},
+    b3::world_overlap_shape(world, origin: {0.0, 0.0, 0.0},
       proxy: &proxy,
       filter: filter,
       fcn: &log_overlap,
-      context: &probe,
-    );
+      context: &probe,);
     assert(probe.calls == 1, "a probe at the origin overlaps only the sphere there");
 }
 
 fn void collecting_a_cast_fills_the_caller_buffer() @test {
     b3::WorldId world = a_world_holding_three_spheres_in_a_line();
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
 
     b3::CastHit[8] roomy;
-    b3::CastHit[] all = world.cast_ray_all(
-      origin: {0.0, 4.0, 0.0},
+    b3::CastHit[] all = b3::world_cast_ray_all(world, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -12.0, 0.0},
       filter: filter,
-      buffer: roomy[..],
-    );
+      buffer: roomy[..],);
     assert(all.len == 3, "a buffer with room collects every sphere");
     float[3] expected_fractions = { 0.291667f, 0.458333f, 0.625f };
     assert(hits_match_the_expected_fractions(all, expected_fractions),
         "the three collected fractions match the three spheres' fractions, each exactly once");
 
     b3::CastHit[2] cramped;
-    b3::CastHit[] some = world.cast_ray_all(
-      origin: {0.0, 4.0, 0.0},
+    b3::CastHit[] some = b3::world_cast_ray_all(world, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -12.0, 0.0},
       filter: filter,
-      buffer: cramped[..],
-    );
+      buffer: cramped[..],);
     assert(some.len == 2, "a full buffer ends the cast rather than dropping hits");
 
-    b3::CastHit[] none = world.cast_ray_all(
-      origin: {0.0, 4.0, 0.0},
+    b3::CastHit[] none = b3::world_cast_ray_all(world, origin: {0.0, 4.0, 0.0},
       translation: {0.0, -12.0, 0.0},
       filter: filter,
-      buffer: roomy[:0],
-    );
+      buffer: roomy[:0],);
     assert(none.len == 0, "an empty buffer collects nothing and writes nothing");
 }
 
 fn void collecting_an_overlap_fills_the_caller_buffer() @test {
     b3::WorldId world = a_world_holding_three_spheres_in_a_line();
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
     b3::Aabb box = {
@@ -375,11 +351,11 @@ fn void collecting_an_overlap_fills_the_caller_buffer() @test {
     };
 
     b3::ShapeId[8] roomy;
-    b3::ShapeId[] found = world.overlap_aabb_all(box, filter, roomy[..]);
+    b3::ShapeId[] found = b3::world_overlap_aabb_all(world, box, filter, roomy[..]);
     assert(found.len == 3, "all three spheres are collected");
 
     b3::ShapeId[1] cramped;
-    b3::ShapeId[] one = world.overlap_aabb_all(box, filter, cramped[..]);
+    b3::ShapeId[] one = b3::world_overlap_aabb_all(world, box, filter, cramped[..]);
     assert(one.len == 1, "a full buffer ends the query");
 
     b3::Vec3[1] proxy_points = { {0.0, 0.0, 0.0} };
@@ -388,19 +364,17 @@ fn void collecting_an_overlap_fills_the_caller_buffer() @test {
       .count = 1,
       .radius = 0.25,
     };
-    b3::ShapeId[] probed = world.overlap_shape_all(
-      origin: {0.0, 0.0, 0.0},
+    b3::ShapeId[] probed = b3::world_overlap_shape_all(world, origin: {0.0, 0.0, 0.0},
       proxy: &proxy,
       filter: filter,
-      buffer: roomy[..],
-    );
+      buffer: roomy[..],);
     assert(probed.len == 1, "a probe at the origin collects only the sphere there");
 }
 
 fn void collecting_a_shape_cast_reports_the_swept_fraction() @test {
     b3::ShapeId sphere_shape;
     b3::WorldId world = a_world_holding_one_sphere(&sphere_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::QueryFilter filter = b3::default_query_filter();
     b3::Vec3[1] proxy_points = { {0.0, 0.0, 0.0} };
@@ -411,13 +385,11 @@ fn void collecting_a_shape_cast_reports_the_swept_fraction() @test {
     };
 
     b3::CastHit[4] buffer;
-    b3::CastHit[] hits = world.cast_shape_all(
-      origin: {0.0, 4.0, 0.0},
+    b3::CastHit[] hits = b3::world_cast_shape_all(world, origin: {0.0, 4.0, 0.0},
       proxy: &proxy,
       translation: {0.0, -8.0, 0.0},
       filter: filter,
-      buffer: buffer[..],
-    );
+      buffer: buffer[..],);
     assert(hits.len == 1, "the swept sphere reaches the resting one");
     assert(hits[0].fraction > 0.4055f && hits[0].fraction < 0.4075f,
         "stopping a quarter unit early, plus the linear slop box3d closes past contact");

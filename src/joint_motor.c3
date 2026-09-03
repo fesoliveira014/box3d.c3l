@@ -14,10 +14,10 @@ module b3;
  @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs during
    one`
 *>
-fn MotorJointId? WorldId.create_motor_joint(self, MotorJointDef* def) {
+fn MotorJointId? create_motor_joint(WorldId world, MotorJointDef* def) {
     if (def == null) return INVALID_DEFINITION~;
-    check_joint_def(self, &def.base)!;
-    JointId joint = create_motor_joint_raw(self, def).checked()!;
+    check_joint_def(world, &def.base)!;
+    JointId joint = create_motor_joint_raw(world, def).checked()!;
     return (MotorJointId)joint;
 }
 

@@ -36,26 +36,26 @@ fn void the_default_body_definition_carries_the_values_the_c_side_sets() @test {
 fn void a_body_lives_and_dies_inside_its_world() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     assert(body.is_valid());
     assert(body.type() == b3::BodyType.STATIC);
     assert(body.is_enabled());
 
-    body.destroy();
+    b3::destroy_body(body);
     assert(!body.is_valid(), "a destroyed body must not report itself valid");
 }
 
 fn void a_zeroed_body_definition_is_refused() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef zeroed;
-    if (catch err = world.create_body(&zeroed)) {
+    if (catch err = b3::create_body(world, &zeroed)) {
         assert(err == b3::INVALID_DEFINITION);
         return;
     }
@@ -65,10 +65,10 @@ fn void a_zeroed_body_definition_is_refused() @test {
 fn void a_body_knows_which_world_holds_it() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     assert(body.world().index1 == world.index1);
     assert(body.world().generation == world.generation);
@@ -77,15 +77,15 @@ fn void a_body_knows_which_world_holds_it() @test {
 fn void a_disabled_body_can_be_enabled_again() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
-    body.disable();
+    b3::body_disable(body);
     assert(!body.is_enabled());
-    body.enable();
+    b3::body_enable(body);
     assert(body.is_enabled());
 
     body.set_type(b3::BodyType.KINEMATIC);
@@ -95,12 +95,12 @@ fn void a_disabled_body_can_be_enabled_again() @test {
 fn void a_body_with_mass_falls_under_gravity() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
     bd.position = (b3::Pos){ 0.0, 100.0, 0.0 };
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     assert(body.mass() == 0.0, "a body carrying no shape has no mass");
 
@@ -112,7 +112,7 @@ fn void a_body_with_mass_falls_under_gravity() @test {
     body.set_mass_data(md);
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     float vy = body.linear_velocity().y;
@@ -125,11 +125,11 @@ fn void a_body_with_mass_falls_under_gravity() @test {
 fn void gravity_scale_changes_the_fall() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
     body.set_gravity_scale(0.5);
     assert(body.gravity_scale() == 0.5);
 
@@ -141,7 +141,7 @@ fn void gravity_scale_changes_the_fall() @test {
     body.set_mass_data(md);
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     float vy = body.linear_velocity().y;
@@ -152,11 +152,11 @@ fn void an_impulse_moves_a_body_the_way_the_arithmetic_says() @test {
     b3::WorldDef wd = b3::default_world_def();
     wd.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::MassData md = {
         .mass = 2.0,
@@ -166,7 +166,7 @@ fn void an_impulse_moves_a_body_the_way_the_arithmetic_says() @test {
     body.set_mass_data(md);
 
     b3::Vec3 impulse = { 4.0, 0.0, 0.0 };
-    body.apply_linear_impulse_to_center(impulse, true);
+    b3::body_apply_linear_impulse_to_center(body, impulse, true);
 
     b3::Vec3 v = body.linear_velocity();
     assert(v.x > 1.99 && v.x < 2.01, "an impulse of four on a mass of two gives a speed of two");
@@ -175,10 +175,10 @@ fn void an_impulse_moves_a_body_the_way_the_arithmetic_says() @test {
 fn void a_transform_round_trips() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::Pos where = { 1.5, 2.5, -3.5 };
     b3::Quat identity = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 };
@@ -192,11 +192,11 @@ fn void a_transform_round_trips() @test {
 fn void local_and_world_coordinates_are_inverses() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.position = (b3::Pos){ 10.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::Vec3 local = { 1.0, 2.0, 3.0 };
     b3::Pos in_world = body.world_point(local);
@@ -209,11 +209,11 @@ fn void local_and_world_coordinates_are_inverses() @test {
 fn void damping_round_trips() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     body.set_linear_damping(0.25);
     body.set_angular_damping(0.75);
@@ -224,10 +224,10 @@ fn void damping_round_trips() @test {
 fn void a_body_name_round_trips() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     assert(body.name().str_view() == "", "an unnamed body reports an empty name, never null");
 
@@ -238,10 +238,10 @@ fn void a_body_name_round_trips() @test {
 fn void user_data_round_trips_on_a_body() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     int sentinel = 7;
     body.set_user_data(&sentinel);
@@ -251,11 +251,11 @@ fn void user_data_round_trips_on_a_body() @test {
 fn void motion_locks_round_trip() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::MotionLocks locks = { .linear_x = true, .angular_z = true };
     body.set_motion_locks(locks);
@@ -272,11 +272,11 @@ fn void motion_locks_round_trip() @test {
 fn void each_body_flag_moves_only_itself() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     assert(body.is_sleep_enabled());
     assert(!body.is_bullet());
@@ -288,7 +288,7 @@ fn void each_body_flag_moves_only_itself() @test {
     assert(body.is_sleep_enabled(), "setting bullet must not touch sleep");
     assert(!body.is_fast_rotation_allowed(), "setting bullet must not touch fast rotation");
 
-    body.allow_fast_rotation(true);
+    b3::body_allow_fast_rotation(body, true);
     assert(body.is_fast_rotation_allowed());
     assert(body.is_bullet(), "allowing fast rotation must not clear bullet");
 
@@ -312,11 +312,11 @@ fn void each_body_flag_moves_only_itself() @test {
 fn void a_sleeping_body_wakes_when_told() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     assert(body.is_awake());
     body.set_awake(false);
@@ -329,12 +329,12 @@ fn void a_spinning_body_reports_the_velocity_at_every_point_it_carries() @test {
     b3::WorldDef wd = b3::default_world_def();
     wd.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
     bd.position = (b3::Pos){ 10.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::MassData md = {
         .mass = 1.0,
@@ -380,11 +380,11 @@ fn void force_and_torque_accumulate_over_a_step_the_way_the_arithmetic_says() @t
     b3::WorldDef wd = b3::default_world_def();
     wd.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::MassData md = {
         .mass = 2.0,
@@ -395,24 +395,24 @@ fn void force_and_torque_accumulate_over_a_step_the_way_the_arithmetic_says() @t
 
     float dt = 1.0f / 60.0f;
 
-    body.apply_force_to_center((b3::Vec3){ 4.0, 0.0, 0.0 }, true);
-    world.step(dt, 4);
+    b3::body_apply_force_to_center(body, (b3::Vec3){ 4.0, 0.0, 0.0 }, true);
+    b3::world_step(world, dt, 4);
     float vx = body.linear_velocity().x;
     assert(vx > 0.032 && vx < 0.035, "a force of four on a mass of two accelerates at two");
     body.set_linear_velocity((b3::Vec3){ 0.0, 0.0, 0.0 });
 
-    body.apply_torque((b3::Vec3){ 0.0, 0.0, 2.0 }, true);
-    world.step(dt, 4);
+    b3::body_apply_torque(body, (b3::Vec3){ 0.0, 0.0, 2.0 }, true);
+    b3::world_step(world, dt, 4);
     float wz = body.angular_velocity().z;
     assert(wz > 0.032 && wz < 0.035, "a torque of two about a unit inertia accelerates at two");
     body.set_angular_velocity((b3::Vec3){ 0.0, 0.0, 0.0 });
 
-    body.apply_angular_impulse((b3::Vec3){ 0.0, 0.0, 1.0 }, true);
+    b3::body_apply_angular_impulse(body, (b3::Vec3){ 0.0, 0.0, 1.0 }, true);
     float wz2 = body.angular_velocity().z;
     assert(wz2 > 0.99 && wz2 < 1.01, "an angular impulse applies immediately, with no step");
     body.set_angular_velocity((b3::Vec3){ 0.0, 0.0, 0.0 });
 
-    body.apply_linear_impulse((b3::Vec3){ 0.0, 4.0, 0.0 }, (b3::Pos){ 1.0, 0.0, 0.0 }, true);
+    b3::body_apply_linear_impulse(body, (b3::Vec3){ 0.0, 4.0, 0.0 }, (b3::Pos){ 1.0, 0.0, 0.0 }, true);
     float vy = body.linear_velocity().y;
     float wz3 = body.angular_velocity().z;
     assert(vy > 1.99 && vy < 2.01, "an impulse of four on a mass of two gives a speed of two");
@@ -420,8 +420,8 @@ fn void force_and_torque_accumulate_over_a_step_the_way_the_arithmetic_says() @t
     body.set_linear_velocity((b3::Vec3){ 0.0, 0.0, 0.0 });
     body.set_angular_velocity((b3::Vec3){ 0.0, 0.0, 0.0 });
 
-    body.apply_force((b3::Vec3){ 0.0, 0.0, 6.0 }, (b3::Pos){ 1.0, 0.0, 0.0 }, true);
-    world.step(dt, 4);
+    b3::body_apply_force(body, (b3::Vec3){ 0.0, 0.0, 6.0 }, (b3::Pos){ 1.0, 0.0, 0.0 }, true);
+    b3::world_step(world, dt, 4);
     float vz = body.linear_velocity().z;
     float wy = body.angular_velocity().y;
     assert(vz > 0.045 && vz < 0.055, "the force at the center gives linear acceleration of three");
@@ -431,12 +431,12 @@ fn void force_and_torque_accumulate_over_a_step_the_way_the_arithmetic_says() @t
 fn void mass_data_reads_back_through_every_mass_accessor() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.DYNAMIC;
     bd.position = (b3::Pos){ 10.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::MassData md = {
         .mass = 4.0,
@@ -470,7 +470,7 @@ fn void mass_data_reads_back_through_every_mass_accessor() @test {
     b3::Pos world_c = body.world_center();
     assert(world_c.x == 10.5 && world_c.y == 0.0 && world_c.z == 0.0);
 
-    body.apply_mass_from_shapes();
+    b3::body_apply_mass_from_shapes(body);
     assert(body.mass() == 0.0, "a body with no shapes recomputes to no mass");
     b3::Vec3 reset_center = body.local_center();
     assert(reset_center.x == 0.0 && reset_center.y == 0.0 && reset_center.z == 0.0);
@@ -479,11 +479,11 @@ fn void mass_data_reads_back_through_every_mass_accessor() @test {
 fn void a_kinematic_body_driven_to_a_target_arrives_there() @test {
     b3::WorldDef wd = b3::default_world_def();
     b3::WorldId world = b3::create_world(&wd)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef bd = b3::default_body_def();
     bd.type = b3::BodyType.KINEMATIC;
-    b3::BodyId body = world.create_body(&bd)!!;
+    b3::BodyId body = b3::create_body(world, &bd)!!;
 
     b3::WorldTransform target = {
         .p = { 1.0, 0.0, 0.0 },
@@ -500,7 +500,7 @@ fn void a_kinematic_body_driven_to_a_target_arrives_there() @test {
     assert(angular.y > -0.01 && angular.y < 0.01);
     assert(angular.z > -0.01 && angular.z < 0.01);
 
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     b3::WorldTransform got = body.transform();
     assert(got.p.x > 0.99 && got.p.x < 1.01);
@@ -520,19 +520,19 @@ fn void a_kinematic_body_driven_to_a_target_arrives_there() @test {
 fn void a_body_reports_the_shapes_attached_to_it() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere first = {.center = {-1.0, 0.0, 0.0}, .radius = 0.5};
     b3::Sphere second = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
     b3::Sphere third = {.center = {1.0, 0.0, 0.0}, .radius = 0.5};
-    body.create_sphere_shape(&shape_def, &first)!!;
-    body.create_sphere_shape(&shape_def, &second)!!;
-    body.create_sphere_shape(&shape_def, &third)!!;
+    b3::create_sphere_shape(body, &shape_def, &first)!!;
+    b3::create_sphere_shape(body, &shape_def, &second)!!;
+    b3::create_sphere_shape(body, &shape_def, &third)!!;
 
     assert(body.shape_count() == 3, "three spheres were attached");
 

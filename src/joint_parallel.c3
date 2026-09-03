@@ -13,10 +13,10 @@ module b3;
  @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs during
    one`
 *>
-fn ParallelJointId? WorldId.create_parallel_joint(self, ParallelJointDef* def) {
+fn ParallelJointId? create_parallel_joint(WorldId world, ParallelJointDef* def) {
     if (def == null) return INVALID_DEFINITION~;
-    check_joint_def(self, &def.base)!;
-    JointId joint = create_parallel_joint_raw(self, def).checked()!;
+    check_joint_def(world, &def.base)!;
+    JointId joint = create_parallel_joint_raw(world, def).checked()!;
     return (ParallelJointId)joint;
 }
 

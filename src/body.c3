@@ -14,8 +14,8 @@ module b3;
  @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs
    during one`
 *>
-fn BodyId? WorldId.create_body(self, BodyDef* def) {
+fn BodyId? create_body(WorldId world, BodyDef* def) {
     if (def == null) return INVALID_DEFINITION~;
     if (def.internal_value != default_body_def().internal_value) return INVALID_DEFINITION~;
-    return create_body_raw(self, def).checked();
+    return create_body_raw(world, def).checked();
 }

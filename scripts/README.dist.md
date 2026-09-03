@@ -28,8 +28,8 @@ import b3;
 
 b3::WorldDef def = b3::default_world_def();
 b3::WorldId world = b3::create_world(&def)!;
-defer world.destroy();
-world.step(1.0f / 60.0f, 4);
+defer b3::destroy_world(world);
+b3::world_step(world, 1.0f / 60.0f, 4);
 ```
 
 ## Modules
@@ -61,15 +61,20 @@ checking:
 ## Conventions
 
 The `b3` prefix is the module name and never appears inside an identifier — `b3::create_world`, not
-`b3CreateWorld`. Functions are `snake_case`, types `PascalCase`. A C name shaped `b3Type_Method`
-becomes a method on that type. Getters drop the `Get` verb; setters keep `Set` — `b3World_GetGravity`
-becomes `world.gravity()`, `b3World_SetGravity` becomes `world.set_gravity(v)`. Construction with a
-receiver already at hand becomes a method rather than a free function: `world.create_body(def)`,
-not `create_body(world, def)`; `create_world` stays free because there is no world yet to own it.
+`b3CreateWorld`. Functions are `snake_case`, types `PascalCase`.
 
-Operations that can fail return an optional with a named fault; no wrapper returns a null handle or
-a sentinel. `create_world`, `world.create_body` and the seven shape constructors validate that their
-definition came from the matching `default_*_def()` before calling into box3d — a behaviour they
+The C symbol decides whether a binding is a method or a free function. A symbol that reads or writes
+a property is a method on its type — `b3World_GetGravity` is `world.gravity()`, `b3World_SetGravity`
+is `world.set_gravity(v)`, `b3Body_IsAwake` is `body.is_awake()`, `b3Body_ComputeAABB` is
+`body.compute_aabb()`. Everything else is a free function taking the receiver first, named from the C
+symbol with nothing reordered: `b3World_Step` is `world_step(world, dt, sub)`, `b3Body_ApplyForce` is
+`body_apply_force(body, …)`, `b3RayCastSphere` is `ray_cast_sphere(&sphere, input)`, `b3DestroyWorld`
+is `destroy_world(world)`.
+
+Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
+sentinel. `create_world`, `create_body` and the seven shape constructors
+(`create_sphere_shape` and friends) in particular validate that their definition came from the
+matching `default_*_def()` before calling into box3d — a behaviour they
 have that calling C directly does not, since a release build of box3d compiles out its own check
 and would otherwise construct silently from a garbage definition.
 

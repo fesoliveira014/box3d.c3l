@@ -51,7 +51,7 @@ fn OverlapReadings the_geometry_a_probe_is_held_against() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
@@ -60,7 +60,7 @@ fn OverlapReadings the_geometry_a_probe_is_held_against() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -70,7 +70,7 @@ fn OverlapReadings the_geometry_a_probe_is_held_against() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Vec3[1] origin = { { 0.0, 0.0, 0.0 } };
     b3::Vec3[1] over_the_grid = { { 1.5, 0.0, 1.5 } };
@@ -85,28 +85,28 @@ fn OverlapReadings the_geometry_a_probe_is_held_against() {
 
     return {
       .sphere = {
-        .at_the_shape = @the_answer_to(unit.overlaps(here, at_the_origin)),
-        .fifty_metres_out = @the_answer_to(unit.overlaps(here, away)),
+        .at_the_shape = @the_answer_to(b3::overlap_sphere(&unit, here, at_the_origin)),
+        .fifty_metres_out = @the_answer_to(b3::overlap_sphere(&unit, here, away)),
       },
       .capsule = {
-        .at_the_shape = @the_answer_to(rod.overlaps(here, at_the_origin)),
-        .fifty_metres_out = @the_answer_to(rod.overlaps(here, away)),
+        .at_the_shape = @the_answer_to(b3::overlap_capsule(&rod, here, at_the_origin)),
+        .fifty_metres_out = @the_answer_to(b3::overlap_capsule(&rod, here, away)),
       },
       .hull = {
-        .at_the_shape = @the_answer_to(cube.base.overlaps(here, at_the_origin)),
-        .fifty_metres_out = @the_answer_to(cube.base.overlaps(here, away)),
+        .at_the_shape = @the_answer_to(b3::overlap_hull(&cube.base, here, at_the_origin)),
+        .fifty_metres_out = @the_answer_to(b3::overlap_hull(&cube.base, here, away)),
       },
       .compound = {
-        .at_the_shape = @the_answer_to(one_sphere.overlaps(here, at_the_origin)),
-        .fifty_metres_out = @the_answer_to(one_sphere.overlaps(here, away)),
+        .at_the_shape = @the_answer_to(b3::overlap_compound(one_sphere, here, at_the_origin)),
+        .fifty_metres_out = @the_answer_to(b3::overlap_compound(one_sphere, here, away)),
       },
       .mesh = {
-        .at_the_shape = @the_answer_to(mesh.overlaps(here, on_the_grid)),
-        .fifty_metres_out = @the_answer_to(mesh.overlaps(here, away)),
+        .at_the_shape = @the_answer_to(b3::overlap_mesh(&mesh, here, on_the_grid)),
+        .fifty_metres_out = @the_answer_to(b3::overlap_mesh(&mesh, here, away)),
       },
       .height_field = {
-        .at_the_shape = @the_answer_to(flat.overlaps(here, on_the_field)),
-        .fifty_metres_out = @the_answer_to(flat.overlaps(here, away)),
+        .at_the_shape = @the_answer_to(b3::overlap_height_field(flat, here, on_the_field)),
+        .fifty_metres_out = @the_answer_to(b3::overlap_height_field(flat, here, away)),
       },
     };
 }
@@ -144,7 +144,7 @@ fn PlacedOverlaps the_geometry_a_placement_carries_out_from_under_a_probe() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
@@ -153,7 +153,7 @@ fn PlacedOverlaps the_geometry_a_placement_carries_out_from_under_a_probe() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::Vec3[1] moved = { { 50.0, 0.0, 0.0 } };
     b3::Vec3[1] moved_over_the_grid = { { 51.5, 0.0, 1.5 } };
@@ -163,11 +163,11 @@ fn PlacedOverlaps the_geometry_a_placement_carries_out_from_under_a_probe() {
     b3::ShapeProxy following = a_probe_over(moved[..], 0.25);
 
     return {
-      .sphere = @the_answer_to(unit.overlaps(there, following)),
-      .capsule = @the_answer_to(rod.overlaps(there, following)),
-      .hull = @the_answer_to(cube.base.overlaps(there, following)),
-      .mesh = @the_answer_to(mesh.overlaps(there, a_probe_over(moved_over_the_grid[..], 0.25))),
-      .height_field = @the_answer_to(flat.overlaps(there, a_probe_over(moved_over_the_field[..], 0.25))),
+      .sphere = @the_answer_to(b3::overlap_sphere(&unit, there, following)),
+      .capsule = @the_answer_to(b3::overlap_capsule(&rod, there, following)),
+      .hull = @the_answer_to(b3::overlap_hull(&cube.base, there, following)),
+      .mesh = @the_answer_to(b3::overlap_mesh(&mesh, there, a_probe_over(moved_over_the_grid[..], 0.25))),
+      .height_field = @the_answer_to(b3::overlap_height_field(flat, there, a_probe_over(moved_over_the_field[..], 0.25))),
     };
 }
 
@@ -197,7 +197,7 @@ fn CompoundPlacements the_placements_a_compound_is_given() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Vec3[1] at_the_child = { { 1.0, 0.0, 0.0 } };
     b3::Vec3[1] moved = { { 51.0, 0.0, 0.0 } };
@@ -209,10 +209,10 @@ fn CompoundPlacements the_placements_a_compound_is_given() {
     b3::ShapeProxy probe = a_probe_over(at_the_child[..], 0.05);
 
     return {
-      .square_to_the_probe = @the_answer_to(one_sphere.overlaps(here, probe)),
-      .turned_away_from_the_probe = @the_answer_to(one_sphere.overlaps(quarter_turn, probe)),
-      .carried_away_from_the_probe = @the_answer_to(one_sphere.overlaps(there, a_probe_over(moved[..], 0.05))),
-      .left_where_it_was_built = @the_answer_to(one_sphere.overlaps(here, probe)),
+      .square_to_the_probe = @the_answer_to(b3::overlap_compound(one_sphere, here, probe)),
+      .turned_away_from_the_probe = @the_answer_to(b3::overlap_compound(one_sphere, quarter_turn, probe)),
+      .carried_away_from_the_probe = @the_answer_to(b3::overlap_compound(one_sphere, there, a_probe_over(moved[..], 0.05))),
+      .left_where_it_was_built = @the_answer_to(b3::overlap_compound(one_sphere, here, probe)),
     };
 }
 
@@ -240,15 +240,15 @@ fn HoleReadings the_height_field_a_probe_is_held_over() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: true,
     )!!;
-    defer holed.destroy();
+    defer b3::destroy_height_field(holed);
 
     b3::Vec3[1] hole = { { 2.5, 0.0, 2.5 } };
     b3::Vec3[1] kept = { { 0.5, 0.0, 0.5 } };
     b3::Transform here = an_unmoved_placement();
 
     return {
-      .over_a_hole = @the_answer_to(holed.overlaps(here, a_probe_over(hole[..], 0.1))),
-      .beside_a_hole = @the_answer_to(holed.overlaps(here, a_probe_over(kept[..], 0.1))),
+      .over_a_hole = @the_answer_to(b3::overlap_height_field(holed, here, a_probe_over(hole[..], 0.1))),
+      .beside_a_hole = @the_answer_to(b3::overlap_height_field(holed, here, a_probe_over(kept[..], 0.1))),
     };
 }
 
@@ -276,8 +276,8 @@ fn SlopReadings the_gaps_a_sphere_still_calls_an_overlap() {
     b3::Transform here = an_unmoved_placement();
 
     return {
-      .within_the_slop = @the_answer_to(unit.overlaps(here, a_probe_over(near[..], 0.0))),
-      .past_the_slop = @the_answer_to(unit.overlaps(here, a_probe_over(clear[..], 0.0))),
+      .within_the_slop = @the_answer_to(b3::overlap_sphere(&unit, here, a_probe_over(near[..], 0.0))),
+      .past_the_slop = @the_answer_to(b3::overlap_sphere(&unit, here, a_probe_over(clear[..], 0.0))),
     };
 }
 
@@ -310,7 +310,7 @@ fn OverlapRefusals the_proxies_the_predicates_refuse() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
@@ -319,7 +319,7 @@ fn OverlapRefusals the_proxies_the_predicates_refuse() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -329,21 +329,21 @@ fn OverlapRefusals the_proxies_the_predicates_refuse() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Vec3[1] origin = { { 0.0, 0.0, 0.0 } };
     b3::Transform here = an_unmoved_placement();
     b3::ShapeProxy empty = a_probe_over(origin[:0], 0.25);
 
     OverlapRefusals refusals;
-    if (catch err = unit.overlaps(here, empty)) refusals.sphere = err;
-    if (catch err = rod.overlaps(here, empty)) refusals.capsule = err;
-    if (catch err = cube.base.overlaps(here, empty)) refusals.hull = err;
-    if (catch err = one_sphere.overlaps(here, empty)) refusals.compound = err;
-    if (catch err = mesh.overlaps(here, empty)) refusals.mesh = err;
-    if (catch err = flat.overlaps(here, empty)) refusals.height_field = err;
+    if (catch err = b3::overlap_sphere(&unit, here, empty)) refusals.sphere = err;
+    if (catch err = b3::overlap_capsule(&rod, here, empty)) refusals.capsule = err;
+    if (catch err = b3::overlap_hull(&cube.base, here, empty)) refusals.hull = err;
+    if (catch err = b3::overlap_compound(one_sphere, here, empty)) refusals.compound = err;
+    if (catch err = b3::overlap_mesh(&mesh, here, empty)) refusals.mesh = err;
+    if (catch err = b3::overlap_height_field(flat, here, empty)) refusals.height_field = err;
 
-    refusals.an_ordinary_probe_still_answers = @the_answer_to(unit.overlaps(here, a_probe_over(origin[..], 0.25)));
+    refusals.an_ordinary_probe_still_answers = @the_answer_to(b3::overlap_sphere(&unit, here, a_probe_over(origin[..], 0.25)));
     return refusals;
 }
 
@@ -380,7 +380,7 @@ fn OverlapAllocation the_byte_count_around_every_overlap() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = b3::create_height_field_grid(
@@ -389,7 +389,7 @@ fn OverlapAllocation the_byte_count_around_every_overlap() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -399,7 +399,7 @@ fn OverlapAllocation the_byte_count_around_every_overlap() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one_sphere = b3::create_compound(&def)!!;
-    defer one_sphere.destroy();
+    defer b3::destroy_compound(one_sphere);
 
     b3::Sphere unit = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
     b3::Capsule rod = { .center1 = { -1.0, 0.0, 0.0 }, .center2 = { 1.0, 0.0, 0.0 }, .radius = 0.25 };
@@ -415,12 +415,12 @@ fn OverlapAllocation the_byte_count_around_every_overlap() {
     int before = b3::byte_count();
 
     bool[6] every = {
-      @the_answer_to(unit.overlaps(here, at_the_origin)),
-      @the_answer_to(rod.overlaps(here, at_the_origin)),
-      @the_answer_to(cube.base.overlaps(here, at_the_origin)),
-      @the_answer_to(one_sphere.overlaps(here, at_the_origin)),
-      @the_answer_to(mesh.overlaps(here, a_probe_over(over_the_grid[..], 0.25))),
-      @the_answer_to(flat.overlaps(here, a_probe_over(over_the_field[..], 0.25))),
+      @the_answer_to(b3::overlap_sphere(&unit, here, at_the_origin)),
+      @the_answer_to(b3::overlap_capsule(&rod, here, at_the_origin)),
+      @the_answer_to(b3::overlap_hull(&cube.base, here, at_the_origin)),
+      @the_answer_to(b3::overlap_compound(one_sphere, here, at_the_origin)),
+      @the_answer_to(b3::overlap_mesh(&mesh, here, a_probe_over(over_the_grid[..], 0.25))),
+      @the_answer_to(b3::overlap_height_field(flat, here, a_probe_over(over_the_field[..], 0.25))),
     };
 
     int after = b3::byte_count();
@@ -452,6 +452,6 @@ fn void a_proxy_naming_no_array_is_refused() @test {
     b3::Transform here = { .p = { 0.0, 0.0, 0.0 }, .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 } };
     b3::ShapeProxy nothing = { .points = null, .count = 1, .radius = 0.1 };
     fault refusal;
-    if (catch err = ball.overlaps(here, nothing)) refusal = err;
+    if (catch err = b3::overlap_sphere(&ball, here, nothing)) refusal = err;
     assert(refusal == b3::INVALID_DEFINITION, "a proxy naming no array is refused before box3d reads it");
 }

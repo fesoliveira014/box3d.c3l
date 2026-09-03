@@ -88,23 +88,23 @@ struct MeshQueryReadings {
 
 fn MeshQueryReadings the_triangles_a_grid_mesh_reports() {
     b3::MeshData* grid = a_four_by_four_grid()!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     QueryLog everything;
-    mesh.query(a_box_around_everything(), &log_triangle, &everything);
+    b3::query_mesh(&mesh, a_box_around_everything(), &log_triangle, &everything);
 
     QueryLog far_corner_cell;
-    mesh.query(a_box_from({ 1.1, -1.0, 1.1 }, { 1.9, 1.0, 1.9 }), &log_triangle, &far_corner_cell);
+    b3::query_mesh(&mesh, a_box_from({ 1.1, -1.0, 1.1 }, { 1.9, 1.0, 1.9 }), &log_triangle, &far_corner_cell);
 
     QueryLog half_a_cell;
-    mesh.query(a_box_from({ 1.7, -0.1, 1.05 }, { 1.95, 0.1, 1.3 }), &log_triangle, &half_a_cell);
+    b3::query_mesh(&mesh, a_box_from({ 1.7, -0.1, 1.05 }, { 1.95, 0.1, 1.3 }), &log_triangle, &half_a_cell);
 
     QueryLog fifty_metres_out;
-    mesh.query(a_box_from({ 50.0, -1.0, 50.0 }, { 51.0, 1.0, 51.0 }), &log_triangle, &fifty_metres_out);
+    b3::query_mesh(&mesh, a_box_from({ 50.0, -1.0, 50.0 }, { 51.0, 1.0, 51.0 }), &log_triangle, &fifty_metres_out);
 
     QueryLog stopped_early = { .stop_after = 3 };
-    mesh.query(a_box_around_everything(), &log_triangle, &stopped_early);
+    b3::query_mesh(&mesh, a_box_around_everything(), &log_triangle, &stopped_early);
 
     return {
       .everything = everything,
@@ -155,7 +155,7 @@ struct CastAgreement {
 
 fn CastAgreement the_triangle_a_cast_and_a_query_both_name() {
     b3::MeshData* grid = a_four_by_four_grid()!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::RayCastInput dropped = {
@@ -165,14 +165,12 @@ fn CastAgreement the_triangle_a_cast_and_a_query_both_name() {
     };
 
     QueryLog around_the_hit;
-    if (try struck = mesh.ray_cast(dropped)) {
+    if (try struck = b3::ray_cast_mesh(&mesh, dropped)) {
         b3::Vec3 point = struck.point;
-        mesh.query(
-          a_box_from({ point.x - 0.01f, point.y - 0.01f, point.z - 0.01f },
+        b3::query_mesh(&mesh, a_box_from({ point.x - 0.01f, point.y - 0.01f, point.z - 0.01f },
             { point.x + 0.01f, point.y + 0.01f, point.z + 0.01f }),
           &log_triangle,
-          &around_the_hit,
-        );
+          &around_the_hit,);
         return {
           .hit = true,
           .cast_triangle = struck.triangle_index,
@@ -204,17 +202,17 @@ struct ScaledReadings {
 // the same grid read at twice the size — so the scale alone decides whether anything is reported.
 fn ScaledReadings the_same_box_put_to_a_mesh_at_two_scales() {
     b3::MeshData* grid = a_four_by_four_grid()!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh unit = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
     b3::Mesh doubled = { .data = grid, .scale = { 2.0, 2.0, 2.0 } };
 
     b3::Aabb out_at_three = a_box_from({ 3.1, -1.0, 3.1 }, { 3.9, 1.0, 3.9 });
 
     QueryLog at_one;
-    unit.query(out_at_three, &log_triangle, &at_one);
+    b3::query_mesh(&unit, out_at_three, &log_triangle, &at_one);
 
     QueryLog at_two;
-    doubled.query(out_at_three, &log_triangle, &at_two);
+    b3::query_mesh(&doubled, out_at_three, &log_triangle, &at_two);
 
     return {
       .unscaled = at_one,
@@ -245,15 +243,15 @@ struct WindingReadings {
 
 fn WindingReadings the_winding_a_mirrored_scale_reports() {
     b3::MeshData* grid = a_four_by_four_grid()!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh plain = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
     b3::Mesh mirrored = { .data = grid, .scale = { -1.0, 1.0, 1.0 } };
 
     QueryLog upright;
-    plain.query(a_box_from({ 0.1, -1.0, 0.1 }, { 0.9, 1.0, 0.9 }), &log_triangle, &upright);
+    b3::query_mesh(&plain, a_box_from({ 0.1, -1.0, 0.1 }, { 0.9, 1.0, 0.9 }), &log_triangle, &upright);
 
     QueryLog reflected;
-    mirrored.query(a_box_from({ -0.9, -1.0, 0.1 }, { -0.1, 1.0, 0.9 }), &log_triangle, &reflected);
+    b3::query_mesh(&mirrored, a_box_from({ -0.9, -1.0, 0.1 }, { -0.1, 1.0, 0.9 }), &log_triangle, &reflected);
 
     return {
       .plain_normal = the_normal_of(upright.first_triangle[0], upright.first_triangle[1], upright.first_triangle[2]),
@@ -288,24 +286,24 @@ struct InvertedReadings {
 
 fn InvertedReadings the_answers_an_inverted_box_gets() {
     b3::MeshData* grid = a_four_by_four_grid()!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = an_eight_by_eight_field(false)!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::Aabb upright = a_box_around_everything();
     b3::Aabb inverted = a_box_from({ 100.0, 100.0, 100.0 }, { -100.0, -100.0, -100.0 });
 
     QueryLog mesh_upright;
-    mesh.query(upright, &log_triangle, &mesh_upright);
+    b3::query_mesh(&mesh, upright, &log_triangle, &mesh_upright);
     QueryLog mesh_inverted;
-    mesh.query(inverted, &log_triangle, &mesh_inverted);
+    b3::query_mesh(&mesh, inverted, &log_triangle, &mesh_inverted);
 
     QueryLog field_upright;
-    flat.query(upright, &log_triangle, &field_upright);
+    b3::query_height_field(flat, upright, &log_triangle, &field_upright);
     QueryLog field_inverted;
-    flat.query(inverted, &log_triangle, &field_inverted);
+    b3::query_height_field(flat, inverted, &log_triangle, &field_inverted);
 
     return {
       .mesh_upright = mesh_upright.count,
@@ -335,25 +333,25 @@ struct FieldQueryReadings {
 
 fn FieldQueryReadings the_triangles_a_flat_field_reports() {
     b3::HeightFieldData* flat = an_eight_by_eight_field(false)!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     QueryLog everything;
-    flat.query(a_box_around_everything(), &log_triangle, &everything);
+    b3::query_height_field(flat, a_box_around_everything(), &log_triangle, &everything);
 
     QueryLog half_a_cell;
-    flat.query(a_box_from({ 4.02, -0.1, 3.7 }, { 4.10, 0.1, 3.9 }), &log_triangle, &half_a_cell);
+    b3::query_height_field(flat, a_box_from({ 4.02, -0.1, 3.7 }, { 4.10, 0.1, 3.9 }), &log_triangle, &half_a_cell);
 
     QueryLog above_the_cell;
-    flat.query(a_box_from({ 4.02, 5.0, 3.7 }, { 4.10, 6.0, 3.9 }), &log_triangle, &above_the_cell);
+    b3::query_height_field(flat, a_box_from({ 4.02, 5.0, 3.7 }, { 4.10, 6.0, 3.9 }), &log_triangle, &above_the_cell);
 
     QueryLog fifty_metres_out;
-    flat.query(a_box_from({ 50.0, -1.0, 50.0 }, { 51.0, 1.0, 51.0 }), &log_triangle, &fifty_metres_out);
+    b3::query_height_field(flat, a_box_from({ 50.0, -1.0, 50.0 }, { 51.0, 1.0, 51.0 }), &log_triangle, &fifty_metres_out);
 
     QueryLog stopped_early = { .stop_after = 3 };
-    flat.query(a_box_around_everything(), &log_triangle, &stopped_early);
+    b3::query_height_field(flat, a_box_around_everything(), &log_triangle, &stopped_early);
 
     QueryLog wider_than_its_indices;
-    flat.query(a_box_from({ -1.0e30, -1.0e30, -1.0e30 }, { 1.0e30, 1.0e30, 1.0e30 }), &log_triangle,
+    b3::query_height_field(flat, a_box_from({ -1.0e30, -1.0e30, -1.0e30 }, { 1.0e30, 1.0e30, 1.0e30 }), &log_triangle,
       &wider_than_its_indices);
 
     return {
@@ -407,22 +405,22 @@ struct HoleQueryReadings {
 
 fn HoleQueryReadings the_triangles_a_holed_field_withholds() {
     b3::HeightFieldData* flat = an_eight_by_eight_field(false)!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
     b3::HeightFieldData* holed = an_eight_by_eight_field(true)!!;
-    defer holed.destroy();
+    defer b3::destroy_height_field(holed);
 
     QueryLog whole_flat;
-    flat.query(a_box_around_everything(), &log_triangle, &whole_flat);
+    b3::query_height_field(flat, a_box_around_everything(), &log_triangle, &whole_flat);
 
     QueryLog whole_holed;
-    holed.query(a_box_around_everything(), &log_triangle, &whole_holed);
+    b3::query_height_field(holed, a_box_around_everything(), &log_triangle, &whole_holed);
 
     // Cell 16 is the second row's third column, punched out; cell 17 is the one beside it.
     QueryLog on_the_hole;
-    holed.query(a_box_from({ 2.1, -0.1, 2.1 }, { 2.9, 0.1, 2.9 }), &log_triangle, &on_the_hole);
+    b3::query_height_field(holed, a_box_from({ 2.1, -0.1, 2.1 }, { 2.9, 0.1, 2.9 }), &log_triangle, &on_the_hole);
 
     QueryLog beside_it;
-    holed.query(a_box_from({ 3.1, -0.1, 2.1 }, { 3.9, 0.1, 2.9 }), &log_triangle, &beside_it);
+    b3::query_height_field(holed, a_box_from({ 3.1, -0.1, 2.1 }, { 3.9, 0.1, 2.9 }), &log_triangle, &beside_it);
 
     return {
       .flat_total = whole_flat.count,
@@ -467,26 +465,26 @@ fn CompoundQueryReadings the_children_a_two_sphere_compound_reports() {
     def.spheres = &spheres[0];
     def.sphere_count = 2;
     b3::CompoundData* pair = b3::create_compound(&def)!!;
-    defer pair.destroy();
+    defer b3::destroy_compound(pair);
 
     QueryLog both;
-    pair.query(a_box_around_everything(), &log_child, &both);
+    b3::query_compound(pair, a_box_around_everything(), &log_child, &both);
 
     QueryLog right_only;
-    pair.query(a_box_from({ 0.4, -1.0, -1.0 }, { 1.6, 1.0, 1.0 }), &log_child, &right_only);
+    b3::query_compound(pair, a_box_from({ 0.4, -1.0, -1.0 }, { 1.6, 1.0, 1.0 }), &log_child, &right_only);
 
     QueryLog at_the_right_box_corner;
-    pair.query(a_box_from({ 1.45, 0.45, 0.45 }, { 1.5, 0.5, 0.5 }), &log_child, &at_the_right_box_corner);
+    b3::query_compound(pair, a_box_from({ 1.45, 0.45, 0.45 }, { 1.5, 0.5, 0.5 }), &log_child, &at_the_right_box_corner);
 
     QueryLog fifty_metres_out;
-    pair.query(a_box_from({ 50.0, -1.0, -1.0 }, { 51.0, 1.0, 1.0 }), &log_child, &fifty_metres_out);
+    b3::query_compound(pair, a_box_from({ 50.0, -1.0, -1.0 }, { 51.0, 1.0, 1.0 }), &log_child, &fifty_metres_out);
 
     b3::Sphere bare = { .center = { 1.0, 0.0, 0.0 }, .radius = 0.5 };
     b3::Transform here = { .p = { 0.0, 0.0, 0.0 }, .q = { .i = 0.0, .j = 0.0, .k = 0.0, .l = 1.0 } };
     b3::Vec3[1] corner = { { 1.475, 0.475, 0.475 } };
     b3::ShapeProxy at_the_corner = { .points = &corner[0], .count = 1, .radius = 0.0 };
     bool reaches = false;
-    if (try answer = bare.overlaps(here, at_the_corner)) reaches = answer;
+    if (try answer = b3::overlap_sphere(&bare, here, at_the_corner)) reaches = answer;
 
     return {
       .both = both,
@@ -545,10 +543,10 @@ fn ChildIndexReadings the_kind_behind_the_index_a_query_reports() {
     def.spheres = &ball;
     def.sphere_count = 1;
     b3::CompoundData* mixed = b3::create_compound(&def)!!;
-    defer mixed.destroy();
+    defer b3::destroy_compound(mixed);
 
     QueryLog over_the_sphere;
-    mixed.query(a_box_from({ 2.4, -1.0, -1.0 }, { 3.6, 1.0, 1.0 }), &log_child, &over_the_sphere);
+    b3::query_compound(mixed, a_box_from({ 2.4, -1.0, -1.0 }, { 3.6, 1.0, 1.0 }), &log_child, &over_the_sphere);
     if (over_the_sphere.count != 1) return {};
 
     int reported = over_the_sphere.first_index;
@@ -592,13 +590,13 @@ fn CompoundOrderReadings the_order_four_children_arrive_in() {
     def.spheres = &spheres[0];
     def.sphere_count = 4;
     b3::CompoundData* row = b3::create_compound(&def)!!;
-    defer row.destroy();
+    defer b3::destroy_compound(row);
 
     QueryLog all_four;
-    row.query(a_box_around_everything(), &log_child, &all_four);
+    b3::query_compound(row, a_box_around_everything(), &log_child, &all_four);
 
     QueryLog stopped = { .stop_after = 1 };
-    row.query(a_box_around_everything(), &log_child, &stopped);
+    b3::query_compound(row, a_box_around_everything(), &log_child, &stopped);
 
     bool once = true;
     for (int i = 0; i < 4; i++) {
@@ -641,7 +639,7 @@ fn void a_compound_query_ends_when_its_callback_says_so() @test {
 fn void a_compound_with_no_children_reports_none() @test {
     b3::CompoundDef nothing_in_it;
     b3::CompoundData* empty = b3::create_compound(&nothing_in_it)!!;
-    defer empty.destroy();
+    defer b3::destroy_compound(empty);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -651,13 +649,13 @@ fn void a_compound_with_no_children_reports_none() @test {
     one_in_it.spheres = &sphere;
     one_in_it.sphere_count = 1;
     b3::CompoundData* single = b3::create_compound(&one_in_it)!!;
-    defer single.destroy();
+    defer b3::destroy_compound(single);
 
     QueryLog from_the_empty;
-    empty.query(a_box_around_everything(), &log_child, &from_the_empty);
+    b3::query_compound(empty, a_box_around_everything(), &log_child, &from_the_empty);
 
     QueryLog from_the_single;
-    single.query(a_box_around_everything(), &log_child, &from_the_single);
+    b3::query_compound(single, a_box_around_everything(), &log_child, &from_the_single);
 
     assert(from_the_single.count == 1, "the box reaches the one child a compound of one holds");
     assert(from_the_empty.count == 0,
@@ -675,11 +673,11 @@ fn QueryAllocation the_byte_count_around_every_query() {
     int baseline = b3::byte_count();
 
     b3::MeshData* grid = a_four_by_four_grid()!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
 
     b3::HeightFieldData* flat = an_eight_by_eight_field(false)!!;
-    defer flat.destroy();
+    defer b3::destroy_height_field(flat);
 
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
@@ -689,16 +687,16 @@ fn QueryAllocation the_byte_count_around_every_query() {
     def.spheres = &sphere;
     def.sphere_count = 1;
     b3::CompoundData* one = b3::create_compound(&def)!!;
-    defer one.destroy();
+    defer b3::destroy_compound(one);
 
     int before = b3::byte_count();
 
     QueryLog triangles;
-    mesh.query(a_box_around_everything(), &log_triangle, &triangles);
+    b3::query_mesh(&mesh, a_box_around_everything(), &log_triangle, &triangles);
     QueryLog cells;
-    flat.query(a_box_around_everything(), &log_triangle, &cells);
+    b3::query_height_field(flat, a_box_around_everything(), &log_triangle, &cells);
     QueryLog children;
-    one.query(a_box_around_everything(), &log_child, &children);
+    b3::query_compound(one, a_box_around_everything(), &log_child, &children);
 
     int after = b3::byte_count();
 

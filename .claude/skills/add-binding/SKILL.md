@@ -22,12 +22,14 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 ## 2. Translate into `src/<area>.c3i`
 
 - **The `b3` prefix is the module name; strip it from every identifier and keep the real symbol verbatim in `@cname`.**
-- **Functions** → `snake_case`. A `b3Type_Method` C name becomes method syntax on that type; a bare `b3Verb...` constructor/destructor becomes a method on the type it produces or consumes where that reads naturally, otherwise a free function.
+- **Functions** → `snake_case`. The C symbol decides the shape and nothing else does. `b3Type_GetX`, `b3Type_SetX`, `b3Type_IsX`/`AreX`, `b3Type_EnableX(bool)` and anything containing `Compute` are methods on the type. Every other symbol is a free function taking the receiver as its first argument, named from the C symbol with `b3` stripped and nothing reordered — including the `_raw` extern.
 
   ```c3
   extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld") @private;
-  extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
+  extern fn void destroy_world(WorldId world) @cname("b3DestroyWorld");
+  extern fn void world_step(WorldId world, float time_step, int sub_step_count) @cname("b3World_Step");
   extern fn void BodyId.set_transform(self, Pos position, Quat rotation) @cname("b3Body_SetTransform");
+  extern fn CastOutput ray_cast_sphere_raw(Sphere* shape, RayCastInput* input) @cname("b3RayCastSphere") @private;
   ```
 
   When a wrapper in `src/<area>.c3` takes the plain name a C symbol maps to (`create_world`), the extern it wraps takes a `_raw` suffix (`create_world_raw`) and is marked `@private` — the wrapper is the only public way to reach it, so a consumer cannot go around whatever validation the wrapper does.
@@ -61,7 +63,7 @@ wrapper must not leak C's error conventions:
 - Fallible operations return an optional (`?`) with a named fault. **Never** return null-as-error, a sentinel, or a raw status code.
 - An invalid or zero ID coming back from C becomes a fault, not a value the caller has to test. Route it through that type's `.checked()` macro in `src/check.c3` (add one, following `WorldId.checked()`/`BodyId.checked()`, if the type doesn't have one yet); add a new `faultdef` there (one fault per line) when no existing one fits.
 - Out-parameters become return values. A `pointer + count` pair becomes a slice.
-- Ownership follows `docs/style.md` §6: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup — except where `CLAUDE.md`'s carve-outs apply: a constructor with a natural receiver already at hand (`world.create_body(def)`) is a method, not a free function; only a constructor with no existing receiver, like `create_world`, stays free.
+- Ownership follows `docs/style.md` §6 without exception: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup. `create_body(world, def)` and `destroy_world(world)` are free functions like every other routine — the carve-outs that used to make them methods are gone.
 
 Struct initializers use `.field = value` for every supplied field; calls with ≥4 arguments use named arguments, one per line, trailing comma.
 

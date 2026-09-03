@@ -11,8 +11,8 @@ module b3;
  @return `where the ray meets the sphere`
  @return? NO_HIT : `the ray does not meet it`
 *>
-fn CastOutput? Sphere.ray_cast(&self, RayCastInput input) {
-    CastOutput result = sphere_ray_cast_raw(self, &input);
+fn CastOutput? ray_cast_sphere(Sphere* sphere, RayCastInput input) {
+    CastOutput result = ray_cast_sphere_raw(sphere, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -28,8 +28,8 @@ fn CastOutput? Sphere.ray_cast(&self, RayCastInput input) {
  @return `where the ray meets the shell`
  @return? NO_HIT : `the ray does not meet it`
 *>
-fn CastOutput? Sphere.ray_cast_hollow(&self, RayCastInput input) {
-    CastOutput result = hollow_sphere_ray_cast_raw(self, &input);
+fn CastOutput? ray_cast_hollow_sphere(Sphere* sphere, RayCastInput input) {
+    CastOutput result = ray_cast_hollow_sphere_raw(sphere, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -45,8 +45,8 @@ fn CastOutput? Sphere.ray_cast_hollow(&self, RayCastInput input) {
  @return `where the ray meets the capsule`
  @return? NO_HIT : `the ray does not meet it`
 *>
-fn CastOutput? Capsule.ray_cast(&self, RayCastInput input) {
-    CastOutput result = capsule_ray_cast_raw(self, &input);
+fn CastOutput? ray_cast_capsule(Capsule* capsule, RayCastInput input) {
+    CastOutput result = ray_cast_capsule_raw(capsule, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -61,8 +61,8 @@ fn CastOutput? Capsule.ray_cast(&self, RayCastInput input) {
  @return `where the ray enters the hull`
  @return? NO_HIT : `the ray does not meet it`
 *>
-fn CastOutput? HullData.ray_cast(&self, RayCastInput input) {
-    CastOutput result = hull_ray_cast_raw(self, &input);
+fn CastOutput? ray_cast_hull(HullData* hull, RayCastInput input) {
+    CastOutput result = ray_cast_hull_raw(hull, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -79,9 +79,9 @@ fn CastOutput? HullData.ray_cast(&self, RayCastInput input) {
  @return? NO_HIT : `it meets none`
  @return? INVALID_DEFINITION : `max_fraction is above 1`
 *>
-fn CastOutput? CompoundData.ray_cast(&self, RayCastInput input) {
+fn CastOutput? ray_cast_compound(CompoundData* compound, RayCastInput input) {
     if (input.max_fraction > 1.0f) return INVALID_DEFINITION~;
-    CastOutput result = compound_ray_cast_raw(self, &input);
+    CastOutput result = ray_cast_compound_raw(compound, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -98,9 +98,9 @@ fn CastOutput? CompoundData.ray_cast(&self, RayCastInput input) {
  @return? NO_HIT : `it meets none`
  @return? INVALID_DEFINITION : `max_fraction is above 1`
 *>
-fn CastOutput? Mesh.ray_cast(&self, RayCastInput input) {
+fn CastOutput? ray_cast_mesh(Mesh* mesh, RayCastInput input) {
     if (input.max_fraction > 1.0f) return INVALID_DEFINITION~;
-    CastOutput result = mesh_ray_cast_raw(self, &input);
+    CastOutput result = ray_cast_mesh_raw(mesh, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -108,7 +108,7 @@ fn CastOutput? Mesh.ray_cast(&self, RayCastInput input) {
 <*
  Casts a ray at this height field's triangles, reporting a fraction of the translation and the
  triangle struck. Nothing is reported from underneath or over a hole cell, and a max_fraction
- above 1 is refused — the same solver as Mesh.ray_cast, refused for the same reason.
+ above 1 is refused — the same solver as ray_cast_mesh, refused for the same reason.
 
  box3d compresses the heights into 16 bits across the range the definition named, so the surface a
  cast meets sits under the heights it was built from by up to one step, scaled by the y scale.
@@ -117,9 +117,9 @@ fn CastOutput? Mesh.ray_cast(&self, RayCastInput input) {
  @return? NO_HIT : `it does not meet it`
  @return? INVALID_DEFINITION : `max_fraction is above 1`
 *>
-fn CastOutput? HeightFieldData.ray_cast(&self, RayCastInput input) {
+fn CastOutput? ray_cast_height_field(HeightFieldData* height_field, RayCastInput input) {
     if (input.max_fraction > 1.0f) return INVALID_DEFINITION~;
-    CastOutput result = height_field_ray_cast_raw(self, &input);
+    CastOutput result = ray_cast_height_field_raw(height_field, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -135,9 +135,9 @@ fn CastOutput? HeightFieldData.ray_cast(&self, RayCastInput input) {
  @return? NO_HIT : `it never does`
  @return? check_shape_proxy!
 *>
-fn CastOutput? Sphere.shape_cast(&self, ShapeCastInput input) {
+fn CastOutput? shape_cast_sphere(Sphere* sphere, ShapeCastInput input) {
     check_shape_proxy(input.proxy)!;
-    CastOutput result = sphere_shape_cast_raw(self, &input);
+    CastOutput result = shape_cast_sphere_raw(sphere, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -145,7 +145,7 @@ fn CastOutput? Sphere.shape_cast(&self, ShapeCastInput input) {
 <*
  Sweeps the input's proxy at this capsule in the capsule's own frame, reporting where the two
  first touch. The capsule lends its radius to the proxy's and box3d closes on the formula
- Sphere.shape_cast states, so an ordinary capsule radius alone carries the stop a full slop past
+ shape_cast_sphere states, so an ordinary capsule radius alone carries the stop a full slop past
  true contact and reaches can_encroach's window with a proxy of no radius at all. A proxy that
  begins in contact reports fraction 0 under a zero normal unless that flag is set.
 
@@ -153,9 +153,9 @@ fn CastOutput? Sphere.shape_cast(&self, ShapeCastInput input) {
  @return? NO_HIT : `it never does`
  @return? check_shape_proxy!
 *>
-fn CastOutput? Capsule.shape_cast(&self, ShapeCastInput input) {
+fn CastOutput? shape_cast_capsule(Capsule* capsule, ShapeCastInput input) {
     check_shape_proxy(input.proxy)!;
-    CastOutput result = capsule_shape_cast_raw(self, &input);
+    CastOutput result = shape_cast_capsule_raw(capsule, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -172,9 +172,9 @@ fn CastOutput? Capsule.shape_cast(&self, ShapeCastInput input) {
  @return? NO_HIT : `it never does`
  @return? check_shape_proxy!
 *>
-fn CastOutput? HullData.shape_cast(&self, ShapeCastInput input) {
+fn CastOutput? shape_cast_hull(HullData* hull, ShapeCastInput input) {
     check_shape_proxy(input.proxy)!;
-    CastOutput result = hull_shape_cast_raw(self, &input);
+    CastOutput result = shape_cast_hull_raw(hull, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -191,9 +191,9 @@ fn CastOutput? HullData.shape_cast(&self, ShapeCastInput input) {
  @return? NO_HIT : `it touches none`
  @return? check_shape_proxy!
 *>
-fn CastOutput? CompoundData.shape_cast(&self, ShapeCastInput input) {
+fn CastOutput? shape_cast_compound(CompoundData* compound, ShapeCastInput input) {
     check_shape_proxy(input.proxy)!;
-    CastOutput result = compound_shape_cast_raw(self, &input);
+    CastOutput result = shape_cast_compound_raw(compound, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -202,7 +202,7 @@ fn CastOutput? CompoundData.shape_cast(&self, ShapeCastInput input) {
  Sweeps the input's proxy at this mesh's triangles, scaled by the mesh's own scale, reporting the
  triangle struck and the fraction at which the proxy first touches it.
 
- A triangle is reached from either side here, where Mesh.ray_cast reaches it from the wound side
+ A triangle is reached from either side here, where ray_cast_mesh reaches it from the wound side
  alone: box3d measures a distance between the proxy and the triangle rather than solving a ray
  against its plane. That is also why a max_fraction above 1 needs no refusal on this one.
 
@@ -210,9 +210,9 @@ fn CastOutput? CompoundData.shape_cast(&self, ShapeCastInput input) {
  @return? NO_HIT : `it touches none`
  @return? check_shape_proxy!
 *>
-fn CastOutput? Mesh.shape_cast(&self, ShapeCastInput input) {
+fn CastOutput? shape_cast_mesh(Mesh* mesh, ShapeCastInput input) {
     check_shape_proxy(input.proxy)!;
-    CastOutput result = mesh_shape_cast_raw(self, &input);
+    CastOutput result = shape_cast_mesh_raw(mesh, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -223,19 +223,19 @@ fn CastOutput? Mesh.shape_cast(&self, ShapeCastInput input) {
 
  A proxy of one point carrying no radius is cast with box3d's ray solver instead, which reads the
  field from above alone and reports a miss by returning 1 — so a max_fraction above 1 is refused
- for such a proxy, exactly as HeightFieldData.ray_cast refuses it. Any other proxy is two-sided.
+ for such a proxy, exactly as ray_cast_height_field refuses it. Any other proxy is two-sided.
 
  @return `where the proxy first touches the field`
  @return? NO_HIT : `it never does`
  @return? check_shape_proxy!
  @return? INVALID_DEFINITION : `a single point with no radius is given a max_fraction above 1`
 *>
-fn CastOutput? HeightFieldData.shape_cast(&self, ShapeCastInput input) {
+fn CastOutput? shape_cast_height_field(HeightFieldData* height_field, ShapeCastInput input) {
     check_shape_proxy(input.proxy)!;
     if (input.max_fraction > 1.0f && input.proxy.count == 1 && input.proxy.radius == 0.0f) {
         return INVALID_DEFINITION~;
     }
-    CastOutput result = height_field_shape_cast_raw(self, &input);
+    CastOutput result = shape_cast_height_field_raw(height_field, &input);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -250,9 +250,9 @@ fn CastOutput? HeightFieldData.shape_cast(&self, ShapeCastInput input) {
  @return `whether the two touch`
  @return? check_shape_proxy!
 *>
-fn bool? Sphere.overlaps(&self, Transform transform, ShapeProxy proxy) {
+fn bool? overlap_sphere(Sphere* sphere, Transform transform, ShapeProxy proxy) {
     check_shape_proxy(proxy)!;
-    return sphere_overlap_raw(self, transform, &proxy);
+    return overlap_sphere_raw(sphere, transform, &proxy);
 }
 
 <*
@@ -263,9 +263,9 @@ fn bool? Sphere.overlaps(&self, Transform transform, ShapeProxy proxy) {
  @return `whether the two touch`
  @return? check_shape_proxy!
 *>
-fn bool? Capsule.overlaps(&self, Transform transform, ShapeProxy proxy) {
+fn bool? overlap_capsule(Capsule* capsule, Transform transform, ShapeProxy proxy) {
     check_shape_proxy(proxy)!;
-    return capsule_overlap_raw(self, transform, &proxy);
+    return overlap_capsule_raw(capsule, transform, &proxy);
 }
 
 <*
@@ -276,9 +276,9 @@ fn bool? Capsule.overlaps(&self, Transform transform, ShapeProxy proxy) {
  @return `whether the two touch`
  @return? check_shape_proxy!
 *>
-fn bool? HullData.overlaps(&self, Transform transform, ShapeProxy proxy) {
+fn bool? overlap_hull(HullData* hull, Transform transform, ShapeProxy proxy) {
     check_shape_proxy(proxy)!;
-    return hull_overlap_raw(self, transform, &proxy);
+    return overlap_hull_raw(hull, transform, &proxy);
 }
 
 <*
@@ -291,9 +291,9 @@ fn bool? HullData.overlaps(&self, Transform transform, ShapeProxy proxy) {
  @return `whether the two touch`
  @return? check_shape_proxy!
 *>
-fn bool? CompoundData.overlaps(&self, Transform transform, ShapeProxy proxy) {
+fn bool? overlap_compound(CompoundData* compound, Transform transform, ShapeProxy proxy) {
     check_shape_proxy(proxy)!;
-    return compound_overlap_raw(self, transform, &proxy);
+    return overlap_compound_raw(compound, transform, &proxy);
 }
 
 <*
@@ -304,9 +304,9 @@ fn bool? CompoundData.overlaps(&self, Transform transform, ShapeProxy proxy) {
  @return `whether the two touch`
  @return? check_shape_proxy!
 *>
-fn bool? Mesh.overlaps(&self, Transform transform, ShapeProxy proxy) {
+fn bool? overlap_mesh(Mesh* mesh, Transform transform, ShapeProxy proxy) {
     check_shape_proxy(proxy)!;
-    return mesh_overlap_raw(self, transform, &proxy);
+    return overlap_mesh_raw(mesh, transform, &proxy);
 }
 
 <*
@@ -317,7 +317,7 @@ fn bool? Mesh.overlaps(&self, Transform transform, ShapeProxy proxy) {
  @return `whether the two touch`
  @return? check_shape_proxy!
 *>
-fn bool? HeightFieldData.overlaps(&self, Transform transform, ShapeProxy proxy) {
+fn bool? overlap_height_field(HeightFieldData* height_field, Transform transform, ShapeProxy proxy) {
     check_shape_proxy(proxy)!;
-    return height_field_overlap_raw(self, transform, &proxy);
+    return overlap_height_field_raw(height_field, transform, &proxy);
 }

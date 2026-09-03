@@ -18,29 +18,29 @@ fn void the_event_types_match_the_c_layout() @test {
 fn void two_bodies_that_collide_report_the_shapes_that_began_touching() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    b3::ShapeId ground_shape = ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::ShapeId ground_shape = b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 5.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_contact_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    b3::ShapeId ball_shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId ball_shape = b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     bool saw_begin;
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
 
         b3::ContactBeginTouchEvent[] begins = world.contact_begin_touch_events();
         if (begins.len == 0) continue;
@@ -62,32 +62,32 @@ fn void two_bodies_that_collide_report_the_shapes_that_began_touching() @test {
 fn void a_bouncing_sphere_reports_that_it_stopped_touching_the_ground() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    b3::ShapeId ground_shape = ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::ShapeId ground_shape = b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 5.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_contact_events = true;
     shape_def.base_material.restitution = 0.6;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    b3::ShapeId ball_shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId ball_shape = b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     int begin_total;
     int end_total;
     bool saw_end;
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
         begin_total += world.contact_begin_touch_events().len;
 
         b3::ContactEndTouchEvent[] ends = world.contact_end_touch_events();
@@ -111,32 +111,32 @@ fn void a_bouncing_sphere_reports_that_it_stopped_touching_the_ground() @test {
 fn void a_sphere_driven_into_the_ground_reports_the_speed_it_arrived_at() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.gravity_scale = 0.0;
     body_def.position = {0.0, 2.0, 0.0};
     body_def.linear_velocity = {0.0, -30.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_hit_events = true;
     shape_def.base_material.user_material_id = 7;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     bool saw_hit;
     for (int i = 0; i < 30; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
 
         b3::ContactHitEvent[] hits = world.contact_hit_events();
         if (hits.len == 0) continue;
@@ -157,28 +157,28 @@ fn void a_sphere_driven_into_the_ground_reports_the_speed_it_arrived_at() @test 
 fn void contact_events_stay_silent_when_no_shape_asks_for_them() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 2.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     int begin_total;
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
         begin_total += world.contact_begin_touch_events().len;
     }
 
@@ -188,9 +188,9 @@ fn void contact_events_stay_silent_when_no_shape_asks_for_them() @test {
 fn void a_world_with_nothing_in_it_reports_empty_contact_slices() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     assert(world.contact_begin_touch_events().len == 0);
     assert(world.contact_end_touch_events().len == 0);
@@ -200,30 +200,30 @@ fn void a_world_with_nothing_in_it_reports_empty_contact_slices() @test {
 fn void a_contact_reports_itself_invalid_once_one_of_its_bodies_is_gone() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 2.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_contact_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     b3::ContactId touched;
     bool captured;
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
 
         b3::ContactBeginTouchEvent[] begins = world.contact_begin_touch_events();
         if (begins.len == 0) continue;
@@ -236,23 +236,23 @@ fn void a_contact_reports_itself_invalid_once_one_of_its_bodies_is_gone() @test 
     assert(captured, "the sphere must reach the ground");
     assert(touched.is_valid());
 
-    ball.destroy();
+    b3::destroy_body(ball);
     assert(!touched.is_valid(), "a contact whose body is gone must not report itself valid");
 }
 
 fn void a_sensor_reports_the_shape_that_entered_and_left_it() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {1.5, 11.0, 0.0};
-    b3::BodyId wall = world.create_body(&body_def)!!;
+    b3::BodyId wall = b3::create_body(world, &body_def)!!;
     b3::BoxHull wall_box = b3::make_box_hull(0.5, 10.0, 1.0);
     b3::ShapeDef wall_shape_def = b3::default_shape_def();
     wall_shape_def.enable_sensor_events = true;
-    b3::ShapeId wall_shape = wall.create_hull_shape(&wall_shape_def, &wall_box.base)!!;
+    b3::ShapeId wall_shape = b3::create_hull_shape(wall, &wall_shape_def, &wall_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
@@ -260,17 +260,17 @@ fn void a_sensor_reports_the_shape_that_entered_and_left_it() @test {
     body_def.gravity_scale = 0.0;
     body_def.position = {7.39814, 4.0, 0.0};
     body_def.linear_velocity = {-20.0, 0.0, 0.0};
-    b3::BodyId bullet = world.create_body(&body_def)!!;
+    b3::BodyId bullet = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.is_sensor = true;
     shape_def.enable_sensor_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.1};
-    b3::ShapeId bullet_shape = bullet.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId bullet_shape = b3::create_sphere_shape(bullet, &shape_def, &sphere)!!;
 
     int begin_total;
     int end_total;
     for (int i = 0; i < 200; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
 
         foreach (entered : world.sensor_begin_touch_events()) {
             begin_total++;
@@ -293,15 +293,15 @@ fn void a_sensor_reports_the_shape_that_entered_and_left_it() @test {
 fn void a_visitor_that_did_not_ask_for_sensor_events_is_never_reported() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {1.5, 11.0, 0.0};
-    b3::BodyId wall = world.create_body(&body_def)!!;
+    b3::BodyId wall = b3::create_body(world, &body_def)!!;
     b3::BoxHull wall_box = b3::make_box_hull(0.5, 10.0, 1.0);
     b3::ShapeDef wall_shape_def = b3::default_shape_def();
-    wall.create_hull_shape(&wall_shape_def, &wall_box.base)!!;
+    b3::create_hull_shape(wall, &wall_shape_def, &wall_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
@@ -309,16 +309,16 @@ fn void a_visitor_that_did_not_ask_for_sensor_events_is_never_reported() @test {
     body_def.gravity_scale = 0.0;
     body_def.position = {7.39814, 4.0, 0.0};
     body_def.linear_velocity = {-20.0, 0.0, 0.0};
-    b3::BodyId bullet = world.create_body(&body_def)!!;
+    b3::BodyId bullet = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.is_sensor = true;
     shape_def.enable_sensor_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.1};
-    bullet.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(bullet, &shape_def, &sphere)!!;
 
     int begin_total;
     for (int i = 0; i < 200; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
         begin_total += world.sensor_begin_touch_events().len;
         if (bullet.position().x < -1.0f) break;
     }
@@ -329,30 +329,30 @@ fn void a_visitor_that_did_not_ask_for_sensor_events_is_never_reported() @test {
 fn void a_moving_body_reports_the_transform_it_reached() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     int marker = 42;
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 2.0, 0.0};
     body_def.user_data = &marker;
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     bool saw_move;
     for (int i = 0; i < 30; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
 
         foreach (moved : world.body_move_events()) {
             if (moved.body_id.index1 != ball.index1) continue;
@@ -372,28 +372,28 @@ fn void a_moving_body_reports_the_transform_it_reached() @test {
 fn void a_body_that_settles_says_so_once_and_then_goes_quiet() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 2.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     int fell_asleep_total;
     for (int i = 0; i < 400; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
 
         foreach (moved : world.body_move_events()) {
             if (moved.fell_asleep) fell_asleep_total++;
@@ -407,9 +407,9 @@ fn void a_body_that_settles_says_so_once_and_then_goes_quiet() @test {
 fn void a_world_with_nothing_moving_reports_empty_sensor_and_move_slices() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     assert(world.sensor_begin_touch_events().len == 0);
     assert(world.sensor_end_touch_events().len == 0);
@@ -449,9 +449,9 @@ fn bool refuse_pair(b3::ShapeId shape_id_a, b3::ShapeId shape_id_b, void* contex
 fn void a_world_without_joints_reports_no_joint_events() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     assert(world.joint_events().len == 0);
 }
@@ -465,7 +465,7 @@ fn void a_joint_identifier_that_names_nothing_is_not_valid() @test {
 fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     int seen;
     pre_solve_calls = 0;
@@ -474,24 +474,24 @@ fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @te
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
     ground_shape_def.enable_pre_solve_events = true;
-    b3::ShapeId ground_shape = ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::ShapeId ground_shape = b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 1.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_pre_solve_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    b3::ShapeId ball_shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId ball_shape = b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     assert(pre_solve_calls >= 1, "a contact between two shapes that asked for pre-solve events reaches the callback");
@@ -512,31 +512,31 @@ fn void a_pre_solve_callback_sees_the_contact_and_the_context_it_was_given() @te
 fn void a_pre_solve_callback_that_refuses_a_contact_lets_the_body_fall_through() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     world.set_pre_solve_callback(&refuse_pre_solve, null);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
     ground_shape_def.enable_pre_solve_events = true;
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 1.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_pre_solve_events = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     assert(ball.position().y < -5.0f, "a contact the callback refuses does not hold the body up");
@@ -545,7 +545,7 @@ fn void a_pre_solve_callback_that_refuses_a_contact_lets_the_body_fall_through()
 fn void a_custom_filter_that_refuses_a_pair_lets_the_body_fall_through() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     custom_filter_calls = 0;
     world.set_custom_filter_callback(&refuse_pair, null);
@@ -553,24 +553,24 @@ fn void a_custom_filter_that_refuses_a_pair_lets_the_body_fall_through() @test {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
     ground_shape_def.enable_custom_filtering = true;
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 1.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     shape_def.enable_custom_filtering = true;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     assert(custom_filter_calls >= 1, "a pair of shapes that asked for custom filtering reaches the callback");

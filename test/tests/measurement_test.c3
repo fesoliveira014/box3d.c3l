@@ -20,7 +20,7 @@ fn b3::Transform a_turn_about(b3::Vec3 axis, double radians, b3::Vec3 position) 
 fn b3::MassData the_mass_of_a_two_metre_box_hull() {
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* hull = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer hull.destroy();
+    defer b3::destroy_hull(hull);
 
     return hull.compute_mass_data(1.0);
 }
@@ -208,7 +208,7 @@ struct HullBounds {
 fn HullBounds the_bounds_of_a_two_metre_box_hull() {
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* hull = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer hull.destroy();
+    defer b3::destroy_hull(hull);
 
     return {
       .at_rest = hull.compute_aabb(an_untouched_placement()),
@@ -251,13 +251,13 @@ fn TurnedHullBounds the_bounds_of_a_rock_hull_turned_two_ways() {
     b3::Transform eighth = a_turn_about(up, math::PI / 4.0, origin);
 
     b3::HullData* rock = b3::create_rock(1.0)!!;
-    defer rock.destroy();
+    defer b3::destroy_hull(rock);
 
-    b3::HullData* turned_a_quarter = rock.clone_and_transform(quarter, unscaled)!!;
-    defer turned_a_quarter.destroy();
+    b3::HullData* turned_a_quarter = b3::clone_and_transform_hull(rock, quarter, unscaled)!!;
+    defer b3::destroy_hull(turned_a_quarter);
 
-    b3::HullData* turned_an_eighth = rock.clone_and_transform(eighth, unscaled)!!;
-    defer turned_an_eighth.destroy();
+    b3::HullData* turned_an_eighth = b3::clone_and_transform_hull(rock, eighth, unscaled)!!;
+    defer b3::destroy_hull(turned_an_eighth);
 
     return {
       .quarter_turn_from_the_box = rock.compute_aabb(quarter),
@@ -365,14 +365,14 @@ fn MeshBounds the_bounds_of_two_meshes_read_at_three_scales() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
 
     b3::MeshData* offset_box = b3::create_box_mesh(
       (b3::Vec3){ 1.0, 0.0, 0.0 },
       (b3::Vec3){ 1.0, 1.0, 1.0 },
       false,
     )!!;
-    defer offset_box.destroy();
+    defer b3::destroy_mesh(offset_box);
 
     b3::Transform rest = an_untouched_placement();
     b3::Transform carried = { .p = { 10.0, 0.0, 0.0 }, .q = { 0.0, 0.0, 0.0, 1.0 } };
@@ -423,7 +423,7 @@ fn HeightFieldBounds the_bounds_of_two_height_field_grids() {
       scale: { 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer unscaled.destroy();
+    defer b3::destroy_height_field(unscaled);
 
     b3::HeightFieldData* stretched = b3::create_height_field_grid(
       row_count: 8,
@@ -431,7 +431,7 @@ fn HeightFieldBounds the_bounds_of_two_height_field_grids() {
       scale: { 2.0, 1.0, 3.0 },
       make_holes: false,
     )!!;
-    defer stretched.destroy();
+    defer b3::destroy_height_field(stretched);
 
     b3::Transform rest = an_untouched_placement();
     b3::Transform carried = { .p = { 10.0, 0.0, 0.0 }, .q = { 0.0, 0.0, 0.0, 1.0 } };
@@ -481,7 +481,7 @@ fn CompoundBounds the_bounds_of_a_two_sphere_compound() {
     def.sphere_count = 2;
 
     b3::CompoundData* compound = b3::create_compound(&def)!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     return {
       .at_rest = compound.compute_aabb(an_untouched_placement())!!,
@@ -514,7 +514,7 @@ fn EmptyCompoundBounds the_bounds_a_childless_compound_reports() {
     int baseline = b3::byte_count();
 
     b3::CompoundData* compound = b3::create_compound(&childless)!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     fault refusal;
     if (catch err = compound.compute_aabb(an_untouched_placement())) refusal = err;
@@ -541,7 +541,7 @@ fn float[2] the_x_reach_of_a_grid_mesh_flat_and_turned() {
       material_count: 1,
       identify_edges: false,
     )!!;
-    defer grid.destroy();
+    defer b3::destroy_mesh(grid);
 
     b3::Vec3 up = { 0.0, 1.0, 0.0 };
     b3::Vec3 origin = { 0.0, 0.0, 0.0 };

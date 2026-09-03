@@ -1,0 +1,108 @@
+module b3::draw;
+
+<*
+ A colour packed as 0xRRGGBB. Not an enum: box3d's b3HexColor names 145 constants, but the values
+ a renderer is handed are not confined to them, box3d passing a shape's custom colour through
+ unexamined and packing a debug material preset into the unused high byte.
+*>
+typedef HexColor = inline uint;
+
+<*
+ The number of constraint graph colours, mirroring B3_GRAPH_COLOR_COUNT in constants.h, which the
+ C API does not expose as a function. The last of them is the overflow slot.
+*>
+const int GRAPH_COLOR_COUNT = 24;
+
+<*
+ Raw graph colour. Private because graph_color() refuses the out-of-range index box3d does no more
+ than assert against before reading past its table.
+*>
+extern fn HexColor graph_color_raw(int index) @cname("b3GetGraphColor") @private;
+
+<*
+ One shape offered to a renderer so it can build whatever it draws that shape with. Read the arm
+ the type names inside the call: the sphere, capsule and mesh arms point into the world's shape
+ array, which moves when it grows, so a pointer kept is stale from the next shape created. The
+ compound and height field arms are the caller's own geometry and outlive the call. The other five
+ arms of any one shape are its address read as geometry it is not.
+*>
+struct DebugShape {
+    ShapeId shape_id;
+    ShapeType type;
+    union {
+        Capsule* capsule;
+        CompoundData* compound;
+        HeightFieldData* height_field;
+        HullData* hull;
+        Mesh* mesh;
+        Sphere* sphere;
+    }
+}
+
+<*
+ Draws one shape at the pose its body holds. user_shape is whatever WorldDef.create_debug_shape
+ answered for that shape, which box3d keeps, so it asks once and draws through the answer after.
+*>
+alias DrawShapeFn = fn void(void* user_shape, WorldTransform transform, HexColor color, void* context);
+alias DrawSegmentFn = fn void(Pos p1, Pos p2, HexColor color, void* context);
+alias DrawTransformFn = fn void(WorldTransform transform, void* context);
+alias DrawPointFn = fn void(Pos p, float size, HexColor color, void* context);
+alias DrawSphereFn = fn void(Pos p, float radius, HexColor color, float alpha, void* context);
+alias DrawCapsuleFn = fn void(Pos p1, Pos p2, float radius, HexColor color, float alpha, void* context);
+alias DrawBoundsFn = fn void(Aabb aabb, HexColor color, void* context);
+alias DrawBoxFn = fn void(Vec3 extents, WorldTransform transform, HexColor color, void* context);
+alias DrawStringFn = fn void(Pos p, ZString s, HexColor color, void* context);
+
+<*
+ What a renderer hands WorldId.draw(): nine callbacks taking world coordinates, the box outside
+ which nothing is drawn, and a flag per thing to draw. See default_debug_draw() for the state one
+ starts in, and DrawShapeFn for what a shape needs beyond draw_shapes.
+*>
+struct DebugDraw {
+    DrawShapeFn draw_shape_fcn;
+    DrawSegmentFn draw_segment_fcn;
+    DrawTransformFn draw_transform_fcn;
+    DrawPointFn draw_point_fcn;
+    DrawSphereFn draw_sphere_fcn;
+    DrawCapsuleFn draw_capsule_fcn;
+    DrawBoundsFn draw_bounds_fcn;
+    DrawBoxFn draw_box_fcn;
+    DrawStringFn draw_string_fcn;
+    Aabb drawing_bounds;
+    float force_scale;
+    float joint_scale;
+    bool draw_shapes;
+    bool draw_joints;
+    bool draw_joint_extras;
+    bool draw_bounds;
+    bool draw_mass;
+    bool draw_sleep;
+    bool draw_body_names;
+    bool draw_contacts;
+    bool draw_anchor_a;
+    bool draw_graph_colors;
+    bool draw_contact_features;
+    bool draw_contact_normals;
+    bool draw_contact_forces;
+    bool draw_islands;
+    void* context;
+}
+
+<*
+ A draw definition with every flag false, so a caller who takes it and draws sees nothing until
+ one is raised. The nine callbacks are box3d's own empty bodies rather than null, the drawing
+ bounds reach 100 length units either side of the origin, and both scales are 1.
+*>
+extern fn DebugDraw default_debug_draw() @cname("b3DefaultDebugDraw");
+
+<*
+ Draws the world through the definition's callbacks, culled to its drawing bounds and to
+ mask_bits, which gates everything: a mask of zero draws nothing at all. Shapes take a second
+ switch as well, WorldDef.create_debug_shape, which only world creation can set. box3d tests no
+ callback for null before calling it, so a raised flag over a null one is a crash rather than a
+ skip, and its check that the drawing bounds are a valid box is an assertion this build
+ compiles out.
+
+ @param mask_bits : `the bits a shape's own filter categories must overlap for it to be considered`
+*>
+extern fn void WorldId.draw(self, DebugDraw* draw, ulong mask_bits) @cname("b3World_Draw");

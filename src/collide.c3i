@@ -1,0 +1,207 @@
+module b3;
+
+<*
+ Three vertices in the frame of whatever they are collided against — these entry points apply no
+ transform. The plane normal is the cross product of the second and third vertices about the first,
+ and each pair culls what lies behind it, though the point tested and the tolerance differ per pair.
+
+ A triangle with no area has no plane, so nothing is culled and a contact can carry a NaN point.
+ The wrappers refuse one.
+*>
+typedef Triangle = Vec3[3];
+
+<*
+ Which feature of a triangle produced a manifold. Written only by the collide entry points that
+ take a triangle, and private with the LocalManifold field that holds it.
+*>
+enum TriangleFeature : int @private {
+    NONE,
+    TRIANGLE_FACE,
+    HULL_FACE,
+    EDGE_1,
+    EDGE_2,
+    EDGE_3,
+    VERTEX_1,
+    VERTEX_2,
+    VERTEX_3,
+}
+
+<*
+ box3d's GJK warm start, holding vertex indices into the pair of shapes it was filled from. It
+ belongs to that pair alone: box3d reads those indices against the next pair's arrays before the
+ metric that would discard them is computed, under a bounds assertion this build compiles out.
+ Private for that reason — a wrapper that needs one keeps its own and zeroes it at every call.
+*>
+struct SimplexCache @private {
+    float metric;
+    ushort count;
+    char[4] index_a;
+    char[4] index_b;
+}
+
+<*
+ box3d's separating-axis warm start: the last axis it tested and what that test gave, whether the
+ two were separated or overlapping — the separation is negative for an overlap, and hit is the only
+ field reporting re-use. The hull pair always replaces the entry; the triangle and hull pair zeroes
+ it instead on its fallback path, so an empty one is observable there.
+*>
+struct SatCache @private {
+    float separation;
+    char type;
+    char index_a;
+    char index_b;
+    char hit;
+}
+
+<*
+ The incoming and outgoing edges a contact point lies between, each named by the shape that owns
+ it and its index in that shape's own array. box3d matches these across steps to warm start a
+ contact, so two points of one manifold that differ here name distinct features.
+*>
+struct FeaturePair {
+    char owner1;
+    char index1;
+    char owner2;
+    char index2;
+}
+
+<*
+ One contact point of a manifold, in shape A's frame. A separation is zero where the surfaces
+ exactly meet, negative for an overlap, and positive for a point the two have not reached — which
+ only some pairs report at all.
+ triangle_index names the triangle a mesh or height field contributed and is left alone by every
+ collide pair bound here, the triangle pairs included.
+*>
+struct LocalManifoldPoint {
+    Vec3 point;
+    float separation;
+    FeaturePair pair;
+    int triangle_index;
+}
+
+<*
+ box3d's own manifold, whose points borrow a buffer the caller supplies. A call that finds nothing
+ leaves the normal standing, and the sphere pair leaves the point count standing too, so one reused
+ across calls reports the previous contact as this one's. Private for that reason: the wrappers
+ build one over storage they own and hand back a CollisionManifold instead.
+*>
+struct LocalManifold @private {
+    Vec3 normal;
+    Vec3 triangle_normal;
+    LocalManifoldPoint* points;
+    int point_count;
+    int triangle_index;
+    int i1;
+    int i2;
+    int i3;
+    float squared_distance;
+    TriangleFeature feature;
+    int triangle_flags;
+}
+
+<*
+ The manifold a pair of shapes produces, in shape A's frame, owning its points instead of
+ borrowing them, so nothing a previous call left behind can be read as this one's. Only the first
+ point_count entries are valid and contact_points() returns that prefix. The capacity handed to
+ box3d is fixed at MAX_MANIFOLD_POINTS, its own manifold size, because a capacity under what a
+ pair needs costs the whole manifold rather than its tail and reads exactly like no contact.
+*>
+struct CollisionManifold {
+    Vec3 normal;
+    int point_count;
+    LocalManifoldPoint[MAX_MANIFOLD_POINTS] points;
+}
+
+<*
+ The manifold of the one pair whose point count the caller's buffer is the only bound on, in
+ shape A's frame. The points borrow that buffer and live exactly as long as it does; a count equal
+ to its length may mean more was clipped away, or that the clip landed on exactly that many.
+ box3d writes only the point, the separation and the feature pair, so the rest is the buffer's.
+*>
+struct CollisionManifoldView {
+    Vec3 normal;
+    LocalManifoldPoint[] points;
+}
+
+<*
+ Raw local collide entry points. Private because each writes through a manifold that borrows the
+ caller's point buffer and takes a capacity below which it reports nothing rather than less. They
+ belong to box3d_collide.c3, whose wrappers are the only way in.
+*>
+extern fn void collide_spheres_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Sphere* sphere_a,
+  Sphere* sphere_b,
+  Transform transform_b_to_a,
+) @cname("b3CollideSpheres") @private;
+
+extern fn void collide_capsule_and_sphere_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Capsule* capsule_a,
+  Sphere* sphere_b,
+  Transform transform_b_to_a,
+) @cname("b3CollideCapsuleAndSphere") @private;
+
+extern fn void collide_hull_and_sphere_raw(
+  LocalManifold* manifold,
+  int capacity,
+  HullData* hull_a,
+  Sphere* sphere_b,
+  Transform transform_b_to_a,
+  SimplexCache* cache,
+) @cname("b3CollideHullAndSphere") @private;
+
+extern fn void collide_capsules_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Capsule* capsule_a,
+  Capsule* capsule_b,
+  Transform transform_b_to_a,
+) @cname("b3CollideCapsules") @private;
+
+extern fn void collide_hull_and_capsule_raw(
+  LocalManifold* manifold,
+  int capacity,
+  HullData* hull_a,
+  Capsule* capsule_b,
+  Transform transform_b_to_a,
+  SimplexCache* cache,
+) @cname("b3CollideHullAndCapsule") @private;
+
+extern fn void collide_hulls_raw(
+  LocalManifold* manifold,
+  int capacity,
+  HullData* hull_a,
+  HullData* hull_b,
+  Transform transform_b_to_a,
+  SatCache* cache,
+) @cname("b3CollideHulls") @private;
+
+extern fn void collide_triangle_and_capsule_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Vec3* triangle_a,
+  Capsule* capsule_b,
+  SimplexCache* cache,
+) @cname("b3CollideTriangleAndCapsule") @private;
+
+extern fn void collide_triangle_and_hull_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Vec3 v1,
+  Vec3 v2,
+  Vec3 v3,
+  int triangle_flags,
+  HullData* hull_b,
+  SatCache* cache,
+  bool enable_speculative,
+) @cname("b3CollideTriangleAndHull") @private;
+
+extern fn void collide_triangle_and_sphere_raw(
+  LocalManifold* manifold,
+  int capacity,
+  Vec3* triangle_a,
+  Sphere* sphere_b,
+) @cname("b3CollideTriangleAndSphere") @private;

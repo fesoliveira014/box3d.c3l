@@ -103,9 +103,9 @@ b3PlaneSolverResult delta,iterationCount
 b3PlaneResult plane,point
 b3BodyPlaneResult shapeId,result
 b3ExplosionDef maskBits,position,radius,falloff,impulsePerArea
-b3RecPlayerInfo frameCount,workerCount,timeStep,subStepCount,lengthScale,bounds
-b3RecQueryType
-b3RecQueryInfo type,filter,aabb,origin,translation,hitCount,key,id,name
-b3RecQueryHit shape,point,normal,fraction
+b3RecPlayerInfo=PlayerInfo frameCount,workerCount,timeStep,subStepCount,lengthScale,bounds
+b3RecQueryType=QueryType
+b3RecQueryInfo=QueryInfo type,filter,aabb,origin,translation,hitCount,key,id,name
+b3RecQueryHit=QueryHit shape,point,normal,fraction
 b3DebugShape shapeId,type,@capsule
 b3DebugDraw DrawShapeFcn,DrawSegmentFcn,DrawTransformFcn,DrawPointFcn,DrawSphereFcn,DrawCapsuleFcn,DrawBoundsFcn,DrawBoxFcn,DrawStringFcn,drawingBounds,forceScale,jointScale,drawShapes,drawJoints,drawJointExtras,drawBounds,drawMass,drawSleep,drawBodyNames,drawContacts,drawAnchorA,drawGraphColors,drawContactFeatures,drawContactNormals,drawContactForces,drawIslands,context

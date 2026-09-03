@@ -9,11 +9,11 @@ This package has no `project.json` and no standalone build, so verification is f
 
 ## 1. Compile-check the binding package
 
-`module b3` spans every `.c3`/`.c3i` file at the package root, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation, with a glob so the next file added is never silently skipped.
+`module b3` spans most of `src/`, and `src/draw.*` and `src/record.*` are its two submodules, so a single-file invocation cannot see the declarations its siblings provide — compile them together in one invocation, with a glob so the next file added is never silently skipped.
 
 ```sh
 cd /home/fesol/source/repos/box3d.c3l
-c3c compile-only --no-obj *.c3i *.c3
+c3c compile-only --no-obj src/*.c3i src/*.c3
 rm -rf obj
 ```
 
@@ -48,7 +48,7 @@ cd /home/fesol/source/repos/box3d.c3l
 ./scripts/build-box3d.sh --check
 ```
 
-This rebuilds box3d and compares every type (and pinned field, where listed) in `scripts/abi-types.txt` against `scripts/abi-sizes.txt`. A drift here means the `$assert` pins in `box3d.c3i` are wrong and calls will corrupt memory. Do not paper over it with `--update` unless the binding is being updated to match in the same change.
+This rebuilds box3d and compares every type (and pinned field, where listed) in `scripts/abi-types.txt` against `scripts/abi-sizes.txt`. A drift here means the `$assert` pins in `src/layout.c3` are wrong and calls will corrupt memory. Do not paper over it with `--update` unless the binding is being updated to match in the same change.
 
 ## 5. Report honestly
 

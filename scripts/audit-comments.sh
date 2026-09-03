@@ -25,7 +25,7 @@ WIDTH="${3:-100}"
 BUDGET="${4:-10}"
 cd "$(dirname "$0")/.."
 
-FILES=$(ls *.c3i *.c3 test/tests/*.c3 2>/dev/null || true)
+FILES=$(ls src/*.c3i src/*.c3 test/tests/*.c3 2>/dev/null || true)
 
 # Emits "file:line:prose:total" for every docstring in $1.
 scan() {

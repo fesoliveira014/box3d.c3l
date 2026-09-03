@@ -1,0 +1,162 @@
+module b3;
+
+<*
+ The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it: call
+ destroy() exactly once, and hold the pointer until every shape built on it is gone. byte_count()
+ carries the allocation, so a mesh never destroyed shifts that count for the rest of the process
+ exactly as a leaked world does. The triangles, vertices and hierarchy hang off the end of that
+ one allocation at byte offsets from its own address, so the mesh is opaque here and could not be
+ copied anyway. Build one with create_grid_mesh() and its siblings in box3d_mesh.c3.
+*>
+typedef MeshData = void;
+
+<*
+ The geometry create_mesh() builds a mesh from. box3d copies everything it reads, so none of
+ these arrays has to outlive the call. There is no default_mesh_def() upstream and no cookie,
+ so a definition carries no mark of being well formed and is written field by field.
+
+ vertices must hold vertex_count points and indices 3 * triangle_count indices, wound
+ counter-clockwise. material_indices is optional and holds one index per triangle.
+*>
+struct MeshDef {
+    Vec3* vertices;
+    int* indices;
+    char* material_indices;
+    float weld_tolerance;
+    int vertex_count;
+    int triangle_count;
+    bool weld_vertices;
+    bool use_median_split;
+    bool identify_edges;
+}
+
+<*
+ A mesh shape's geometry as the shape holds it: the mesh it borrows and the scale it reads that
+ mesh through. ShapeId.mesh() hands back a copy of the pair, never of the geometry — data is the
+ caller's own mesh pointer, still the caller's to destroy and still bound to outlive the shape.
+
+ That ownership belongs to ShapeId.mesh() alone. The same struct is the mesh arm of ChildShape,
+ where data addresses the compound's own allocation instead and destroying it aborts the process.
+*>
+struct Mesh {
+    MeshData* data;
+    Vec3 scale;
+}
+
+<*
+ The collision data behind a height field shape. Ownership, the byte count and the trailing
+ arrays all work exactly as they do for MeshData — see there.
+
+ Build one with create_height_field_grid() and its siblings in box3d_mesh.c3.
+*>
+typedef HeightFieldData = void;
+
+<*
+ The grid create_height_field() builds a height field from. box3d copies everything it reads,
+ so neither array has to outlive the call, and there is no default definition or cookie.
+
+ heights must hold count_x * count_z samples, one per grid point, in units the scale is applied
+ to afterwards; heights outside the global range are clamped to it before being quantised into
+ 16 bits. material_indices is optional and holds one index per cell, where 0xFF marks a hole.
+*>
+struct HeightFieldDef {
+    float* heights;
+    char* material_indices;
+    Vec3 scale;
+    int count_x;
+    int count_z;
+    float global_minimum_height;
+    float global_maximum_height;
+    bool clockwise_winding;
+}
+
+<*
+ Raw mesh constructors. Every one of them builds a b3MeshDef and hands it to b3CreateMesh, so
+ every one returns a null pointer for geometry box3d cannot use; the wrappers in box3d_mesh.c3
+ turn that into a fault and are the only public way in.
+*>
+extern fn MeshData* create_grid_mesh_raw(int x_count, int z_count, float cell_width, int material_count, bool identify_edges) @cname("b3CreateGridMesh") @private;
+extern fn MeshData* create_wave_mesh_raw(int x_count, int z_count, float cell_width, float amplitude, float row_frequency, float column_frequency) @cname("b3CreateWaveMesh") @private;
+extern fn MeshData* create_torus_mesh_raw(int radial_resolution, int tubular_resolution, float radius, float thickness) @cname("b3CreateTorusMesh") @private;
+extern fn MeshData* create_box_mesh_raw(Vec3 center, Vec3 extent, bool identify_edges) @cname("b3CreateBoxMesh") @private;
+extern fn MeshData* create_hollow_box_mesh_raw(Vec3 center, Vec3 extent) @cname("b3CreateHollowBoxMesh") @private;
+extern fn MeshData* create_platform_mesh_raw(Vec3 center, float height, float top_width, float bottom_width) @cname("b3CreatePlatformMesh") @private;
+extern fn MeshData* create_mesh_raw(MeshDef* def, int* degenerate_triangle_indices, int degenerate_capacity) @cname("b3CreateMesh") @private;
+
+<*
+ Releases the mesh. The caller owns it and must call this exactly once — see MeshData.
+*>
+extern fn void MeshData.destroy(&self) @cname("b3DestroyMesh");
+
+<*
+ The height of the mesh's bounding volume hierarchy, not any dimension of the mesh itself: it
+ is the number of levels below the root, so a mesh small enough to fit in one leaf reports 0.
+*>
+extern fn int MeshData.tree_height(&self) @cname("b3GetHeight");
+
+<*
+ The bounds of the mesh scaled and then placed by this transform. The scale multiplies the mesh's
+ cached bounds component by component in mesh space and box3d re-orders the corners afterwards,
+ so a negative component mirrors the box rather than turning it inside out, and a zero one
+ flattens it. The placement then widens the box under rotation exactly as
+ HullData.compute_aabb() does.
+*>
+extern fn Aabb MeshData.compute_aabb(&self, Transform transform, Vec3 scale) @cname("b3ComputeMeshAABB");
+
+<*
+ Raw height field constructors. None of them can return a null pointer — box3d allocates
+ whatever it is asked for, including a grid with no cells at all — so the wrappers in
+ box3d_mesh.c3 carry the guards instead and are the only public way in.
+*>
+extern fn HeightFieldData* create_height_field_raw(HeightFieldDef* def) @cname("b3CreateHeightField") @private;
+extern fn HeightFieldData* create_grid_raw(int row_count, int column_count, Vec3 scale, bool make_holes) @cname("b3CreateGrid") @private;
+extern fn HeightFieldData* create_wave_raw(int row_count, int column_count, Vec3 scale, float row_frequency, float column_frequency, bool make_holes) @cname("b3CreateWave") @private;
+
+<*
+ Raw height field file calls. The first reads both of the definition's arrays without testing
+ either for null, where create_height_field_raw() reads only the heights, and the second answers
+ every refusal with a null pointer. The wrappers in box3d_mesh.c3 carry both guards and are the
+ only public way in.
+*>
+extern fn void dump_height_data_raw(HeightFieldDef* def, ZString path) @cname("b3DumpHeightData") @private;
+extern fn HeightFieldData* load_height_field_raw(ZString path) @cname("b3LoadHeightField") @private;
+
+<*
+ Releases the height field. The caller owns it and must call this exactly once — see MeshData.
+*>
+extern fn void HeightFieldData.destroy(&self) @cname("b3DestroyHeightField");
+
+<*
+ The bounds of the height field placed by this transform. The scale the field was built with is
+ already inside the cached box this carries through, which is why there is no scale argument
+ here and MeshData.compute_aabb() has one. The placement widens the box under rotation exactly
+ as HullData.compute_aabb() does.
+*>
+extern fn Aabb HeightFieldData.compute_aabb(&self, Transform transform) @cname("b3ComputeHeightFieldAABB");
+
+<*
+ Called once for each triangle a mesh or height field query finds, with the triangle's vertices
+ in the shape's own frame and the index a cast on that shape reports. Returning false ends a
+ Mesh.query; HeightFieldData.query reads nothing back and cannot be stopped.
+*>
+alias MeshQueryFn = fn bool(Vec3 a, Vec3 b, Vec3 c, int triangle_index, void* context);
+
+<*
+ Reports every triangle of this mesh that meets bounds, a box in the mesh's own frame with the
+ mesh's scale already applied — the frame the vertices arrive in. Each triangle is tested against
+ the box itself rather than against the node holding it.
+
+ An inverted box is repaired into the box it spans rather than answering nothing, and a mirroring
+ scale swaps the second and third vertex so the scaled triangle keeps its winding.
+*>
+extern fn void Mesh.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryMesh");
+
+<*
+ Reports the triangles whose cell meets bounds, a box in the field's own frame and scale. The test
+ is per cell — a cell meeting bounds reports both its triangles, a hole cell neither — and what fcn
+ returns is discarded, so nothing stops the traversal.
+
+ The work follows the box, not the field: box3d spans it in unclamped cell indices, so a billion
+ cells costs seconds and a span past a signed int reports nothing. Intersect with compute_aabb().
+*>
+extern fn void HeightFieldData.query(&self, Aabb bounds, MeshQueryFn fcn, void* context) @cname("b3QueryHeightField");

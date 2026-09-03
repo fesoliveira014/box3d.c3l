@@ -1,0 +1,265 @@
+module b3;
+
+<*
+ The two children of an internal tree node, as indices into the tree's own node array. box3d
+ writes -1 in either of them where there is no child.
+*>
+struct TreeNodeChildren {
+    int child1;
+    int child2;
+}
+
+<*
+ A tree node's flags. box3d sets LEAF with ALLOCATED when a proxy is created and clears the word
+ when the slot is freed; nothing else in the tree writes either bit, so LEAF is an exact test for
+ whether a node index names a live proxy. ENLARGED is box3d's own rebuild bookkeeping.
+*>
+const ushort TREE_NODE_ALLOCATED = 0x0001;
+const ushort TREE_NODE_ENLARGED = 0x0002;
+const ushort TREE_NODE_LEAF = 0x0004;
+
+<*
+ One node of a dynamic tree, declared because the tree's two proxy accessors are inline in box3d's
+ header rather than exported, so box3d_tree.c3 reimplements them over these fields.
+
+ A node is a leaf, an internal node or a free slot: the shared eight bytes are a proxy's user
+ data, two child indices, or the next free slot. flags says which — TREE_NODE_LEAF is the only
+ reading under which user_data and aabb mean anything.
+*>
+struct TreeNode {
+    Aabb aabb;
+    ulong category_bits;
+    union {
+        TreeNodeChildren children;
+        ulong user_data;
+    }
+    union {
+        int parent;
+        int next;
+    }
+    ushort height;
+    ushort flags;
+}
+
+<*
+ A bounding volume hierarchy over proxies, held by value: 80 bytes pointing at a pool box3d
+ allocated, so a copy leaves two structs sharing one pool and only one may be destroyed. Pass it
+ on as &tree; the pool moves every node as it grows, so nodes is not a pointer to hold on to.
+
+ A compound's tree is neither the caller's to destroy nor to modify: destroy() frees into the
+ middle of the compound, and its free list points at live geometry, so create_proxy() overwrites
+ a child and hides it from every query with nothing reporting the loss.
+*>
+struct DynamicTree {
+    ulong version;
+    TreeNode* nodes;
+    int root;
+    int node_count;
+    int node_capacity;
+    int proxy_count;
+    int free_list;
+    int* leaf_indices;
+    Aabb* leaf_boxes;
+    Vec3* leaf_centers;
+    int* bin_indices;
+    int rebuild_capacity;
+}
+
+<*
+ Builds an empty tree and the node pool it inserts into.
+
+ proxy_capacity is a starting size and never a ceiling: box3d raises anything below 16 — a
+ negative argument included — to 16, so every argument from 16 down builds the same tree, and the
+ pool grows past it as needed. The tree comes back by value and the caller owns it: destroy() it
+ exactly once, and see DynamicTree for what a copy means. The 80-byte struct is the caller's own
+ storage; the node pool is on byte_count(), as a world or a mesh is.
+*>
+extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Create");
+
+<*
+ Releases the node pool and the rebuild arrays, then zeroes the tree, so a second call on the
+ same struct frees nothing. That protects no copy: a copy still holds the freed pointer. See
+ DynamicTree, which also covers the tree a compound owns.
+
+ The zero it leaves is not the empty-tree state — box3d marks an empty root with -1, so height(),
+ area_ratio() and root_bounds() read a freed pool afterwards and crash. Everything else here is
+ safe on it: the rest test the node count, which the zeroing sets to 0.
+*>
+extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
+
+<*
+ Writes the tree to the path: the struct with its pointers and rebuild scratch zeroed, then the
+ whole node pool including the free list. A path box3d cannot open is a silent no-op — it returns
+ nothing a caller could read, which is why this takes no fault where load_tree() does.
+*>
+extern fn void DynamicTree.save(&self, ZString path) @cname("b3DynamicTree_Save");
+
+<*
+ Raw tree load. Private because load_tree() reads the zeroed tree box3d answers every refusal
+ with as the fault it is.
+*>
+extern fn DynamicTree load_tree_raw(ZString path, float scale) @cname("b3DynamicTree_Load") @private;
+
+extern fn int create_proxy_raw(
+  DynamicTree* tree,
+  Aabb aabb,
+  ulong category_bits,
+  ulong user_data,
+) @cname("b3DynamicTree_CreateProxy") @private;
+
+<*
+ Raw proxy calls that index the node array on an id the caller supplies, under assertions this
+ build compiles out. box3d_tree.c3 carries the guards and is the only public way in.
+*>
+extern fn void destroy_proxy_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_DestroyProxy") @private;
+extern fn void move_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_MoveProxy") @private;
+extern fn void enlarge_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_EnlargeProxy") @private;
+extern fn void set_category_bits_raw(DynamicTree* tree, int proxy_id, ulong category_bits) @cname("b3DynamicTree_SetCategoryBits") @private;
+extern fn ulong category_bits_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_GetCategoryBits") @private;
+
+<*
+ The number of levels below the root, so a tree holding a single proxy reports 0 and so does an
+ empty one.
+*>
+extern fn int DynamicTree.height(&self) @cname("b3DynamicTree_GetHeight");
+
+<*
+ The summed perimeter of the internal nodes over the root's. Leaves and the root are skipped, so
+ a tree whose only internal node is the root reports 0 — two proxies or fewer, not an empty tree.
+ A root with no volume, which proxies holding the zero box give at any count, divides by zero and
+ reports NaN rather than 0.
+*>
+extern fn float DynamicTree.area_ratio(&self) @cname("b3DynamicTree_GetAreaRatio");
+
+<*
+ The box containing every proxy. An empty tree reports the type's zero rather than an inverted or
+ otherwise marked box, so a caller cannot tell it from a degenerate box at the origin.
+*>
+extern fn Aabb DynamicTree.root_bounds(&self) @cname("b3DynamicTree_GetRootBounds");
+
+<*
+ Arithmetic over the capacities rather than a reading of the heap: it counts the caller's own
+ 80-byte struct, which is not on the heap, and after a rebuild two arrays box3d's median split
+ never allocates. The module's byte_count() is the number the allocator agrees with.
+*>
+extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount");
+
+<*
+ Rebalances the tree and returns the number of boxes it sorted. A partial build keeps every
+ subtree box3d has not marked enlarged and so sorts far fewer boxes than a full one — but any
+ enlarge_proxy() marks the whole ancestor chain, so one of those undoes the saving. Either build
+ allocates the rebuild arrays when it has something to sort, and byte_count() carries them.
+*>
+extern fn int DynamicTree.rebuild(&self, bool full_build) @cname("b3DynamicTree_Rebuild");
+
+<*
+ Called once for each proxy a query finds. Returning false ends the traversal, and the tree must
+ not be modified from inside the call: the traversal carries node indices across it, and a proxy
+ created or destroyed there makes them name something else.
+*>
+alias TreeQueryFn = fn bool(int proxy_id, ulong user_data, void* context);
+
+<*
+ Called once for each proxy a closest query reaches, given the search bound as it stands. Only a
+ return value below that bound takes effect, so the callback is what measures anything — see
+ DynamicTree.query_closest(). TreeQueryFn's rule against modifying the tree holds here too, and
+ for the same reason.
+*>
+alias TreeClosestFn = fn float(float search_bound, int proxy_id, ulong user_data, void* context);
+
+<*
+ Reports proxies whose box overlaps aabb, calling fcn once for each until it returns false — every
+ one, unless the tree exhausts box3d's 1024-entry traversal stack, which drops a whole subtree and
+ reports the short answer as a normal one. Only a degenerate tree of nested boxes reaches that.
+
+ The mask flags do not refine each other: loosely a node passes on any bit in common, strictly on
+ every bit of the mask, and only a single-bit mask agrees for every proxy. A zero mask reports
+ nothing loosely and everything strictly.
+*>
+extern fn TreeStats DynamicTree.query(
+  &self,
+  Aabb aabb,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeQueryFn fcn,
+  void* context,
+) @cname("b3DynamicTree_Query");
+
+<*
+ The closest traversal, whose in-out float box3d calls minDistanceSqr. box3d_tree.c3 takes that
+ bound by value and is the only public way in.
+*>
+extern fn TreeStats query_closest_raw(
+  DynamicTree* tree,
+  Vec3 point,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeClosestFn fcn,
+  void* context,
+  float* search_bound,
+) @cname("b3DynamicTree_QueryClosest") @private;
+
+<*
+ What a closest query ended with: box3d's traversal counters and the bound the callback left,
+ which is the bound the query started with when nothing returned anything smaller. A C3 type with
+ no C counterpart — box3d passes the bound back through the in-out float it was given.
+*>
+struct ClosestSearch {
+    TreeStats stats;
+    float search_bound;
+}
+
+<*
+ An axis-aligned box swept along translation, in the tree's own frame. The box never rotates, and
+ what travels is its centre: DynamicTree.box_cast() grows each node box by this one's half-extents
+ on all three axes and runs the centre's line through that, so the box enters the sweep only as a
+ centre and a size.
+*>
+struct BoxCastInput {
+    Aabb box;
+    Vec3 translation;
+    float max_fraction;
+}
+
+<*
+ Called once for each proxy a ray cast reaches, given the input with max_fraction narrowed to the
+ bound the cast currently holds. Returning 0 ends the traversal, a value between 0 and that bound
+ clips the ray to it, and the bound itself continues unclipped; anything negative does neither,
+ which is how box3d skips a proxy. TreeQueryFn's rule against modifying the tree holds here too.
+*>
+alias TreeRayCastFn = fn float(RayCastInput* input, int proxy_id, ulong user_data, void* context);
+
+<*
+ The box cast's counterpart to TreeRayCastFn, over a BoxCastInput and with the same return
+ contract and the same rule against modifying the tree.
+*>
+alias TreeBoxCastFn = fn float(BoxCastInput* input, int proxy_id, ulong user_data, void* context);
+
+<*
+ Reports the proxies whose box the ray crosses, calling fcn once for each. This is the broad phase
+ alone — a proxy is offered because the ray met its box, and the exact cast against whatever that
+ box holds is the callback's work. query() gives the mask flags and the traversal stack's limit,
+ which apply here too, and TreeRayCastFn gives what fcn's return does.
+*>
+extern fn TreeStats DynamicTree.ray_cast(
+  &self,
+  RayCastInput* input,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeRayCastFn fcn,
+  void* context,
+) @cname("b3DynamicTree_RayCast");
+
+<*
+ Sweeps the input's box along its translation and reports the proxies it reaches, on the terms
+ ray_cast() states and with TreeBoxCastFn in place of TreeRayCastFn. See BoxCastInput for what
+ box3d sweeps, which is not the box itself.
+*>
+extern fn TreeStats DynamicTree.box_cast(
+  &self,
+  BoxCastInput* input,
+  ulong mask_bits,
+  bool require_all_bits,
+  TreeBoxCastFn fcn,
+  void* context,
+) @cname("b3DynamicTree_BoxCast");

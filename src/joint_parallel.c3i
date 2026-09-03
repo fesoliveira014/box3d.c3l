@@ -1,0 +1,80 @@
+module b3;
+
+<*
+ A joint known to be a parallel joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_parallel(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef ParallelJointId = inline JointId;
+
+<*
+ A parallel joint definition: a spring holding local frame A's z axis parallel to local frame B's
+ and holding nothing else, so the bodies stay free to translate and to spin about that axis —
+ which is what keeps a body upright. Must come from default_parallel_joint_def(), which unlike the
+ prismatic and weld defaults zeroes nothing it adds: hertz 1, damping_ratio 1, max_torque
+ float::max, so a default parallel joint is already sprung. The spring is gated on max_torque
+ rather than bounded by it, so a max_torque of 0 stops the joint constraining anything.
+*>
+struct ParallelJointDef {
+    inline JointDef base;
+    float hertz;
+    float damping_ratio;
+    float max_torque;
+}
+
+extern fn ParallelJointDef default_parallel_joint_def() @cname("b3DefaultParallelJointDef");
+
+<*
+ Raw parallel joint constructor. Bypasses WorldId.create_parallel_joint's definition guard and
+ hands back a joint of no particular type, so it is private to the module —
+ box3d_joint_parallel.c3's WorldId.create_parallel_joint is the only caller and is the only
+ public way to a live parallel joint.
+*>
+extern fn JointId create_parallel_joint_raw(
+  WorldId world_id,
+  ParallelJointDef* def,
+) @cname("b3CreateParallelJoint") @private;
+
+<*
+ Sets the spring's stiffness in hertz, asserted finite and at or above 0 under an assertion this
+ build compiles out. 1 by default, and 0 means the opposite of the weld joint's: box3d's softness
+ for a zero hertz carries a zero mass scale, so a parallel spring at 0 stops solving, not rigid.
+
+ That frees the frames only on a joint silenced before it accumulated an impulse — the warm start
+ re-applies the impulse the spring holds every substep, gated on neither hertz nor ceiling, so one
+ silenced after working goes on pushing with it.
+*>
+extern fn void ParallelJointId.set_spring_hertz(self, float hertz) @cname("b3ParallelJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz. 1 on a joint built from a default definition.
+*>
+extern fn float ParallelJointId.spring_hertz(self) @cname("b3ParallelJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional. 1 on a joint built from a default definition.
+ Asserted finite and at or above 0 under the same compiled-out assertion set_spring_hertz
+ describes, and stored as handed.
+*>
+extern fn void ParallelJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3ParallelJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional. 1 on a joint built from a default definition.
+*>
+extern fn float ParallelJointId.spring_damping_ratio(self) @cname("b3ParallelJoint_GetSpringDampingRatio");
+
+<*
+ Sets the ceiling in newton-metres on the torque the spring may apply, asserted finite and at or
+ above 0 under an assertion this build compiles out. float::max by default. The ceiling gates the
+ constraint as well as bounding it, so set_max_torque(0) leaves the joint solving nothing at all.
+ Upstream names the parameter a force; what it stores and everything reading it is a torque.
+ Silencing a spring that has already worked does not undo the impulse it holds — see
+ set_spring_hertz.
+*>
+extern fn void ParallelJointId.set_max_torque(self, float torque) @cname("b3ParallelJoint_SetMaxTorque");
+
+<*
+ The ceiling in newton-metres on the torque the spring may apply. float::max on a joint built from
+ a default definition.
+*>
+extern fn float ParallelJointId.max_torque(self) @cname("b3ParallelJoint_GetMaxTorque");

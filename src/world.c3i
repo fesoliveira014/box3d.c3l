@@ -1,0 +1,197 @@
+module b3;
+
+<*
+ Mixes two touching surfaces' frictions into the one the solver uses, in place of box3d's own
+ sqrt(a * b). box3d may call it from a worker thread and hands it no context of the caller's, so it
+ must not touch the world. It runs every step the pair's narrow phase finds them touching, and once
+ per manifold point against a mesh or height field, where the answers are averaged — recycling,
+ sleeping and mere nearness each suppress it, so the count is neither one per pair nor per step.
+*>
+alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float friction_b, ulong user_material_id_b);
+
+<*
+ Mixes two touching surfaces' restitutions, in place of box3d's own max(a, b). The threading,
+ context and frequency rules are FrictionFn's, because box3d asks both from the same place: the
+ line after a contact's manifold is recomputed.
+*>
+alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, float restitution_b, ulong user_material_id_b);
+alias TaskFn = fn void(void* task_context);
+alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, ZString task_name);
+alias FinishTaskFn = fn void(void* user_task, void* user_context);
+<*
+ Answers a shape's renderer-side handle, which box3d holds and hands to DrawShapeFcn. A world
+ answering this must set destroy_debug_shape too — see DestroyDebugShapeFn for what happens when
+ it does not.
+*>
+alias CreateDebugShapeFn = fn void*(DebugShape* debug_shape, void* user_context);
+<*
+ Releases whatever create_debug_shape answered for a shape, when that shape or its world is
+ destroyed. box3d does not test this one for null on the shape's own destroy path, so a world
+ that answers for its shapes and leaves this out crashes there rather than skipping it.
+*>
+alias DestroyDebugShapeFn = fn void(void* user_shape, void* user_context);
+
+<*
+ The number of worlds box3d can hold at once. Mirrors B3_MAX_WORLDS in constants.h, which the C API
+ does not expose as a function.
+*>
+const int MAX_WORLDS = 128;
+
+<*
+ The most workers a world can run its step across. Mirrors B3_MAX_WORKERS in constants.h, which
+ the C API does not expose as a function, and is the ceiling that record::Player.set_worker_count()
+ clamps into.
+*>
+const int MAX_WORKERS = 32;
+
+struct Capacity {
+    int static_shape_count;
+    int dynamic_shape_count;
+    int static_body_count;
+    int dynamic_body_count;
+    int contact_count;
+}
+
+struct WorldDef {
+    Vec3 gravity;
+    float restitution_threshold;
+    float hit_event_threshold;
+    float contact_hertz;
+    float contact_damping_ratio;
+    float contact_speed;
+    float maximum_linear_speed;
+    FrictionFn friction_callback;
+    RestitutionFn restitution_callback;
+    bool enable_sleep;
+    bool enable_continuous;
+    uint worker_count;
+    EnqueueTaskFn enqueue_task;
+    FinishTaskFn finish_task;
+    void* user_task_context;
+    void* user_data;
+    CreateDebugShapeFn create_debug_shape;
+    DestroyDebugShapeFn destroy_debug_shape;
+    void* user_debug_shape_context;
+    Capacity capacity;
+    int internal_value;
+}
+
+struct Profile {
+    float step;
+    float pairs;
+    float collide;
+    float solve;
+    float solver_setup;
+    float constraints;
+    float prepare_constraints;
+    float integrate_velocities;
+    float warm_start;
+    float solve_impulses;
+    float integrate_positions;
+    float relax_impulses;
+    float apply_restitution;
+    float store_impulses;
+    float split_islands;
+    float transforms;
+    float sensor_hits;
+    float joint_events;
+    float hit_events;
+    float refit;
+    float bullets;
+    float sleep_islands;
+    float sensors;
+}
+
+struct Counters {
+    int body_count;
+    int shape_count;
+    int contact_count;
+    int joint_count;
+    int island_count;
+    int stack_used;
+    int arena_capacity;
+    int static_tree_height;
+    int tree_height;
+    int sat_call_count;
+    int sat_cache_hit_count;
+    int byte_count;
+    int task_count;
+    int[24] color_counts;
+    int[8] manifold_counts;
+    int awake_contact_count;
+    int recycled_contact_count;
+    int distance_iterations;
+    int push_back_iterations;
+    int root_iterations;
+}
+
+extern fn WorldDef default_world_def() @cname("b3DefaultWorldDef");
+
+<*
+ Raw world constructor. Bypasses create_world's definition-cookie guard, so it is private to the
+ module — box3d_world.c3's create_world is the only caller and is the only public way to a live
+ world.
+*>
+extern fn WorldId create_world_raw(WorldDef* def) @cname("b3CreateWorld") @private;
+extern fn void WorldId.destroy(self) @cname("b3DestroyWorld");
+extern fn void WorldId.step(self, float time_step, int sub_step_count) @cname("b3World_Step");
+extern fn bool WorldId.is_valid(self) @cname("b3World_IsValid");
+extern fn int world_count() @cname("b3GetWorldCount");
+
+<*
+ The high-water mark of worlds that have existed at once since the process started — not a limit.
+ `MAX_WORLDS` is the actual ceiling box3d enforces; this can read anywhere at or below it and never
+ tells a caller how many more worlds they are allowed to create.
+*>
+extern fn int max_world_count() @cname("b3GetMaxWorldCount");
+
+extern fn Vec3 WorldId.gravity(self) @cname("b3World_GetGravity");
+extern fn void WorldId.set_gravity(self, Vec3 gravity) @cname("b3World_SetGravity");
+extern fn float WorldId.restitution_threshold(self) @cname("b3World_GetRestitutionThreshold");
+extern fn void WorldId.set_restitution_threshold(self, float value) @cname("b3World_SetRestitutionThreshold");
+extern fn float WorldId.hit_event_threshold(self) @cname("b3World_GetHitEventThreshold");
+extern fn void WorldId.set_hit_event_threshold(self, float value) @cname("b3World_SetHitEventThreshold");
+extern fn float WorldId.maximum_linear_speed(self) @cname("b3World_GetMaximumLinearSpeed");
+extern fn void WorldId.set_maximum_linear_speed(self, float maximum_linear_speed) @cname("b3World_SetMaximumLinearSpeed");
+extern fn float WorldId.contact_recycle_distance(self) @cname("b3World_GetContactRecycleDistance");
+extern fn void WorldId.set_contact_recycle_distance(self, float recycle_distance) @cname("b3World_SetContactRecycleDistance");
+extern fn void WorldId.set_contact_tuning(self, float hertz, float damping_ratio, float contact_speed) @cname("b3World_SetContactTuning");
+extern fn void WorldId.enable_sleeping(self, bool flag) @cname("b3World_EnableSleeping");
+extern fn bool WorldId.is_sleeping_enabled(self) @cname("b3World_IsSleepingEnabled");
+extern fn void WorldId.enable_continuous(self, bool flag) @cname("b3World_EnableContinuous");
+extern fn bool WorldId.is_continuous_enabled(self) @cname("b3World_IsContinuousEnabled");
+extern fn void WorldId.enable_warm_starting(self, bool flag) @cname("b3World_EnableWarmStarting");
+extern fn bool WorldId.is_warm_starting_enabled(self) @cname("b3World_IsWarmStartingEnabled");
+extern fn void WorldId.enable_speculative(self, bool flag) @cname("b3World_EnableSpeculative");
+extern fn int WorldId.worker_count(self) @cname("b3World_GetWorkerCount");
+extern fn void WorldId.set_worker_count(self, int count) @cname("b3World_SetWorkerCount");
+extern fn int WorldId.awake_body_count(self) @cname("b3World_GetAwakeBodyCount");
+extern fn Profile WorldId.profile(self) @cname("b3World_GetProfile");
+extern fn Counters WorldId.counters(self) @cname("b3World_GetCounters");
+extern fn Capacity WorldId.max_capacity(self) @cname("b3World_GetMaxCapacity");
+extern fn Aabb WorldId.bounds(self) @cname("b3World_GetBounds");
+extern fn void* WorldId.user_data(self) @cname("b3World_GetUserData");
+extern fn void WorldId.set_user_data(self, void* user_data) @cname("b3World_SetUserData");
+
+<*
+ Writes a breakdown of everything the world holds to the handler set_log_fn() installed: a line
+ for each pool, array, database and allocator it keeps, and the total in kilobytes last. The
+ lines are one per store and never one per body or shape. A locked world writes nothing at all.
+*>
+extern fn void WorldId.dump_memory_stats(self) @cname("b3World_DumpMemoryStats");
+
+<*
+ Replaces the world's friction mixing with fcn, and restores box3d's own when fcn is null. A
+ locked world — mid step(), or inside a callback it runs — keeps the mixing it has, under an
+ assertion this build compiles out. See FrictionFn for what box3d then calls, and how often.
+*>
+extern fn void WorldId.set_friction_callback(self, FrictionFn fcn) @cname("b3World_SetFrictionCallback");
+
+<*
+ Replaces the world's restitution mixing with fcn, and restores box3d's own when fcn is null. A
+ locked world keeps the mixing it has, under the same assertion this build compiles out. See
+ RestitutionFn for what box3d then calls, and how often.
+*>
+extern fn void WorldId.set_restitution_callback(self, RestitutionFn fcn) @cname("b3World_SetRestitutionCallback");
+
+extern fn void WorldId.rebuild_static_tree(self) @cname("b3World_RebuildStaticTree");

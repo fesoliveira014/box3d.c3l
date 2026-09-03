@@ -56,7 +56,7 @@ struct FreshRecording {
 fn FreshRecording the_readings_around_a_fresh_recording() {
     int baseline = b3::byte_count();
 
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     char[] bytes = recording.data();
@@ -81,15 +81,15 @@ fn void a_fresh_recording_is_empty_over_storage_box3d_has_already_taken() @test 
 fn int[4] the_bytes_a_recording_takes_at_each_starting_capacity() {
     int baseline = b3::byte_count();
 
-    b3::Recording* small = b3::create_recording(128);
+    record::Recording* small = record::create_recording(128);
     int at_128 = b3::byte_count();
     small.destroy();
 
-    b3::Recording* standard = b3::create_recording(0);
+    record::Recording* standard = record::create_recording(0);
     int at_zero = b3::byte_count();
     standard.destroy();
 
-    b3::Recording* backwards = b3::create_recording(-1);
+    record::Recording* backwards = record::create_recording(-1);
     int at_negative = b3::byte_count();
     backwards.destroy();
 
@@ -123,7 +123,7 @@ fn RecordedSession the_readings_from_a_recorded_drop() {
     int baseline = b3::byte_count();
     int worlds_before = b3::world_count();
 
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -143,7 +143,7 @@ fn RecordedSession the_readings_from_a_recorded_drop() {
         .at_stop = recording.data().len,
         .west = pair.west.position(),
         .east = pair.east.position(),
-        .replays = b3::validate_replay(recording.data(), 1),
+        .replays = record::validate_replay(recording.data(), 1),
     };
 }
 
@@ -176,7 +176,7 @@ fn FileRoundTrip the_readings_from_a_recording_through_a_file() {
     String file = a_temporary_recording_path("box3d_round_trip.rec");
     defer (void)path::delete((PathCommon)file);
 
-    b3::Recording* written = b3::create_recording(0);
+    record::Recording* written = record::create_recording(0);
     defer written.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -189,7 +189,7 @@ fn FileRoundTrip the_readings_from_a_recording_through_a_file() {
     pair.world.stop_recording();
 
     if (catch written.save(file.zstr_tcopy())) return {};
-    b3::Recording*? read = b3::load_recording(file.zstr_tcopy());
+    record::Recording*? read = record::load_recording(file.zstr_tcopy());
     if (catch read) return { .written_length = written.data().len, .written_hash = b3::hash(written.data()) };
     defer read.destroy();
 
@@ -198,7 +198,7 @@ fn FileRoundTrip the_readings_from_a_recording_through_a_file() {
         .read_length = read.data().len,
         .written_hash = b3::hash(written.data()),
         .read_hash = b3::hash(read.data()),
-        .read_back_replays = b3::validate_replay(read.data(), 1),
+        .read_back_replays = record::validate_replay(read.data(), 1),
     };
 }
 
@@ -222,12 +222,12 @@ fn EmptyThroughAFile the_readings_from_an_unrecorded_recording_through_a_file() 
     String file = a_temporary_recording_path("box3d_empty.rec");
     defer (void)path::delete((PathCommon)file);
 
-    b3::Recording* empty = b3::create_recording(0);
+    record::Recording* empty = record::create_recording(0);
     defer empty.destroy();
 
     EmptyThroughAFile readings;
     readings.saved = @ok(empty.save(file.zstr_tcopy()));
-    b3::Recording*? read = b3::load_recording(file.zstr_tcopy());
+    record::Recording*? read = record::load_recording(file.zstr_tcopy());
     if (catch err = read) return { .saved = readings.saved, .load_refusal = err };
     read.destroy();
     return readings;
@@ -259,7 +259,7 @@ fn SilentRefusals the_readings_from_the_four_silent_refusals() {
     char[64] junk;
     for (int i = 0; i < junk.len; i++) junk[i] = 0xAB;
 
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     SilentRefusals refusals;
@@ -267,10 +267,10 @@ fn SilentRefusals the_readings_from_the_four_silent_refusals() {
     refusals.worlds_before = b3::world_count();
 
     if (catch err = recording.save("/no/such/directory/box3d.rec")) refusals.save_to_a_missing_directory = err;
-    if (catch err = b3::load_recording("/no/such/directory/box3d.rec")) refusals.load_a_missing_path = err;
-    refusals.junk_was_not_replayed = !b3::validate_replay(junk[..], 1);
-    if (catch err = b3::create_player(junk[..], 1)) refusals.player_over_junk = err;
-    refusals.nothing_was_replayed = !b3::validate_replay(recording.data(), 1);
+    if (catch err = record::load_recording("/no/such/directory/box3d.rec")) refusals.load_a_missing_path = err;
+    refusals.junk_was_not_replayed = !record::validate_replay(junk[..], 1);
+    if (catch err = record::create_player(junk[..], 1)) refusals.player_over_junk = err;
+    refusals.nothing_was_replayed = !record::validate_replay(recording.data(), 1);
 
     refusals.after = b3::byte_count();
     refusals.worlds_after = b3::world_count();
@@ -300,9 +300,9 @@ struct StartRefusals {
 }
 
 fn StartRefusals the_readings_around_a_refused_start() {
-    b3::Recording* first = b3::create_recording(0);
+    record::Recording* first = record::create_recording(0);
     defer first.destroy();
-    b3::Recording* second = b3::create_recording(0);
+    record::Recording* second = record::create_recording(0);
     defer second.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -335,7 +335,7 @@ struct BufferMoves {
 // pointer. The claim data() makes is that a slice taken before a recorded step does not survive it,
 // and only a buffer that actually grows can show that.
 fn BufferMoves the_readings_around_a_growing_buffer() {
-    b3::Recording* recording = b3::create_recording(128);
+    record::Recording* recording = record::create_recording(128);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -392,7 +392,7 @@ struct PlayerLifetime {
 // The player takes the process-wide length unit over, so this reads it against a caller's unit of
 // three and puts that unit back before the assertions run rather than in a defer.
 fn PlayerLifetime the_readings_around_a_live_player() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -409,7 +409,7 @@ fn PlayerLifetime the_readings_around_a_live_player() {
     b3::set_length_units_per_meter(3.0);
     around.unit_before = b3::length_units_per_meter();
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) {
         b3::set_length_units_per_meter(1.0);
         return around;
@@ -457,7 +457,7 @@ struct ReplayedDrop {
 }
 
 fn ReplayedDrop the_readings_from_a_replayed_drop() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -475,7 +475,7 @@ fn ReplayedDrop the_readings_from_a_replayed_drop() {
     replay.live_east = pair.east.position();
 
     int worlds_before = b3::world_count();
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return replay;
     replay.worlds_the_player_added = b3::world_count() - worlds_before;
 
@@ -545,7 +545,7 @@ struct SeekReadings {
 }
 
 fn SeekReadings the_readings_around_a_seek() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -558,7 +558,7 @@ fn SeekReadings the_readings_around_a_seek() {
     }
     pair.world.stop_recording();
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return around;
 
     for (int frame = 0; frame < A_SEEK_TARGET; frame++) player.step_frame();
@@ -621,7 +621,7 @@ const int A_TAGGED_BOX_ID = 9;
 // One session carrying what the player accessors are read through: a pebble created and destroyed
 // part way in, and three queries on one step, two of them tagged. A record written before a step
 // belongs to the frame that step completes, so each lands one frame after the step it precedes.
-fn bool a_busy_session_recorded_into(DroppedPair pair, b3::Recording* recording) {
+fn bool a_busy_session_recorded_into(DroppedPair pair, record::Recording* recording) {
     if (catch pair.world.start_recording(recording)) return false;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
@@ -676,7 +676,7 @@ struct ReplayEnds {
 }
 
 fn ReplayEnds the_readings_at_both_ends_of_a_replay() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -685,7 +685,7 @@ fn ReplayEnds the_readings_at_both_ends_of_a_replay() {
     ReplayEnds ends;
     if (!a_busy_session_recorded_into(pair, recording)) return ends;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return ends;
 
     ends.the_stream_was_live_at_the_open = !player.is_at_end();
@@ -738,7 +738,7 @@ struct BodyOrdinals {
 }
 
 fn BodyOrdinals the_readings_across_a_destroyed_body_ordinal() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -747,7 +747,7 @@ fn BodyOrdinals the_readings_across_a_destroyed_body_ordinal() {
     BodyOrdinals ordinals;
     if (!a_busy_session_recorded_into(pair, recording)) return ordinals;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return ordinals;
 
     player.seek_frame(A_PEBBLE_STEP);
@@ -802,7 +802,7 @@ struct KeyframePolicy {
 }
 
 fn KeyframePolicy the_readings_around_a_keyframe_policy() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -811,7 +811,7 @@ fn KeyframePolicy the_readings_around_a_keyframe_policy() {
     KeyframePolicy policy;
     if (!a_busy_session_recorded_into(pair, recording)) return policy;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return policy;
 
     policy.budget_at_the_open = player.keyframe_budget();
@@ -869,7 +869,7 @@ struct WorkerCounts {
 }
 
 fn WorkerCounts the_readings_around_a_worker_count() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -878,13 +878,13 @@ fn WorkerCounts the_readings_around_a_worker_count() {
     WorkerCounts counts;
     if (!a_busy_session_recorded_into(pair, recording)) return counts;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return counts;
 
     counts.at_the_open = player.info().worker_count;
     counts.in_the_replay_world = player.world_id().worker_count();
 
-    b3::RecPlayer*? unclamped = b3::create_player(recording.data(), 4 * b3::MAX_WORKERS);
+    record::Player*? unclamped = record::create_player(recording.data(), 4 * b3::MAX_WORKERS);
     if (try unclamped) {
         counts.asked_for_at_the_open = unclamped.info().worker_count;
         counts.stood_up_at_the_open = unclamped.world_id().worker_count();
@@ -930,8 +930,8 @@ struct FrameQueries {
     int at_the_frame_before;
     int at_the_query_frame;
     int at_the_frame_after;
-    b3::RecQueryType the_rays_kind;
-    b3::RecQueryType the_boxs_kind;
+    record::QueryType the_rays_kind;
+    record::QueryType the_boxs_kind;
     ulong the_rays_id;
     ulong the_boxs_id;
     bool the_ray_named_itself;
@@ -952,7 +952,7 @@ struct FrameQueries {
 }
 
 fn FrameQueries the_readings_from_a_replayed_frames_queries() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -961,7 +961,7 @@ fn FrameQueries the_readings_from_a_replayed_frames_queries() {
     FrameQueries queries;
     if (!a_busy_session_recorded_into(pair, recording)) return queries;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return queries;
 
     player.seek_frame(A_QUERY_FRAME - 1);
@@ -990,7 +990,7 @@ fn FrameQueries the_readings_from_a_replayed_frames_queries() {
 
         bool named = box.hit_count > 0;
         for (int index = 0; index < box.hit_count; index++) {
-            b3::RecQueryHit? hit = player.frame_query_hit(1, index);
+            record::QueryHit? hit = player.frame_query_hit(1, index);
             if (catch hit) {
                 named = false;
                 continue;
@@ -1021,8 +1021,8 @@ fn void a_replayed_frame_reports_the_queries_recorded_ahead_of_its_step() @test 
     assert(queries.at_the_query_frame == A_RECORDED_QUERY_COUNT && queries.at_the_frame_before == 0
         && queries.at_the_frame_after == 0,
         "the three queries belong to the frame whose step they were recorded ahead of, and to no other");
-    assert(queries.the_rays_kind == b3::RecQueryType.CAST_RAY_CLOSEST
-        && queries.the_boxs_kind == b3::RecQueryType.OVERLAP_AABB,
+    assert(queries.the_rays_kind == record::QueryType.CAST_RAY_CLOSEST
+        && queries.the_boxs_kind == record::QueryType.OVERLAP_AABB,
         "each names the world call that made it");
     assert(queries.the_rays_id == A_TAGGED_RAY_ID && queries.the_boxs_id == A_TAGGED_BOX_ID
         && queries.the_ray_named_itself && queries.the_box_named_itself,
@@ -1053,7 +1053,7 @@ struct DebugShapeTally {
     int withdrawn;
 }
 
-fn void* offer_a_debug_shape(b3::DebugShape* debug_shape, void* user_context) {
+fn void* offer_a_debug_shape(draw::DebugShape* debug_shape, void* user_context) {
     DebugShapeTally* tally = (DebugShapeTally*)user_context;
     tally.offered++;
     return user_context;
@@ -1079,7 +1079,7 @@ struct DebugShapeWiring {
 }
 
 fn DebugShapeWiring the_readings_around_wiring_a_renderer_in() {
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -1088,7 +1088,7 @@ fn DebugShapeWiring the_readings_around_wiring_a_renderer_in() {
     DebugShapeWiring wiring;
     if (!a_busy_session_recorded_into(pair, recording)) return wiring;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return wiring;
 
     player.seek_frame(A_QUERY_FRAME);

@@ -1,0 +1,259 @@
+module b3;
+
+<*
+ A joint known to be a distance joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_distance(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef DistanceJointId = inline JointId;
+
+<*
+ A distance joint definition: two anchors held at length by a segment, with an optional spring,
+ limit and motor. Must come from default_distance_joint_def(), which — unlike the revolute default
+ — does not zero what it adds: length is 1, the spring force range is -float::max to float::max,
+ and max_length is 1.0e5 scaled by the length unit. box3d solves the spring, limit and motor
+ together only while enable_spring && (min_length < max_length || enable_limit == false), and
+ otherwise solves one rigid constraint, skipping the limit and the motor.
+*>
+struct DistanceJointDef {
+    inline JointDef base;
+    float length;
+    bool enable_spring;
+    float lower_spring_force;
+    float upper_spring_force;
+    float hertz;
+    float damping_ratio;
+    bool enable_limit;
+    float min_length;
+    float max_length;
+    bool enable_motor;
+    float max_motor_force;
+    float motor_speed;
+}
+
+<*
+ The range a distance joint's spring force is held between. This is a C3 type with no C
+ counterpart: box3d reports the pair through two out-parameters.
+*>
+struct SpringForceRange {
+    float lower;
+    float upper;
+}
+
+extern fn DistanceJointDef default_distance_joint_def() @cname("b3DefaultDistanceJointDef");
+
+<*
+ Raw distance joint constructor. Bypasses WorldId.create_distance_joint's definition guard and
+ hands back a joint of no particular type, so it is private to the module —
+ box3d_joint_distance.c3's WorldId.create_distance_joint is the only caller and is the only public
+ way to a live distance joint.
+*>
+extern fn JointId create_distance_joint_raw(
+  WorldId world_id,
+  DistanceJointDef* def,
+) @cname("b3CreateDistanceJoint") @private;
+
+<*
+ Sets the rest length this joint holds its two anchors at, not the distance they are at now, which
+ current_length() reads.
+
+ The value is clamped between box3d's linear slop and its huge value, neither a fixed number:
+ 0.005 and 1.0e5 length units, so the floor is 0.010 once the length unit is 2. The clamp is
+ silent — length() reports what was stored, not what was asked for. Setting the length also zeroes
+ the joint's three accumulated impulses, so it rebuilds its hold over the following steps.
+*>
+extern fn void DistanceJointId.set_length(self, float length) @cname("b3DistanceJoint_SetLength");
+
+<*
+ The rest length this joint holds its two anchors at, not the distance the anchors are at now,
+ which current_length() reads — even a rigid joint sits a little off its rest length, and both are
+ plain floats, so either compiles where the other is meant. The two paths that store it disagree
+ at both ends: construction raises a definition's length to the linear slop and gives it no
+ ceiling, so a 0 arrives as 0.005 length units and a 1.0e7 untouched, while set_length clamps
+ between that floor and 1.0e5.
+*>
+extern fn float DistanceJointId.length(self) @cname("b3DistanceJoint_GetLength");
+
+<*
+ The distance between this joint's two anchors as they stand now, measured from the two bodies'
+ current transforms. Not the rest length the joint holds them at, which is what length() reads.
+
+ It is meaningful whether the joint is rigid or sprung, and is how the two are told apart: a rigid
+ joint keeps this within a hair of its rest length and a sprung one does not, and which a joint is
+ follows the compound condition DistanceJointDef describes, not the spring flag alone. Zero while
+ the world is locked.
+*>
+extern fn float DistanceJointId.current_length(self) @cname("b3DistanceJoint_GetCurrentLength");
+
+<*
+ Enables or disables this joint's limit, which holds the anchors' separation between min_length
+ and max_length. box3d reaches the limit only inside the branch it solves the spring in, so the
+ flag acts under the compound condition DistanceJointDef describes rather than on its own:
+ enabling it on a joint whose spring is off changes nothing, and enabling it with min_length equal
+ to max_length turns the joint rigid rather than tightening it. Unlike the revolute joint's flag
+ of the same name, this one leaves the accumulated impulses alone.
+*>
+extern fn void DistanceJointId.enable_limit(self, bool enable_limit) @cname("b3DistanceJoint_EnableLimit");
+
+<*
+ Whether this joint's limit is enabled. False on a joint built from a default definition. The flag
+ is stored whatever the rest of the joint is set to, so a true reading says the limit was asked
+ for and not that it is acting: whether the solver reaches the limit at all follows the compound
+ condition DistanceJointDef describes.
+*>
+extern fn bool DistanceJointId.is_limit_enabled(self) @cname("b3DistanceJoint_IsLimitEnabled");
+
+<*
+ Sets the two lengths the limit holds the anchors' separation between. box3d clamps each of the
+ pair between 0.005 and 1.0e5 length units — so the floor is 0.010 once the length unit is 2 — and
+ then stores the smaller of the clamped pair as the minimum and the larger as the maximum. Both
+ corrections are silent: min_length() and max_length() report what was stored, and a pair under
+ the floor comes back as two equal lengths. Setting the range also zeroes the joint's three
+ accumulated impulses, so it rebuilds its hold over the following steps.
+*>
+extern fn void DistanceJointId.set_length_range(self, float min_length, float max_length) @cname("b3DistanceJoint_SetLengthRange");
+
+<*
+ The low end of the separation the limit holds the anchors above. It is what box3d stored, not
+ what it was handed: see set_length_range. On a joint fresh from its definition it is neither,
+ because construction is its own path — it raises the definition's min_length to the linear slop
+ and applies none of the setter's ceiling, so a default definition's 0 arrives as 0.005 length
+ units.
+*>
+extern fn float DistanceJointId.min_length(self) @cname("b3DistanceJoint_GetMinLength");
+
+<*
+ The high end of the separation the limit holds the anchors below. It is what box3d stored, not
+ what it was handed: see set_length_range. On a joint fresh from its definition it is the larger
+ of the definition's two lengths and nothing else — no floor, no ceiling — so a default
+ definition's max_length, box3d's huge value of 1.0e5 scaled by the length unit, arrives
+ unchanged, while a definition whose max_length is under the slop leaves this reading below
+ min_length().
+*>
+extern fn float DistanceJointId.max_length(self) @cname("b3DistanceJoint_GetMaxLength");
+
+<*
+ Enables or disables this joint's spring, and with it the limit and the motor: box3d solves all
+ three in one branch whose other half is a single rigid constraint. So this is the joint's master
+ switch rather than the spring's alone — enabling the limit or the motor on a joint whose spring
+ is off changes nothing — and it is not the only way into the rigid half, whose whole condition
+ DistanceJointDef describes. Unlike the revolute joint's flag of the same name, this one leaves
+ the accumulated impulses alone.
+*>
+extern fn void DistanceJointId.enable_spring(self, bool enable_spring) @cname("b3DistanceJoint_EnableSpring");
+
+<*
+ Whether this joint's spring is enabled. False on a joint built from a default definition. The
+ flag is stored whatever the rest of the joint is set to, so a true reading says the spring was
+ asked for and not that the joint is sprung: the other half of the condition DistanceJointDef
+ describes can still send it down the rigid branch.
+*>
+extern fn bool DistanceJointId.is_spring_enabled(self) @cname("b3DistanceJoint_IsSpringEnabled");
+
+<*
+ Sets the spring's stiffness in hertz. 0 on a joint built from a default definition, and box3d
+ solves the spring only while this is above 0, so an enabled spring left at the default pulls on
+ nothing — the joint still takes the sprung branch and its limit and motor still act, but the
+ spring itself contributes no impulse.
+
+ Unlike the revolute joint's setter of the same name, this one asserts nothing at all, so a
+ negative or non-finite stiffness is not even checked in a build that keeps box3d's assertions.
+*>
+extern fn void DistanceJointId.set_spring_hertz(self, float hertz) @cname("b3DistanceJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz.
+*>
+extern fn float DistanceJointId.spring_hertz(self) @cname("b3DistanceJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional: 1 settles the joint on its rest length without
+ overshooting it. 0 on a joint built from a default definition. Asserts nothing, the same absence
+ set_spring_hertz describes.
+*>
+extern fn void DistanceJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3DistanceJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional.
+*>
+extern fn float DistanceJointId.spring_damping_ratio(self) @cname("b3DistanceJoint_GetSpringDampingRatio");
+
+<*
+ Sets the two forces the spring's pull is held between, in newtons; -float::max and float::max on
+ a joint built from a default definition. The range acts under the compound condition
+ DistanceJointDef describes and only while spring_hertz() is above 0.
+
+ This setter neither clamps its pair nor orders it: box3d's assertion that the lower does not
+ exceed the upper is compiled out here, so an inverted pair is stored, reported back verbatim, and
+ clamped against as stored. set_length_range, one accessor away, does both — neither carries over.
+*>
+extern fn void DistanceJointId.set_spring_force_range(self, float lower_force, float upper_force) @cname("b3DistanceJoint_SetSpringForceRange");
+
+<*
+ Raw spring force range accessor. Private because it reports the pair through two out-parameters;
+ box3d_joint_distance.c3's DistanceJointId.spring_force_range() returns them as one value.
+*>
+extern fn void spring_force_range_raw(
+  DistanceJointId joint_id,
+  float* lower_force,
+  float* upper_force,
+) @cname("b3DistanceJoint_GetSpringForceRange") @private;
+
+<*
+ Enables or disables this joint's motor, which drives the two anchors apart at motor_speed() with
+ at most max_motor_force() behind it. box3d reaches the motor only inside the branch it solves the
+ spring in, so the flag acts under the compound condition DistanceJointDef describes: on a joint
+ whose spring is off an enabled motor drives nothing at all.
+
+ A change to the flag discards the motor's accumulated impulse, so motor_force() reads zero until
+ the next step; storing the value the flag already holds discards nothing.
+*>
+extern fn void DistanceJointId.enable_motor(self, bool enable_motor) @cname("b3DistanceJoint_EnableMotor");
+
+<*
+ Whether this joint's motor is enabled. False on a joint built from a default definition. The flag
+ is stored whatever the rest of the joint is set to, so a true reading says the motor was asked
+ for and not that it is driving anything: whether the solver reaches the motor at all follows the
+ compound condition DistanceJointDef describes.
+*>
+extern fn bool DistanceJointId.is_motor_enabled(self) @cname("b3DistanceJoint_IsMotorEnabled");
+
+<*
+ Sets the speed the motor drives the two anchors apart at, in metres per second along the segment
+ between them: positive lengthens the joint, negative shortens it. It is a target the motor
+ pursues only as far as max_motor_force() lets it, and only under the compound condition
+ DistanceJointDef describes. Unlike the revolute joint's setter of the same name it asserts
+ nothing at all, and it leaves the motor's accumulated impulse as it stands.
+*>
+extern fn void DistanceJointId.set_motor_speed(self, float motor_speed) @cname("b3DistanceJoint_SetMotorSpeed");
+
+<*
+ The speed the motor drives the two anchors apart at, in metres per second. What was set, not what
+ the anchors are separating at.
+*>
+extern fn float DistanceJointId.motor_speed(self) @cname("b3DistanceJoint_GetMotorSpeed");
+
+<*
+ Sets the largest force the motor may apply, in newtons; 0 on a joint built from a default
+ definition, which leaves an enabled motor unable to move anything. box3d holds the motor's
+ impulse between this force scaled by the sub-step, so a motor asked for more speed than it buys
+ settles at exactly this reading. Unlike the revolute joint's setter of the same shape it asserts
+ nothing, and it leaves the accumulated impulse alone, so motor_force() reports the last step's
+ force until another is taken under the new ceiling.
+*>
+extern fn void DistanceJointId.set_max_motor_force(self, float force) @cname("b3DistanceJoint_SetMaxMotorForce");
+
+<*
+ The largest force the motor may apply, in newtons.
+*>
+extern fn float DistanceJointId.max_motor_force(self) @cname("b3DistanceJoint_GetMaxMotorForce");
+
+<*
+ The force the motor applied over the last step, in newtons, bounded by max_motor_force(). Zero on
+ a joint the solver has only ever taken the rigid branch for, though that branch leaves the
+ impulse untouched, so a joint driven while sprung goes on reporting its last force once made
+ rigid. This is the motor's own share where the shared constraint_force() is the whole joint's,
+ which carries it exactly once — not twice the way revolute's constraint_torque() does — and
+ agrees only while the spring and the limit contribute nothing.
+*>
+extern fn float DistanceJointId.motor_force(self) @cname("b3DistanceJoint_GetMotorForce");

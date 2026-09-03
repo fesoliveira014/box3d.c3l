@@ -1,4 +1,4 @@
-module b3;
+module b3::record;
 
 <*
  The bytes recorded so far, empty until a session has written into it. The slice borrows box3d's
@@ -16,14 +16,14 @@ fn char[] Recording.data(&self) {
  recording — and writes its header when it accepts, which is what the fault reads.
 
  @param recording : `the buffer to write into, which must outlive the session`
- @return? NOT_A_RECORDING : `the buffer holds nothing after the call — so any buffer that is not
+ @return? b3::NOT_A_RECORDING : `the buffer holds nothing after the call — so any buffer that is not
    empty when box3d refuses reads as accepted, including the one this world is already recording
    into and one just loaded from a file`
 *>
 fn void? WorldId.start_recording(self, Recording* recording) {
-    if (recording == null) return NOT_A_RECORDING~;
+    if (recording == null) return b3::NOT_A_RECORDING~;
     start_recording_raw(self, recording);
-    if (recording_size_raw(recording) == 0) return NOT_A_RECORDING~;
+    if (recording_size_raw(recording) == 0) return b3::NOT_A_RECORDING~;
 }
 
 <*
@@ -31,10 +31,10 @@ fn void? WorldId.start_recording(self, Recording* recording) {
  filled writes a well-formed empty file that load_recording() then refuses, so a round trip only
  survives bytes a session actually produced.
 
- @return? FILE_UNAVAILABLE : `box3d could not open the path, or the write fell short`
+ @return? b3::FILE_UNAVAILABLE : `box3d could not open the path, or the write fell short`
 *>
 fn void? Recording.save(&self, ZString path) {
-    if (!save_recording_raw(self, path)) return FILE_UNAVAILABLE~;
+    if (!save_recording_raw(self, path)) return b3::FILE_UNAVAILABLE~;
 }
 
 <*
@@ -43,12 +43,12 @@ fn void? Recording.save(&self, ZString path) {
  caller owns the result and must destroy() it — see Recording.
 
  @return `the recording`
- @return? FILE_UNAVAILABLE : `the path could not be read, or carries no recording, which box3d
+ @return? b3::FILE_UNAVAILABLE : `the path could not be read, or carries no recording, which box3d
    does not distinguish`
 *>
 fn Recording*? load_recording(ZString path) {
     Recording* recording = load_recording_raw(path);
-    if (recording == null) return FILE_UNAVAILABLE~;
+    if (recording == null) return b3::FILE_UNAVAILABLE~;
     return recording;
 }
 
@@ -68,7 +68,7 @@ fn bool validate_replay(char[] data, int worker_count) {
 }
 
 <*
- Stands up a replay of these bytes — see RecPlayer for the world it owns. box3d copies them, so
+ Stands up a replay of these bytes — see Player for the world it owns. box3d copies them, so
  the slice need not outlive the call, and it prints on standard output the reason it refused one.
  A live player holds the process-wide length unit at the one its recording was made under, and
  only a player that was built gives it back: a buffer refused past its header keeps it, silently,
@@ -78,11 +78,11 @@ fn bool validate_replay(char[] data, int worker_count) {
    the recording does not carry the count it was produced at, so replaying under a different one
    is the caller's own cross-thread determinism test`
  @return `the player`
- @return? NOT_A_RECORDING : `the bytes carry no header box3d will replay`
+ @return? b3::NOT_A_RECORDING : `the bytes carry no header box3d will replay`
 *>
-fn RecPlayer*? create_player(char[] data, int worker_count) {
-    RecPlayer* player = create_player_raw(data.ptr, (int)data.len, worker_count);
-    if (player == null) return NOT_A_RECORDING~;
+fn Player*? create_player(char[] data, int worker_count) {
+    Player* player = create_player_raw(data.ptr, (int)data.len, worker_count);
+    if (player == null) return b3::NOT_A_RECORDING~;
     return player;
 }
 
@@ -91,11 +91,11 @@ fn RecPlayer*? create_player(char[] data, int worker_count) {
  has_diverged() answers true.
 
  @return `the frame`
- @return? NO_HIT : `every state hash has matched — restart() puts it back to that`
+ @return? b3::NO_HIT : `every state hash has matched — restart() puts it back to that`
 *>
-fn int? RecPlayer.diverge_frame(&self) {
+fn int? Player.diverge_frame(&self) {
     int frame = diverge_frame_raw(self);
-    if (frame < 0) return NO_HIT~;
+    if (frame < 0) return b3::NO_HIT~;
     return frame;
 }
 
@@ -104,11 +104,11 @@ fn int? RecPlayer.diverge_frame(&self) {
  a promise of a body.
 
  @return `the body`
- @return? INDEX_OUT_OF_RANGE : `index is outside 0 to body_count() - 1`
- @return? INVALID_HANDLE : `the body at that ordinal has been destroyed`
+ @return? b3::INDEX_OUT_OF_RANGE : `index is outside 0 to body_count() - 1`
+ @return? b3::INVALID_HANDLE : `the body at that ordinal has been destroyed`
 *>
-fn BodyId? RecPlayer.body_id(&self, int index) {
-    if (index < 0 || index >= self.body_count()) return INDEX_OUT_OF_RANGE~;
+fn BodyId? Player.body_id(&self, int index) {
+    if (index < 0 || index >= self.body_count()) return b3::INDEX_OUT_OF_RANGE~;
     return body_id_raw(self, index).checked();
 }
 
@@ -117,23 +117,23 @@ fn BodyId? RecPlayer.body_id(&self, int index) {
  with a zeroed struct, which reads as a real untagged overlap of nothing, hence the fault.
 
  @return `the query`
- @return? INDEX_OUT_OF_RANGE : `index is outside 0 to frame_query_count() - 1`
+ @return? b3::INDEX_OUT_OF_RANGE : `index is outside 0 to frame_query_count() - 1`
 *>
-fn RecQueryInfo? RecPlayer.frame_query(&self, int index) {
-    if (index < 0 || index >= self.frame_query_count()) return INDEX_OUT_OF_RANGE~;
+fn QueryInfo? Player.frame_query(&self, int index) {
+    if (index < 0 || index >= self.frame_query_count()) return b3::INDEX_OUT_OF_RANGE~;
     return frame_query_raw(self, index);
 }
 
 <*
- One result of one of the last replayed frame's queries — see RecQueryHit for the fields an
+ One result of one of the last replayed frame's queries — see QueryHit for the fields an
  overlap leaves holding the replay's scratch rather than a hit.
 
  @return `the hit`
- @return? RecPlayer.frame_query!
- @return? INDEX_OUT_OF_RANGE : `that query holds no hit_index`
+ @return? Player.frame_query!
+ @return? b3::INDEX_OUT_OF_RANGE : `that query holds no hit_index`
 *>
-fn RecQueryHit? RecPlayer.frame_query_hit(&self, int query_index, int hit_index) {
-    RecQueryInfo query = self.frame_query(query_index)!;
-    if (hit_index < 0 || hit_index >= query.hit_count) return INDEX_OUT_OF_RANGE~;
+fn QueryHit? Player.frame_query_hit(&self, int query_index, int hit_index) {
+    QueryInfo query = self.frame_query(query_index)!;
+    if (hit_index < 0 || hit_index >= query.hit_count) return b3::INDEX_OUT_OF_RANGE~;
     return frame_query_hit_raw(self, query_index, hit_index);
 }

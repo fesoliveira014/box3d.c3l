@@ -25,7 +25,7 @@ The other five are left out on purpose, and the reason is not the same one twice
 
 Rather than trust the paragraph above, derive it — and intersect three sets, not two, because a
 header declaration is not evidence the symbol was built. Every bound symbol is a `@cname` in
-`box3d.c3i`, every declared one a `B3_API` in `vendor/box3d/include/box3d/*.h`, and every one that
+`src/*.c3i`, every declared one a `B3_API` in `vendor/box3d/include/box3d/*.h`, and every one that
 exists a `T` in `nm -g --defined-only linked-libs/linux-x64/libbox3d.a`.
 
 ## Using it
@@ -42,6 +42,12 @@ Add the package to a C3 project's dependency search path and list `b3` as a depe
 The module is `b3`, after the manifest's `provides` name — not the directory name `box3d.c3l`. The
 module takes the C library's own symbol prefix, so `b3CreateWorld` in C reads as `b3::create_world`
 in C3.
+
+Two optional subsystems carry a namespace of their own, and `import b3;` reaches both because it
+imports submodules recursively: debug draw is `b3::draw` (`draw::DebugDraw`,
+`draw::default_debug_draw()`, `world.draw()`) and recording and replay is `b3::record`
+(`record::Recording`, `record::Player`, `world.start_recording()`). The faults stay in `b3`
+whichever module returns them — a `b3::record` call refuses with `b3::NOT_A_RECORDING`.
 
 The per-type `.checked()` macros (`WorldId.checked()`, `BodyId.checked()`, …) turn a null
 identifier into a named fault instead of undefined behavior; a caller opts in by routing an

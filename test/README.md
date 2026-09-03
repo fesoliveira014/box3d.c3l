@@ -4,8 +4,9 @@ A standalone consumer project that compiles and runs against the `b3` binding in
 directory. It is deliberately **not** referenced by the package `manifest.json`, so
 consumers of `b3` never inherit anything from here.
 
-`libs/box3d.c3l` is a symlink to the repository root — the package resolves by its
-`provides` name (`b3`), not by directory name.
+`libs/b3.c3l` is a symlink to the repository root. The package resolves by its `provides` name
+(`b3`) whatever the directory is called; the name matches it anyway because `c3c project fetch`
+looks for `<search-path>/<dependency>.c3l`.
 
 Prerequisites: `linked-libs/linux-x64/libbox3d.a` must exist. Build it with
 `scripts/build-box3d.sh` from the repository root.

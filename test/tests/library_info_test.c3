@@ -31,13 +31,13 @@ fn void the_default_length_unit_is_one_meter() @test {
 }
 
 fn void the_constraint_graph_colours_are_refused_outside_the_table() @test {
-    b3::HexColor first = b3::graph_color(0)!!;
-    b3::HexColor overflow = b3::graph_color(b3::GRAPH_COLOR_COUNT - 1)!!;
+    draw::HexColor first = draw::graph_color(0)!!;
+    draw::HexColor overflow = draw::graph_color(draw::GRAPH_COLOR_COUNT - 1)!!;
 
     fault under;
     fault over;
-    if (catch err = b3::graph_color(-1)) under = err;
-    if (catch err = b3::graph_color(b3::GRAPH_COLOR_COUNT)) over = err;
+    if (catch err = draw::graph_color(-1)) under = err;
+    if (catch err = draw::graph_color(draw::GRAPH_COLOR_COUNT)) over = err;
 
     assert(first == 0xFF0000 && overflow == 0xC0C0C0, "the table runs from red to the silver overflow slot");
     assert(under == b3::INDEX_OUT_OF_RANGE, "box3d reads a negative index and answers black");

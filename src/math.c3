@@ -15,8 +15,8 @@ fn bool has_length(Vec3 v) @private {
 }
 
 <*
- The rotation the matrix's three columns describe, normalised. cx, cy and cz are columns: a caller
- filling them from rows gets the inverse rotation, which no layout pin can catch.
+ The rotation the matrix's three columns describe, normalised. `m` is column-major, so a caller
+ who fills it from rows gets the inverse rotation, which no layout pin can catch.
 *>
 fn Quat make_quat_from_matrix(Matrix3 m) {
     return make_quat_from_matrix_raw(&m);

@@ -44,7 +44,7 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 
 Layout pins are generated, never hand-written, and they live in `src/layout.c3` rather than beside the struct — writing one by hand puts a number in the repository that nothing measured.
 
-1. Add the C type name to `scripts/abi-types.txt`, one per line. Append a comma-separated field list — `b3WorldDef fieldA,fieldB` — to pin individual field offsets as well; list every field of the struct, not a subset, since the generated pins are positional.
+1. Add the C type name to `scripts/abi-types.txt`, one per line. Append a comma-separated field list — `b3WorldDef fieldA,fieldB` — to pin individual field offsets as well; list every field of the struct, not a subset, since the generated pins are positional. Two markers exist for fields the pin cannot state plainly: `@name` for a field C3 leaves unnamed (the first arm of an anonymous union) pins the offset and drops the name, and `-name` probes and records the offset but pins nothing on the C3 side, for a type whose C3 spelling does not expose the C fields as positional members at all.
 2. Run `./scripts/build-box3d.sh --update` from the repository root. It probes the real headers, rewrites `scripts/abi-sizes.txt`, and regenerates `src/layout.c3` with a size, alignment and per-field pin for every listed type, converting each C name to its C3 spelling. Where that conversion cannot reach the C3 name, write it outright as `b3X=Y` — the `b3Rec*` family does, because the transformation would restore the prefix `b3::record` already carries.
 3. Check the generated pins compile: a failure means the C3 struct disagrees with the header, which is the whole point.
 

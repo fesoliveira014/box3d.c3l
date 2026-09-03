@@ -6,7 +6,7 @@ b3ContactId index1,world0,padding,generation
 b3Vec3
 b3Pos
 b3Quat
-b3Matrix3 cx,cy,cz
+b3Matrix3 -cx,-cy,-cz
 b3Transform
 b3WorldTransform p,q
 b3AABB lowerBound,upperBound

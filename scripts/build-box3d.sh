@@ -79,7 +79,9 @@ generate_layout() {
             for (i = 4; i <= NF; i++) {
                 split($i, kv, "=")
                 idx = i - 4
-                if (substr(kv[1], 1, 1) == "@") {
+                if (substr(kv[1], 1, 1) == "-") {
+                    continue
+                } else if (substr(kv[1], 1, 1) == "@") {
                     printf "$assert %s::members[%d].offset == %s;\n", t, idx, kv[2]
                 } else {
                     printf "$assert %s::members[%d].offset == %s && %s::members[%d].name == \"%s\";\n", \
@@ -124,6 +126,11 @@ echo "Installed $OUT/libbox3d.a"
 # ignored). Every struct the binding declares in full belongs here; the $assert size pin in
 # the split .c3i files must match, and a listed field gets its own offsetof pin.
 #
+# A field written `-name` is probed and recorded but pins nothing on the C3 side, for a C3 type
+# that does not expose the C struct's fields as positional members — b3Matrix3 is std::math's
+# Matrix3f, whose only member is an anonymous union. The offset still reaches abi-sizes.txt, so a
+# reordered or repadded C struct still fails --check; only the C3 half of the pin is dropped.
+#
 # A type written `b3X=Y` names its C3 spelling outright, for the types whose C3 name the
 # prefix-stripping cannot reach: the b3Rec* family is named for the b3::record module, so
 # transforming b3RecPlayerInfo would restore the prefix the namespace already carries.
@@ -153,7 +160,9 @@ PROBE="$VENDOR/build/abi_probe.c"
             saved_ifs="$IFS"
             IFS=,
             for f in $fields; do
-                printf '    printf(" %%s=%%zu", "%s", (size_t)offsetof(%s, %s));\n' "$f" "$t" "${f#@}"
+                bare="${f#@}"
+                bare="${bare#-}"
+                printf '    printf(" %%s=%%zu", "%s", (size_t)offsetof(%s, %s));\n' "$f" "$t" "$bare"
             done
             IFS="$saved_ifs"
         fi

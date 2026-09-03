@@ -467,9 +467,9 @@ fn void a_sphere_gives_its_body_the_mass_and_inertia_its_density_implies() @test
     b3::MassData mass_data = shape.compute_mass_data();
     float inertia = (float)(0.4 * expected * 0.25);
     assert(math::abs(mass_data.mass - expected) < 0.001);
-    assert(math::abs(mass_data.inertia.cx.x - inertia) < 0.001);
-    assert(math::abs(mass_data.inertia.cy.y - inertia) < 0.001);
-    assert(math::abs(mass_data.inertia.cz.z - inertia) < 0.001);
+    assert(math::abs(mass_data.inertia.m00 - inertia) < 0.001);
+    assert(math::abs(mass_data.inertia.m11 - inertia) < 0.001);
+    assert(math::abs(mass_data.inertia.m22 - inertia) < 0.001);
 }
 
 fn void a_capsule_gives_its_body_the_mass_of_a_cylinder_and_two_hemispheres() @test {

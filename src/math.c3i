@@ -1,18 +1,17 @@
 module b3;
 
 import std::math::quaternion;
+import std::math;
 
 alias Vec3 = float[<3>];
 alias Quat = Quaternionf;
 <*
- A three by three matrix held as its three columns, which is how box3d multiplies it: b3MulMV
- reads cx * a.x + cy * a.y + cz * a.z. A caller filling it from rows transposes it silently.
+ The standard library's float 3x3, which box3d's b3Matrix3 matches byte for byte: both store
+ three columns and multiply as column times vector, so `m * v` and `m.transpose()` mean here what
+ b3MulMV and b3Transpose3 mean in C. `m01` is row 0 of column 1 — the index order is the
+ transpose of the column-then-row order the C field names read in.
 *>
-struct Matrix3 {
-    Vec3 cx;
-    Vec3 cy;
-    Vec3 cz;
-}
+alias Matrix3 = Matrix3f;
 
 <*
  A world position. Distinct from Vec3 so a position is never silently used as a direction.

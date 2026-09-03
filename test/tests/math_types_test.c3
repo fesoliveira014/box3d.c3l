@@ -141,14 +141,16 @@ fn void only_an_outward_bound_is_unbounded() @test {
 
 fn void a_valid_matrix_is_only_a_finite_one() @test {
     b3::Matrix3 identity = {
-      .cx = { 1.0, 0.0, 0.0 },
-      .cy = { 0.0, 1.0, 0.0 },
-      .cz = { 0.0, 0.0, 1.0 },
+      .m = {
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+      },
     };
     b3::Matrix3 zeroed;
     float infinity = (float)1.0e40;
     b3::Matrix3 with_a_nan = identity;
-    with_a_nan.cy.z = infinity - infinity;
+    with_a_nan.m21 = infinity - infinity;
 
     assert(b3::is_valid_matrix3(identity));
     assert(b3::is_valid_matrix3(zeroed), "a matrix that is no rotation at all is still valid");
@@ -198,31 +200,35 @@ fn void atan2_answers_zero_for_the_origin_alone() @test {
 fn void steiner_matches_the_parallel_axis_theorem() @test {
     b3::Matrix3 tensor = b3::steiner(3.0, { 1.0, 2.0, 3.0 });
 
-    assert(tensor.cx.x == 39.0 && tensor.cy.y == 30.0 && tensor.cz.z == 15.0,
+    assert(tensor.m00 == 39.0 && tensor.m11 == 30.0 && tensor.m22 == 15.0,
         "the mass times the squared distance across each axis, down the diagonal");
-    assert(tensor.cy.x == -6.0 && tensor.cz.x == -9.0 && tensor.cz.y == -18.0,
+    assert(tensor.m01 == -6.0 && tensor.m02 == -9.0 && tensor.m12 == -18.0,
         "and the negated mass-weighted products off it");
-    assert(tensor.cx.y == tensor.cy.x && tensor.cx.z == tensor.cz.x && tensor.cy.z == tensor.cz.y,
+    assert(tensor.m10 == tensor.m01 && tensor.m20 == tensor.m02 && tensor.m21 == tensor.m12,
         "which is symmetric, so no column order can be read off it");
 }
 
 fn void steiner_puts_nothing_on_the_axis_the_offset_runs_along() @test {
     b3::Matrix3 tensor = b3::steiner(2.0, { 3.0, 0.0, 0.0 });
 
-    assert(tensor.cy.y == 18.0 && tensor.cz.z == 18.0, "mass times the squared offset across the other two axes");
-    assert(tensor.cx.x == 0.0, "and nothing at all along the offset itself");
+    assert(tensor.m11 == 18.0 && tensor.m22 == 18.0, "mass times the squared offset across the other two axes");
+    assert(tensor.m00 == 0.0, "and nothing at all along the offset itself");
 }
 
 fn void a_quaternion_from_a_matrix_reads_columns_and_not_rows() @test {
     b3::Matrix3 quarter_turn_about_z = {
-      .cx = { 0.0, 1.0, 0.0 },
-      .cy = { -1.0, 0.0, 0.0 },
-      .cz = { 0.0, 0.0, 1.0 },
+      .m = {
+        0.0, 1.0, 0.0,
+        -1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0,
+      },
     };
     b3::Matrix3 transposed = {
-      .cx = { 0.0, -1.0, 0.0 },
-      .cy = { 1.0, 0.0, 0.0 },
-      .cz = { 0.0, 0.0, 1.0 },
+      .m = {
+        0.0, -1.0, 0.0,
+        1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0,
+      },
     };
 
     b3::Quat turn = b3::make_quat_from_matrix(quarter_turn_about_z);
@@ -233,6 +239,27 @@ fn void a_quaternion_from_a_matrix_reads_columns_and_not_rows() @test {
     assert(turn.k > 0.706 && turn.k < 0.708, "which is a quarter turn about positive z");
     assert(the_other_way.k > -0.708 && the_other_way.k < -0.706,
         "and the same matrix filled from rows is the same turn the other way, which no layout pin can catch");
+}
+
+fn void the_standard_library_multiplies_a_matrix_the_way_box3d_does() @test {
+    b3::Matrix3 quarter_turn_about_z = {
+      .m = {
+        0.0, 1.0, 0.0,
+        -1.0, 0.0, 0.0,
+        0.0, 0.0, 1.0,
+      },
+    };
+
+    b3::Vec3 along_x = { 1.0, 0.0, 0.0 };
+    b3::Vec3 by_operator = quarter_turn_about_z * along_x;
+    b3::Vec3 by_box3d = b3::make_quat_from_matrix(quarter_turn_about_z).rotate_vec3({ 1.0, 0.0, 0.0 });
+
+    assert(by_operator.y > 0.99 && by_operator.y < 1.01,
+        "the operator reads the same columns b3MulMV does, so m * v is box3d's own product");
+    assert(math::abs(by_operator.x - by_box3d.x) < 0.001
+        && math::abs(by_operator.y - by_box3d.y) < 0.001
+        && math::abs(by_operator.z - by_box3d.z) < 0.001,
+        "which is the agreement the shared type rests on: a standard library that transposed would pass every layout pin");
 }
 
 fn void a_rotation_between_antipodal_vectors_is_a_half_turn() @test {

@@ -105,11 +105,12 @@ matching `default_*_def()` before calling into box3d — a behaviour they have t
 does not, since a release build of box3d compiles out its own check for this and would otherwise
 construct silently with a garbage definition.
 
-box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
-operators and vector methods work directly on values that cross the ABI. Matrices are not a
-standard-library matrix type: `Matrix3` is a struct of the three `Vec3` **columns** box3d
-multiplies it as, named `cx`, `cy` and `cz`, so a caller filling it from rows cannot do so by
-accident.
+box3d's vectors, quaternions and matrices all map onto the C3 standard library's own types, so the
+usual operators and methods work directly on values that cross the ABI: `Matrix3` is `Matrix3f`,
+which matches `b3Matrix3` byte for byte and shares its convention — column-major storage, `m * v`
+reading the columns `b3MulMV` reads. `m01` is row 0 of column 1, the transpose of the order the C
+field names `cx`, `cy`, `cz` read in, so a caller filling a matrix from rows still transposes it
+silently; `a_quaternion_from_a_matrix_reads_columns_and_not_rows` is the test that says so.
 
 ## License
 

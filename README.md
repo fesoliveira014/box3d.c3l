@@ -3,15 +3,30 @@
 C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rigid body physics
 library written in C17.
 
-Status: most of the API surface is bound. Worlds and bodies, every shape kind — sphere, capsule,
-convex hull, mesh, height field and baked compound — the world's event arrays with the pre-solve
-and custom-filter callbacks, the ray casts, shape casts, overlap queries and contact data, all nine
-joint types, the dynamic tree and its two traversals, the character mover and explosions, the
-world's two contact callbacks, the math and validity singles, and the standalone geometry, distance
-and manifold functions that answer about shapes with no world in play. Debug draw with recording
-and replay follows. Rather than trust this paragraph, derive the remainder: every bound symbol is
-a `@cname` in `box3d.c3i`, and every available one is a `B3_API` in
-`vendor/box3d/include/box3d/*.h`.
+Status: box3d's exported surface is bound — 575 of the 580 `B3_API` functions across its headers.
+Worlds and bodies, every shape kind — sphere, capsule, convex hull, mesh, height field and baked
+compound — the world's event arrays with the pre-solve and custom-filter callbacks, the ray casts,
+shape casts, overlap queries and contact data, all nine joint types, the dynamic tree and its two
+traversals, the character mover and explosions, the world's two contact callbacks, the math and
+validity singles, the standalone geometry, distance and manifold functions that answer about shapes
+with no world in play, debug draw, and the recording and replay surface with the file and buffer
+round trips that ride with it.
+
+The other five are left out on purpose, and the reason is not the same one twice:
+
+- `b3World_DumpShapeBounds` is declared in `box3d.h` and defined nowhere, so a call could not link.
+- `b3InternalAssert` is box3d's own assertion hook, declared and defined behind the same
+  `NDEBUG` guard, so it is absent from the Release build this package ships.
+- `b3DynamicTree_Validate` and `b3DynamicTree_ValidateNoEnlarged` have bodies that compile to
+  nothing unless box3d is built with validation on, which this package does not do. A bound call
+  that cannot validate is worse than no call at all.
+- `b3DynamicTree_GetProxyCount` reads the `proxy_count` field the binding already exposes, and a C3
+  method may not share a name with one of its struct's fields. Read the field.
+
+Rather than trust the paragraph above, derive it — and intersect three sets, not two, because a
+header declaration is not evidence the symbol was built. Every bound symbol is a `@cname` in
+`box3d.c3i`, every declared one a `B3_API` in `vendor/box3d/include/box3d/*.h`, and every one that
+exists a `T` in `nm -g --defined-only linked-libs/linux-x64/libbox3d.a`.
 
 ## Using it
 

@@ -40,7 +40,7 @@ fn BuilderVertexCounts the_hull_builders_that_produced_a_hull() {
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
 
     b3::HullData* from_points = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer from_points.destroy();
+    defer b3::destroy_hull(from_points);
 
     b3::HullData*? cylinder = b3::create_cylinder(
       height: 2.0,
@@ -48,7 +48,7 @@ fn BuilderVertexCounts the_hull_builders_that_produced_a_hull() {
       y_offset: 0.0,
       sides: 8,
     );
-    defer if (try cylinder) cylinder.destroy();
+    defer if (try cylinder) b3::destroy_hull(cylinder);
 
     b3::HullData*? cone = b3::create_cone(
       height: 2.0,
@@ -56,19 +56,17 @@ fn BuilderVertexCounts the_hull_builders_that_produced_a_hull() {
       radius2: 0.5,
       slices: 8,
     );
-    defer if (try cone) cone.destroy();
+    defer if (try cone) b3::destroy_hull(cone);
 
     b3::HullData*? rock = b3::create_rock(1.0);
-    defer if (try rock) rock.destroy();
+    defer if (try rock) b3::destroy_hull(rock);
 
-    b3::HullData*? clone = from_points.clone();
-    defer if (try clone) clone.destroy();
+    b3::HullData*? clone = b3::clone_hull(from_points);
+    defer if (try clone) b3::destroy_hull(clone);
 
-    b3::HullData*? transformed_clone = from_points.clone_and_transform(
-      a_placement_five_metres_along_x(),
-      (b3::Vec3){ 2.0, 3.0, 4.0 },
-    );
-    defer if (try transformed_clone) transformed_clone.destroy();
+    b3::HullData*? transformed_clone = b3::clone_and_transform_hull(from_points, a_placement_five_metres_along_x(),
+      (b3::Vec3){ 2.0, 3.0, 4.0 },);
+    defer if (try transformed_clone) b3::destroy_hull(transformed_clone);
 
     return {
         .from_points = from_points.vertex_count,
@@ -98,7 +96,7 @@ fn int[2] the_byte_count_around_a_live_hull() {
 
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* hull = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer hull.destroy();
+    defer b3::destroy_hull(hull);
 
     return { baseline, b3::byte_count() };
 }
@@ -124,11 +122,11 @@ fn CloneReadings the_byte_count_around_a_cloned_hull() {
 
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* original = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer original.destroy();
+    defer b3::destroy_hull(original);
     int with_original = b3::byte_count();
 
-    b3::HullData* clone = original.clone()!!;
-    defer clone.destroy();
+    b3::HullData* clone = b3::clone_hull(original)!!;
+    defer b3::destroy_hull(clone);
 
     return {
         .baseline = baseline,
@@ -158,13 +156,11 @@ struct TransformedCloneBounds {
 fn TransformedCloneBounds the_bounds_around_a_stretched_and_moved_clone() {
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* original = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer original.destroy();
+    defer b3::destroy_hull(original);
 
-    b3::HullData* clone = original.clone_and_transform(
-      a_placement_five_metres_along_x(),
-      (b3::Vec3){ 2.0, 3.0, 4.0 },
-    )!!;
-    defer clone.destroy();
+    b3::HullData* clone = b3::clone_and_transform_hull(original, a_placement_five_metres_along_x(),
+      (b3::Vec3){ 2.0, 3.0, 4.0 },)!!;
+    defer b3::destroy_hull(clone);
 
     return { .original = original.aabb, .clone = clone.aabb };
 }
@@ -203,19 +199,15 @@ fn MirroredCloneReadings the_readings_of_an_upright_and_a_mirrored_cone() {
       radius2: 0.5,
       slices: 8,
     )!!;
-    defer cone.destroy();
+    defer b3::destroy_hull(cone);
 
-    b3::HullData* upright = cone.clone_and_transform(
-      a_placement_five_metres_along_x(),
-      (b3::Vec3){ 1.0, 1.0, 1.0 },
-    )!!;
-    defer upright.destroy();
+    b3::HullData* upright = b3::clone_and_transform_hull(cone, a_placement_five_metres_along_x(),
+      (b3::Vec3){ 1.0, 1.0, 1.0 },)!!;
+    defer b3::destroy_hull(upright);
 
-    b3::HullData* mirrored = cone.clone_and_transform(
-      a_placement_five_metres_along_x(),
-      (b3::Vec3){ 1.0, -1.0, 1.0 },
-    )!!;
-    defer mirrored.destroy();
+    b3::HullData* mirrored = b3::clone_and_transform_hull(cone, a_placement_five_metres_along_x(),
+      (b3::Vec3){ 1.0, -1.0, 1.0 },)!!;
+    defer b3::destroy_hull(mirrored);
 
     return {
         .upright = upright.aabb,
@@ -254,7 +246,7 @@ fn CylinderBounds the_bounds_of_a_cylinder_at_two_offsets() {
       y_offset: -1.0,
       sides: 8,
     )!!;
-    defer lowered.destroy();
+    defer b3::destroy_hull(lowered);
 
     b3::HullData* raised = b3::create_cylinder(
       height: 2.0,
@@ -262,7 +254,7 @@ fn CylinderBounds the_bounds_of_a_cylinder_at_two_offsets() {
       y_offset: 3.0,
       sides: 8,
     )!!;
-    defer raised.destroy();
+    defer b3::destroy_hull(raised);
 
     return { .lowered = lowered.aabb, .raised = raised.aabb };
 }
@@ -293,7 +285,7 @@ struct BoxHullReadings {
 fn BoxHullReadings the_readings_of_a_hull_over_a_two_metre_box() {
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* hull = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
-    defer hull.destroy();
+    defer b3::destroy_hull(hull);
 
     return {
         .vertex_count = hull.vertex_count,
@@ -320,7 +312,7 @@ fn int the_vertex_count_of_a_box_hull_capped_at(int max_vertex_count) {
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
 
     b3::HullData*? hull = b3::create_hull(corners[..], max_vertex_count);
-    defer if (try hull) hull.destroy();
+    defer if (try hull) b3::destroy_hull(hull);
 
     return @the_vertex_count_of(hull);
 }
@@ -344,7 +336,7 @@ fn void the_arguments_box3d_asserts_and_then_accepts() @test {
       y_offset: 0.0,
       sides: 8,
     );
-    defer if (try upside_down) upside_down.destroy();
+    defer if (try upside_down) b3::destroy_hull(upside_down);
     assert(@the_vertex_count_of(upside_down) == 16,
         "a negative height builds the cylinder downwards from its offset");
 
@@ -354,7 +346,7 @@ fn void the_arguments_box3d_asserts_and_then_accepts() @test {
       radius2: 0.5,
       slices: 8,
     );
-    defer if (try apex) apex.destroy();
+    defer if (try apex) b3::destroy_hull(apex);
     assert(@the_vertex_count_of(apex) == 9, "a base radius of zero draws the base ring into one apex");
 
     b3::HullData*? three_slices = b3::create_cone(
@@ -363,11 +355,11 @@ fn void the_arguments_box3d_asserts_and_then_accepts() @test {
       radius2: 0.5,
       slices: 3,
     );
-    defer if (try three_slices) three_slices.destroy();
+    defer if (try three_slices) b3::destroy_hull(three_slices);
     assert(@the_vertex_count_of(three_slices) == 6, "and three slices build where box3d asserts four");
 
     b3::HullData*? negative_rock = b3::create_rock(-1.0);
-    defer if (try negative_rock) negative_rock.destroy();
+    defer if (try negative_rock) b3::destroy_hull(negative_rock);
     assert(@the_vertex_count_of(negative_rock) == 10,
         "a rock of negative radius is the same ten points");
 }
@@ -384,7 +376,7 @@ macro HullRefusal @the_refusal_of(#builder) {
     int baseline = b3::byte_count();
 
     b3::HullData*? hull = #builder;
-    defer if (try hull) hull.destroy();
+    defer if (try hull) b3::destroy_hull(hull);
 
     if (catch err = hull) return { .refusal = err, .baseline = baseline, .after = b3::byte_count() };
     return { .refusal = {}, .baseline = baseline, .after = b3::byte_count() };

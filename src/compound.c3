@@ -157,8 +157,8 @@ fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
  pointer without testing it, so each one crashes until compound_from_bytes() is called over these
  very bytes. Called over a copy it repairs the copy and leaves this compound broken.
 *>
-fn char[] CompoundData.to_bytes(&self) {
-    return compound_to_bytes_raw(self)[:self.byte_count];
+fn char[] convert_compound_to_bytes(CompoundData* compound) {
+    return convert_compound_to_bytes_raw(compound)[:compound.byte_count];
 }
 
 <*
@@ -173,7 +173,7 @@ fn char[] CompoundData.to_bytes(&self) {
 *>
 fn CompoundData*? compound_from_bytes(char[] bytes) {
     if (bytes.len < CompoundData::size) return BUFFER_TOO_SMALL~;
-    return checked_geometry(compound_from_bytes_raw(bytes.ptr, (int)bytes.len), NOT_A_COMPOUND);
+    return checked_geometry(convert_bytes_to_compound_raw(bytes.ptr, (int)bytes.len), NOT_A_COMPOUND);
 }
 
 <*
@@ -192,8 +192,8 @@ fn CompoundData*? compound_from_bytes(char[] bytes) {
  @return? INVALID_HANDLE : `box3d returned a null identifier, which a body that is not static
    always does`
 *>
-fn ShapeId? BodyId.create_baked_compound_shape(self, ShapeDef* def, CompoundData* compound) {
+fn ShapeId? create_baked_compound_shape(BodyId body, ShapeDef* def, CompoundData* compound) {
     check_shape_def(def)!;
     if (compound == null) return INVALID_DEFINITION~;
-    return create_baked_compound_shape_raw(self, def, compound).checked();
+    return create_baked_compound_shape_raw(body, def, compound).checked();
 }

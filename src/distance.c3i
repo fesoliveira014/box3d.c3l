@@ -61,7 +61,7 @@ extern fn DistanceOutput shape_distance_raw(
  as a struct whose remaining fields are undefined — and because a proxy of no points is read as
  though it held its first. shape_cast() checks both proxies and turns a miss into a fault.
 *>
-extern fn CastOutput shape_cast_pair_raw(ShapeCastPairInput* input) @cname("b3ShapeCast") @private;
+extern fn CastOutput shape_cast_raw(ShapeCastPairInput* input) @cname("b3ShapeCast") @private;
 
 <*
  The motion of one shape over a time-of-impact interval. The centre of mass runs c1 to c2 and the

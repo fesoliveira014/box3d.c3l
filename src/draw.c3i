@@ -54,7 +54,7 @@ alias DrawBoxFn = fn void(Vec3 extents, WorldTransform transform, HexColor color
 alias DrawStringFn = fn void(Pos p, ZString s, HexColor color, void* context);
 
 <*
- What a renderer hands WorldId.draw(): nine callbacks taking world coordinates, the box outside
+ What a renderer hands world_draw(): nine callbacks taking world coordinates, the box outside
  which nothing is drawn, and a flag per thing to draw. See default_debug_draw() for the state one
  starts in, and DrawShapeFn for what a shape needs beyond draw_shapes.
 *>
@@ -105,4 +105,4 @@ extern fn DebugDraw default_debug_draw() @cname("b3DefaultDebugDraw");
 
  @param mask_bits : `the bits a shape's own filter categories must overlap for it to be considered`
 *>
-extern fn void WorldId.draw(self, DebugDraw* draw, ulong mask_bits) @cname("b3World_Draw");
+extern fn void world_draw(WorldId world, DebugDraw* draw, ulong mask_bits) @cname("b3World_Draw");

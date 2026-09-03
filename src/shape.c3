@@ -10,10 +10,10 @@ module b3;
  @return? INVALID_DEFINITION : `sphere is null`
  @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
-fn ShapeId? BodyId.create_sphere_shape(self, ShapeDef* def, Sphere* sphere) {
+fn ShapeId? create_sphere_shape(BodyId body, ShapeDef* def, Sphere* sphere) {
     check_shape_def(def)!;
     if (sphere == null) return INVALID_DEFINITION~;
-    return create_sphere_shape_raw(self, def, sphere).checked();
+    return create_sphere_shape_raw(body, def, sphere).checked();
 }
 
 <*
@@ -27,10 +27,10 @@ fn ShapeId? BodyId.create_sphere_shape(self, ShapeDef* def, Sphere* sphere) {
  @return? INVALID_DEFINITION : `capsule is null`
  @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
-fn ShapeId? BodyId.create_capsule_shape(self, ShapeDef* def, Capsule* capsule) {
+fn ShapeId? create_capsule_shape(BodyId body, ShapeDef* def, Capsule* capsule) {
     check_shape_def(def)!;
     if (capsule == null) return INVALID_DEFINITION~;
-    return create_capsule_shape_raw(self, def, capsule).checked();
+    return create_capsule_shape_raw(body, def, capsule).checked();
 }
 
 <*
@@ -44,10 +44,10 @@ fn ShapeId? BodyId.create_capsule_shape(self, ShapeDef* def, Capsule* capsule) {
  @return? INVALID_DEFINITION : `hull is null`
  @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
-fn ShapeId? BodyId.create_hull_shape(self, ShapeDef* def, HullData* hull) {
+fn ShapeId? create_hull_shape(BodyId body, ShapeDef* def, HullData* hull) {
     check_shape_def(def)!;
     if (hull == null) return INVALID_DEFINITION~;
-    return create_hull_shape_raw(self, def, hull).checked();
+    return create_hull_shape_raw(body, def, hull).checked();
 }
 
 <*
@@ -61,8 +61,7 @@ fn ShapeId? BodyId.create_hull_shape(self, ShapeDef* def, HullData* hull) {
  @return? INVALID_DEFINITION : `hull is null`
  @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
-fn ShapeId? BodyId.create_transformed_hull_shape(
-  self,
+fn ShapeId? create_transformed_hull_shape(BodyId body,
   ShapeDef* def,
   HullData* hull,
   Transform transform,
@@ -71,7 +70,7 @@ fn ShapeId? BodyId.create_transformed_hull_shape(
     check_shape_def(def)!;
     if (hull == null) return INVALID_DEFINITION~;
     return create_transformed_hull_shape_raw(
-      body_id: self,
+      body_id: body,
       def: def,
       hull: hull,
       transform: transform,
@@ -113,7 +112,7 @@ fn HullData*? ShapeId.hull(self) {
 
 <*
  The mesh belongs to the caller rather than to the world: data is the very pointer
- BodyId.create_mesh_shape() or set_mesh() was handed, and it must still outlive this shape.
+ create_mesh_shape(BodyId) or set_mesh() was handed, and it must still outlive this shape.
 
  @return `the mesh and the scale it is read through`
  @return? WRONG_SHAPE_TYPE : `this shape is not a mesh`
@@ -139,10 +138,10 @@ fn HeightFieldData*? ShapeId.height_field(self) {
  Gives this shape a mesh, replacing whatever geometry it had and making its type MESH — there is
  no type guard, unlike on mesh(), because changing the type is what the call is for.
 
- The shape borrows the new mesh as BodyId.create_mesh_shape() does, and box3d drops the old
+ The shape borrows the new mesh as create_mesh_shape(BodyId) does, and box3d drops the old
  pointer without freeing it, so a caller replacing a mesh is left holding two and owes destroy()
- on both. The body's mass is not recomputed until BodyId.apply_mass_from_shapes(), and a mesh
- contributes none. Silently does nothing while the world is locked, mid WorldId.step.
+ on both. The body's mass is not recomputed until body_apply_mass_from_shapes(BodyId), and a mesh
+ contributes none. Silently does nothing while the world is locked, mid world_step.
 
  @param mesh : `the mesh, which must outlive the shape`
  @param scale : `how far the mesh's vertices are stretched along each axis, non-uniform or

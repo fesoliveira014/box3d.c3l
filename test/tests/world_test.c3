@@ -39,10 +39,10 @@ fn void a_world_runs_and_then_reports_itself_invalid() @test {
 
     assert(world.is_valid());
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
-    world.destroy();
+    b3::destroy_world(world);
     assert(!world.is_valid(), "a destroyed world must not report itself valid");
 }
 
@@ -63,7 +63,7 @@ fn void a_world_releases_everything_it_allocated() @test {
     b3::WorldId world = b3::create_world(&def)!!;
     assert(b3::byte_count() > baseline, "creating a world must allocate");
 
-    world.destroy();
+    b3::destroy_world(world);
     assert(b3::byte_count() == baseline, "destroying it must release everything");
 }
 
@@ -83,7 +83,7 @@ fn void the_world_limit_becomes_a_fault() @test {
     }
 
     for (int i = 0; i < b3::MAX_WORLDS; i++) {
-        worlds[i].destroy();
+        b3::destroy_world(worlds[i]);
     }
     assert(b3::byte_count() == baseline);
 }
@@ -91,7 +91,7 @@ fn void the_world_limit_becomes_a_fault() @test {
 fn void a_world_reports_the_properties_its_definition_asked_for() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     assert(world.gravity().y == -10.0);
     assert(world.restitution_threshold() == 1.0);
@@ -107,7 +107,7 @@ fn void a_world_reports_the_properties_its_definition_asked_for() @test {
 fn void a_property_survives_a_round_trip() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::Vec3 half_g = { 0.0, -1.5, 0.0 };
     world.set_gravity(half_g);
@@ -123,7 +123,7 @@ fn void a_property_survives_a_round_trip() @test {
 fn void an_empty_world_has_empty_counters() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::Counters counters = world.counters();
     assert(counters.body_count == 0);
@@ -144,7 +144,7 @@ fn void an_empty_world_has_empty_counters() @test {
 fn void every_settable_property_survives_a_round_trip() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     // Both thresholds default to 1.0, so five pairwise-distinct values are what actually catches a
     // cross-wired setter/getter pair rather than passing by coincidence.
@@ -164,7 +164,7 @@ fn void every_settable_property_survives_a_round_trip() @test {
 fn void each_toggle_moves_only_its_own_flag() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     // All three default to true, so flipping one and checking only it changed is what actually
     // catches a cross-wired toggle rather than passing by coincidence.
@@ -187,7 +187,7 @@ fn void each_toggle_moves_only_its_own_flag() @test {
 fn void user_data_round_trips() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     int sentinel;
     world.set_user_data(&sentinel);
@@ -202,17 +202,17 @@ fn void the_world_count_tracks_live_worlds() @test {
     assert(b3::world_count() == 1);
     assert(b3::max_world_count() >= b3::world_count());
 
-    world.destroy();
+    b3::destroy_world(world);
     assert(b3::world_count() == 0);
 }
 
 fn void a_stepped_world_reports_a_nonzero_profile() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     for (int i = 0; i < 10; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     b3::Profile profile = world.profile();
@@ -225,18 +225,18 @@ fn void speculative_and_static_tree_rebuild_leave_the_world_valid() @test {
     b3::WorldId world = b3::create_world(&def)!!;
 
     world.enable_speculative(true);
-    world.rebuild_static_tree();
-    world.step(1.0f / 60.0f, 4);
+    b3::world_rebuild_static_tree(world);
+    b3::world_step(world, 1.0f / 60.0f, 4);
     assert(world.is_valid());
 
-    world.destroy();
+    b3::destroy_world(world);
     assert(b3::byte_count() == baseline);
 }
 
 fn void set_contact_tuning_takes_named_arguments() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     // set_contact_tuning cannot be round-tripped: box3d exposes no getter for these three values,
     // and observing an effect needs shapes in contact. The ordering (hertz, damping ratio, contact
@@ -248,14 +248,14 @@ fn void set_contact_tuning_takes_named_arguments() @test {
 fn void the_world_bounds_enclose_the_shapes_it_holds() @test {
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::BoxHull hull = b3::make_box_hull(10.0, 0.5, 10.0);
-    b3::ShapeId shape = ground.create_hull_shape(&shape_def, &hull.base)!!;
-    world.step(1.0f / 60.0f, 4);
+    b3::ShapeId shape = b3::create_hull_shape(ground, &shape_def, &hull.base)!!;
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     b3::Aabb bounds = world.bounds();
     b3::Aabb shape_bounds = shape.aabb();
@@ -301,11 +301,11 @@ fn bool ask_for_the_breakdown_mid_step(
     // the same reading. The unlocked ask beside it is the control -- it proves this callback can
     // dump, so the zero the locked one leaves is the lock's doing and not the callback's absence.
     int before_locked = memory_stat_lines;
-    the_world_dumping_its_memory.dump_memory_stats();
+    b3::world_dump_memory_stats(the_world_dumping_its_memory);
     memory_stat_lines_from_inside_a_step += memory_stat_lines - before_locked;
 
     int before_unlocked = memory_stat_lines;
-    an_unlocked_world_asked_from_inside_the_step.dump_memory_stats();
+    b3::world_dump_memory_stats(an_unlocked_world_asked_from_inside_the_step);
     memory_stat_lines_from_an_unlocked_world += memory_stat_lines - before_unlocked;
     return true;
 }
@@ -328,14 +328,14 @@ fn MemoryBreakdown the_readings_from_dumping_a_worlds_memory() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId empty = b3::create_world(&world_def)!!;
     memory_stat_lines = 0;
-    empty.dump_memory_stats();
+    b3::world_dump_memory_stats(empty);
     breakdown.lines_for_an_empty_world = memory_stat_lines;
-    empty.destroy();
+    b3::destroy_world(empty);
 
     b3::BodyId ball;
     the_world_dumping_its_memory = a_world_that_keeps_solving_one_contact(&ball);
     memory_stat_lines = 0;
-    the_world_dumping_its_memory.dump_memory_stats();
+    b3::world_dump_memory_stats(the_world_dumping_its_memory);
     breakdown.lines_for_a_world_holding_bodies = memory_stat_lines;
     breakdown.the_last_line_was_the_total =
       ((ZString)&the_last_memory_stat_line).str_view().starts_with("total:");
@@ -350,14 +350,14 @@ fn MemoryBreakdown the_readings_from_dumping_a_worlds_memory() {
     memory_stat_lines_from_an_unlocked_world = 0;
     pre_solves_that_asked_for_the_breakdown = 0;
     for (int i = 0; i < 120; i++) {
-        the_world_dumping_its_memory.step(1.0f / 60.0f, 4);
+        b3::world_step(the_world_dumping_its_memory, 1.0f / 60.0f, 4);
     }
     breakdown.pre_solves = pre_solves_that_asked_for_the_breakdown;
     breakdown.lines_from_inside_a_step = memory_stat_lines_from_inside_a_step;
     breakdown.lines_from_an_unlocked_world = memory_stat_lines_from_an_unlocked_world;
 
-    an_unlocked_world_asked_from_inside_the_step.destroy();
-    the_world_dumping_its_memory.destroy();
+    b3::destroy_world(an_unlocked_world_asked_from_inside_the_step);
+    b3::destroy_world(the_world_dumping_its_memory);
     b3::set_log_fn(&capturing_log);
     return breakdown;
 }

@@ -18,7 +18,7 @@ struct QueryFilter {
 }
 
 <*
- The closest hit from WorldId.cast_ray_closest(). node_visits and leaf_visits are traversal
+ The closest hit from world_cast_ray_closest(). node_visits and leaf_visits are traversal
  diagnostics. When hit is false every other field is undefined, which is why the wrapper faults
  instead of returning this struct.
 *>
@@ -151,9 +151,9 @@ extern fn QueryFilter default_query_filter() @cname("b3DefaultQueryFilter");
 
 <*
  Raw closest-hit accessor. Private because a miss comes back as a struct whose point, normal and
- fraction are undefined; WorldId.cast_ray_closest() turns that into a fault.
+ fraction are undefined; world_cast_ray_closest() turns that into a fault.
 *>
-extern fn RayResult cast_ray_closest_raw(
+extern fn RayResult world_cast_ray_closest_raw(
   WorldId world_id,
   Pos origin,
   Vec3 translation,
@@ -197,10 +197,9 @@ extern fn BodyCastResult body_cast_shape_raw(
 
 <*
  True when any shape on this body overlaps the proxy placed at origin. A compound shape on a body
- far from origin is missed without a signal — see CompoundData.overlaps for why.
+ far from origin is missed without a signal — see overlap_compound for why.
 *>
-extern fn bool BodyId.overlap_shape(
-  self,
+extern fn bool body_overlap_shape(BodyId body,
   Pos origin,
   ShapeProxy* proxy,
   QueryFilter filter,
@@ -246,8 +245,7 @@ alias OverlapResultFn = fn bool(ShapeId shape_id, void* context);
  no particular order. The callback's return value steers the cast — see CastResultFn. Returns the
  broad-phase traversal counters.
 *>
-extern fn TreeStats WorldId.cast_ray(
-  self,
+extern fn TreeStats world_cast_ray(WorldId world,
   Pos origin,
   Vec3 translation,
   QueryFilter filter,
@@ -263,8 +261,7 @@ extern fn TreeStats WorldId.cast_ray(
  is greater, so the stop lands short of the geometric touch below a total radius of one slop, on
  it at one, and past above — a full slop past from two.
 *>
-extern fn TreeStats WorldId.cast_shape(
-  self,
+extern fn TreeStats world_cast_shape(WorldId world,
   Pos origin,
   ShapeProxy* proxy,
   Vec3 translation,
@@ -277,8 +274,7 @@ extern fn TreeStats WorldId.cast_shape(
  Reports shapes whose broad-phase bounds potentially overlap the query box; it is not an exact
  test against the shape's actual geometry.
 *>
-extern fn TreeStats WorldId.overlap_aabb(
-  self,
+extern fn TreeStats world_overlap_aabb(WorldId world,
   Aabb aabb,
   QueryFilter filter,
   OverlapResultFn fcn,
@@ -290,10 +286,9 @@ extern fn TreeStats WorldId.overlap_aabb(
  borrowed for the duration of the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
 
  A compound-shaped body far from origin is missed without a signal: box3d culls the compound's
- own tree with a box it never carried into the compound's frame — see CompoundData.overlaps.
+ own tree with a box it never carried into the compound's frame — see overlap_compound.
 *>
-extern fn TreeStats WorldId.overlap_shape(
-  self,
+extern fn TreeStats world_overlap_shape(WorldId world,
   Pos origin,
   ShapeProxy* proxy,
   QueryFilter filter,

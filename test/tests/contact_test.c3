@@ -10,22 +10,22 @@ fn b3::WorldId a_world_with_a_ball_resting_on_ground(b3::BodyId* out_ball, b3::S
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(10.0, 0.5, 10.0);
     b3::ShapeDef ground_shape_def = b3::default_shape_def();
-    ground.create_hull_shape(&ground_shape_def, &ground_box.base)!!;
+    b3::create_hull_shape(ground, &ground_shape_def, &ground_box.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 0.5, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1.0;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    b3::ShapeId ball_shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId ball_shape = b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     *out_ball = ball;
@@ -37,7 +37,7 @@ fn void a_resting_body_reports_its_touching_contact() @test {
     b3::BodyId ball;
     b3::ShapeId ball_shape;
     b3::WorldId world = a_world_with_a_ball_resting_on_ground(&ball, &ball_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ContactData[8] storage;
     b3::ContactData[] contacts = ball.contact_data(storage[..]);
@@ -55,7 +55,7 @@ fn void contact_capacity_is_an_upper_bound_on_what_is_written() @test {
     b3::BodyId ball;
     b3::ShapeId ball_shape;
     b3::WorldId world = a_world_with_a_ball_resting_on_ground(&ball, &ball_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     int capacity = ball.contact_capacity();
     b3::ContactData[8] storage;
@@ -72,7 +72,7 @@ fn void a_contact_carries_its_manifold_geometry() @test {
     b3::BodyId ball;
     b3::ShapeId ball_shape;
     b3::WorldId world = a_world_with_a_ball_resting_on_ground(&ball, &ball_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ContactData[8] storage;
     b3::ContactData[] contacts = ball.contact_data(storage[..]);
@@ -103,7 +103,7 @@ fn void a_shape_reports_the_same_contact_as_its_body() @test {
     b3::BodyId ball;
     b3::ShapeId ball_shape;
     b3::WorldId world = a_world_with_a_ball_resting_on_ground(&ball, &ball_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ContactData[8] body_storage;
     b3::ContactData[] from_body = ball.contact_data(body_storage[..]);
@@ -121,7 +121,7 @@ fn void a_contact_id_survives_a_step_and_dies_with_its_body() @test {
     b3::BodyId ball;
     b3::ShapeId ball_shape;
     b3::WorldId world = a_world_with_a_ball_resting_on_ground(&ball, &ball_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ContactData[8] storage;
     b3::ContactData[] contacts = ball.contact_data(storage[..]);
@@ -129,13 +129,13 @@ fn void a_contact_id_survives_a_step_and_dies_with_its_body() @test {
 
     b3::ContactId held = contacts[0].contact_id;
 
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
     assert(held.is_valid(), "a resting contact outlives a step");
 
     b3::ContactData refetched = held.data();
     assert(refetched.contact_manifolds().len >= 1, "and its geometry can be fetched again");
 
-    ball.destroy();
+    b3::destroy_body(ball);
     assert(!held.is_valid(), "destroying a body ends its contacts");
 }
 
@@ -180,23 +180,23 @@ fn b3::WorldId a_world_of_two_distinct_surfaces(b3::BodyId* out_ball) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull slab = b3::make_box_hull(40.0, 0.5, 40.0);
     b3::ShapeDef slab_def = b3::default_shape_def();
     slab_def.base_material.friction = SLAB_FRICTION;
     slab_def.base_material.restitution = SLAB_RESTITUTION;
-    ground.create_hull_shape(&slab_def, &slab.base)!!;
+    b3::create_hull_shape(ground, &slab_def, &slab.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 4.0, 0.0};
-    b3::BodyId ball = world.create_body(&body_def)!!;
+    b3::BodyId ball = b3::create_body(world, &body_def)!!;
     b3::ShapeDef ball_def = b3::default_shape_def();
     ball_def.density = 1.0;
     ball_def.base_material.friction = BALL_FRICTION;
     ball_def.base_material.restitution = BALL_RESTITUTION;
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    ball.create_sphere_shape(&ball_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &ball_def, &sphere)!!;
 
     *out_ball = ball;
     return world;
@@ -211,14 +211,14 @@ struct Drop {
 fn Drop the_drop_of_a_ball(bool install_friction, bool install_restitution) {
     b3::BodyId ball;
     b3::WorldId world = a_world_of_two_distinct_surfaces(&ball);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (install_friction) world.set_friction_callback(&answer_friction);
     if (install_restitution) world.set_restitution_callback(&answer_restitution);
 
     float late_peak = -1000.0f;
     for (int i = 0; i < 240; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
         if (i >= 180 && ball.position().y > late_peak) late_peak = ball.position().y;
     }
 
@@ -284,10 +284,10 @@ struct ReplacedDrop {
 fn ReplacedDrop the_drop_after_a_callback_is_replaced_by_null() {
     b3::BodyId ball;
     b3::WorldId world = a_world_of_two_distinct_surfaces(&ball);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     world.set_restitution_callback(&answer_restitution);
-    for (int i = 0; i < 120; i++) world.step(1.0f / 60.0f, 4);
+    for (int i = 0; i < 120; i++) b3::world_step(world, 1.0f / 60.0f, 4);
     int installed = restitution_record.calls;
 
     world.set_restitution_callback(null);
@@ -295,7 +295,7 @@ fn ReplacedDrop the_drop_after_a_callback_is_replaced_by_null() {
 
     float late_peak = -1000.0f;
     for (int i = 0; i < 360; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
         if (i >= 300 && ball.position().y > late_peak) late_peak = ball.position().y;
     }
 
@@ -341,27 +341,27 @@ fn Slide the_slide_of_a_box(bool install, float answer) {
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = {0.0, -0.5, 0.0};
-    b3::BodyId ground = world.create_body(&body_def)!!;
+    b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull slab = b3::make_box_hull(200.0, 0.5, 200.0);
     b3::ShapeDef slab_def = b3::default_shape_def();
     slab_def.base_material.friction = SLAB_FRICTION;
-    ground.create_hull_shape(&slab_def, &slab.base)!!;
+    b3::create_hull_shape(ground, &slab_def, &slab.base)!!;
 
     body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, 0.25, 0.0};
     body_def.linear_velocity = {10.0, 0.0, 0.0};
-    b3::BodyId slider = world.create_body(&body_def)!!;
+    b3::BodyId slider = b3::create_body(world, &body_def)!!;
     b3::ShapeDef slider_def = b3::default_shape_def();
     slider_def.density = 1.0;
     slider_def.base_material.friction = BALL_FRICTION;
     b3::BoxHull box = b3::make_box_hull(0.5, 0.25, 0.5);
-    slider.create_hull_shape(&slider_def, &box.base)!!;
+    b3::create_hull_shape(slider, &slider_def, &box.base)!!;
 
     // Contact recycling skips the narrow phase, and the mixing with it, whenever the pair has
     // barely moved; turning it off is what makes the call count a reading of the callback.
@@ -369,7 +369,7 @@ fn Slide the_slide_of_a_box(bool install, float answer) {
     if (install) world.set_friction_callback(&answer_friction);
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -461,7 +461,7 @@ fn LockedMixing the_mixing_installed_from_inside_and_from_between_steps() {
     {
         b3::BodyId ball;
         mixing_world = a_world_that_keeps_solving_one_contact(&ball);
-        defer mixing_world.destroy();
+        defer b3::destroy_world(mixing_world);
 
         mixing_world.set_pre_solve_callback(&set_the_mixing, null);
         b3::ShapeId[4] storage;
@@ -469,7 +469,7 @@ fn LockedMixing the_mixing_installed_from_inside_and_from_between_steps() {
             shape.enable_pre_solve_events(true);
         }
         for (int i = 0; i < 240; i++) {
-            mixing_world.step(1.0f / 60.0f, 4);
+            b3::world_step(mixing_world, 1.0f / 60.0f, 4);
         }
         readings.inside_attempts = mixing_pre_solve_calls;
         readings.inside_friction_calls = friction_record.calls;
@@ -482,7 +482,7 @@ fn LockedMixing the_mixing_installed_from_inside_and_from_between_steps() {
     {
         b3::BodyId ball;
         mixing_world = a_world_that_keeps_solving_one_contact(&ball);
-        defer mixing_world.destroy();
+        defer b3::destroy_world(mixing_world);
 
         for (int i = 0; i < 240; i++) {
             set_the_mixing(
@@ -492,7 +492,7 @@ fn LockedMixing the_mixing_installed_from_inside_and_from_between_steps() {
               normal: {},
               context: null,
             );
-            mixing_world.step(1.0f / 60.0f, 4);
+            b3::world_step(mixing_world, 1.0f / 60.0f, 4);
         }
         readings.outside_attempts = mixing_pre_solve_calls;
         readings.outside_friction_calls = friction_record.calls;

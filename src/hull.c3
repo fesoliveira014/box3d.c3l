@@ -91,8 +91,8 @@ fn HullData*? create_rock(float radius) {
  @return? DEGENERATE_GEOMETRY : `box3d returned a null pointer, which a safe build cannot reach:
    C3 traps the null receiver first`
 *>
-fn HullData*? HullData.clone(&self) {
-    return checked_geometry(clone_hull_raw(self), DEGENERATE_GEOMETRY);
+fn HullData*? clone_hull(HullData* hull) {
+    return checked_geometry(clone_hull_raw(hull), DEGENERATE_GEOMETRY);
 }
 
 <*
@@ -107,8 +107,8 @@ fn HullData*? HullData.clone(&self) {
  @return? DEGENERATE_GEOMETRY : `the scaled hull's volume underflows to nothing, which repeated
    shrinking reaches`
 *>
-fn HullData*? HullData.clone_and_transform(&self, Transform transform, Vec3 scale) {
-    return checked_geometry(clone_and_transform_hull_raw(self, transform, scale), DEGENERATE_GEOMETRY);
+fn HullData*? clone_and_transform_hull(HullData* hull, Transform transform, Vec3 scale) {
+    return checked_geometry(clone_and_transform_hull_raw(hull, transform, scale), DEGENERATE_GEOMETRY);
 }
 
 <*

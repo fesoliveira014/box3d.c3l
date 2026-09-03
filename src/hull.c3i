@@ -35,7 +35,7 @@ struct HullFace {
  offsets it carries, so a bare HullData must never be copied — only a BoxHull, which embeds
  one together with its storage, copies correctly.
 
- create_hull() and its siblings in box3d_hull.c3 allocate one the caller owns and must destroy()
+ create_hull() and its siblings in src/hull.c3 allocate one the caller owns and must destroy()
  exactly once; byte_count() carries it until then. A BoxHull owns its storage instead, so calling
  destroy() on its base frees a pointer box3d never allocated.
 *>
@@ -94,13 +94,13 @@ struct ScaledBox {
 }
 
 <*
- Raw box scaler. Rewrites both of the arguments it is handed, so box3d_hull.c3's scale_box is the
+ Raw box scaler. Rewrites both of the arguments it is handed, so src/hull.c3's scale_box is the
  only public way in.
 *>
 extern fn void scale_box_raw(Vec3* half_widths, Transform* transform, Vec3 post_scale, float min_half_width) @cname("b3ScaleBox") @private;
 
 <*
- Raw hull constructors, whose null returns the wrappers in box3d_hull.c3 turn into faults; those
+ Raw hull constructors, whose null returns the wrappers in src/hull.c3 turn into faults; those
  wrappers are the only public way in. The cylinder, cone and rock end in b3CreateHull and answer
  null for a point set it will not close. The two clones do not: they allocate and copy, and answer
  null for an absent hull or, when transformed, for a volume the rebake underflows.
@@ -113,17 +113,17 @@ extern fn HullData* clone_hull_raw(HullData* hull) @cname("b3CloneHull") @privat
 extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform transform, Vec3 scale) @cname("b3CloneAndTransformHull") @private;
 
 <*
- Releases a hull box3d_hull.c3 returned, exactly once.
+ Releases a hull src/hull.c3 returned, exactly once.
 
  Only those. A BoxHull's base, a compound's hull child and the hull a shape reports are all owned
  by something else and abort the process or corrupt it here — see HullData.
 *>
-extern fn void HullData.destroy(&self) @cname("b3DestroyHull");
+extern fn void destroy_hull(HullData* hull) @cname("b3DestroyHull");
 
 <*
  The mass and inertia of the hull at this density, both linear in it, about the hull's own
  centroid — which box3d hands back unscaled, having baked all three at build time rather than
- integrating again. HullData.clone_and_transform() re-bakes them for a placed or scaled copy.
+ integrating again. clone_and_transform_hull() re-bakes them for a placed or scaled copy.
 
  The density is unchecked, so a negative one yields a negative mass and tensor, not a refusal.
 *>

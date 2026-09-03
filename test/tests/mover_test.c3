@@ -338,11 +338,11 @@ fn b3::WorldId a_world_holding_one_wall(b3::ShapeId* out_shape) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = { 2.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::BoxHull box = b3::make_box_hull(WALL_HALF_WIDTH, WALL_HALF_HEIGHT, WALL_HALF_DEPTH);
-    *out_shape = body.create_hull_shape(&shape_def, &box.base)!!;
+    *out_shape = b3::create_hull_shape(body, &shape_def, &box.base)!!;
     return world;
 }
 
@@ -362,20 +362,18 @@ fn b3::Pos a_mover_origin_penetrating_the_wall() {
 fn MoverPlanes the_planes_of_a_mover_pushed_into_a_wall(b3::WorldId world) {
     b3::Capsule mover = an_upright_mover();
     MoverPlanes collected;
-    world.collide_mover(
-      origin: a_mover_origin_penetrating_the_wall(),
+    b3::world_collide_mover(world, origin: a_mover_origin_penetrating_the_wall(),
       mover: &mover,
       filter: b3::default_query_filter(),
       fcn: &collect_mover_planes,
-      context: &collected,
-    );
+      context: &collected,);
     return collected;
 }
 
 fn void a_mover_pushed_into_a_wall_reports_a_plane_pointing_out_of_it() @test {
     b3::ShapeId wall_shape;
     b3::WorldId world = a_world_holding_one_wall(&wall_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     MoverPlanes collected = the_planes_of_a_mover_pushed_into_a_wall(world);
     assert(collected.call_count == 1 && collected.plane_count == 1,
@@ -404,7 +402,7 @@ fn void a_mover_pushed_into_a_wall_reports_a_plane_pointing_out_of_it() @test {
 fn void the_plane_a_wall_reports_slides_a_mover_along_it() @test {
     b3::ShapeId wall_shape;
     b3::WorldId world = a_world_holding_one_wall(&wall_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     MoverPlanes collected = the_planes_of_a_mover_pushed_into_a_wall(world);
     assert(collected.plane_count == 1, "the wall reported the one plane the chain is fed");
@@ -455,38 +453,30 @@ fn MoverCasts the_casts_of_a_mover_at_a_wall(b3::WorldId world, float translatio
     int accepted = 0;
     int refused = 0;
 
-    float unfiltered = world.cast_mover(
-      origin: start,
+    float unfiltered = b3::world_cast_mover(world, origin: start,
       mover: &mover,
       translation: at_the_wall,
       filter: filter,
       fcn: null,
-      context: null,
-    );
-    float aside = world.cast_mover(
-      origin: start,
+      context: null,);
+    float aside = b3::world_cast_mover(world, origin: start,
       mover: &mover,
       translation: { 0.0, 0.0, translation_length },
       filter: filter,
       fcn: null,
-      context: null,
-    );
-    float through_an_accepting_filter = world.cast_mover(
-      origin: start,
+      context: null,);
+    float through_an_accepting_filter = b3::world_cast_mover(world, origin: start,
       mover: &mover,
       translation: at_the_wall,
       filter: filter,
       fcn: &accept_every_shape,
-      context: &accepted,
-    );
-    float through_a_refusing_filter = world.cast_mover(
-      origin: start,
+      context: &accepted,);
+    float through_a_refusing_filter = b3::world_cast_mover(world, origin: start,
       mover: &mover,
       translation: at_the_wall,
       filter: filter,
       fcn: &refuse_every_shape,
-      context: &refused,
-    );
+      context: &refused,);
 
     return {
       .into_the_wall = unfiltered,
@@ -501,7 +491,7 @@ fn MoverCasts the_casts_of_a_mover_at_a_wall(b3::WorldId world, float translatio
 fn void a_mover_cast_into_a_wall_stops_one_linear_slop_past_its_face() @test {
     b3::ShapeId wall_shape;
     b3::WorldId world = a_world_holding_one_wall(&wall_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     float translation_length = 2.0;
     MoverCasts casts = the_casts_of_a_mover_at_a_wall(world, translation_length);
@@ -520,7 +510,7 @@ fn void a_mover_cast_into_a_wall_stops_one_linear_slop_past_its_face() @test {
 fn void a_mover_cast_takes_the_shape_filter_it_is_handed() @test {
     b3::ShapeId wall_shape;
     b3::WorldId world = a_world_holding_one_wall(&wall_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     MoverCasts casts = the_casts_of_a_mover_at_a_wall(world, 2.0);
 
@@ -540,15 +530,15 @@ fn b3::BodyId a_body_carrying_three_spheres(b3::WorldId world) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = { 0.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere across = { .center = { 0.4, 0.0, 0.0 }, .radius = 0.30 };
     b3::Sphere above = { .center = { 0.0, 0.5, 0.0 }, .radius = 0.35 };
     b3::Sphere behind = { .center = { 0.0, 0.0, 0.6 }, .radius = 0.40 };
-    body.create_sphere_shape(&shape_def, &across)!!;
-    body.create_sphere_shape(&shape_def, &above)!!;
-    body.create_sphere_shape(&shape_def, &behind)!!;
+    b3::create_sphere_shape(body, &shape_def, &across)!!;
+    b3::create_sphere_shape(body, &shape_def, &above)!!;
+    b3::create_sphere_shape(body, &shape_def, &behind)!!;
     return body;
 }
 
@@ -563,7 +553,7 @@ fn b3::Capsule a_mover_swallowing_three_spheres() {
 fn void a_body_local_mover_collide_answers_every_prefix_of_what_it_touches() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId body = a_body_carrying_three_spheres(world);
     b3::Capsule mover = a_mover_swallowing_three_spheres();
@@ -573,13 +563,11 @@ fn void a_body_local_mover_collide_answers_every_prefix_of_what_it_touches() @te
     b3::BodyPlaneResult[4] buffer;
     int[5] reported;
     for (int capacity = 0; capacity <= 4; capacity++) {
-        b3::BodyPlaneResult[] planes = body.collide_mover(
-          buffer: buffer[:capacity],
+        b3::BodyPlaneResult[] planes = b3::body_collide_mover(body, buffer: buffer[:capacity],
           origin: { 0.0, 0.0, 0.0 },
           mover: &mover,
           filter: filter,
-          body_transform: body_transform,
-        );
+          body_transform: body_transform,);
         reported[capacity] = (int)planes.len;
     }
 
@@ -593,7 +581,7 @@ fn void a_body_local_mover_collide_answers_every_prefix_of_what_it_touches() @te
 fn void a_body_local_mover_collide_names_the_shape_each_plane_came_from() @test {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId body = a_body_carrying_three_spheres(world);
     b3::Capsule mover = a_mover_swallowing_three_spheres();
@@ -603,13 +591,11 @@ fn void a_body_local_mover_collide_names_the_shape_each_plane_came_from() @test 
     assert(on_the_body.len == 3, "the body carries the three spheres the fixture gave it");
 
     b3::BodyPlaneResult[4] buffer;
-    b3::BodyPlaneResult[] planes = body.collide_mover(
-      buffer: buffer[..],
+    b3::BodyPlaneResult[] planes = b3::body_collide_mover(body, buffer: buffer[..],
       origin: { 0.0, 0.0, 0.0 },
       mover: &mover,
       filter: b3::default_query_filter(),
-      body_transform: body.transform(),
-    );
+      body_transform: body.transform(),);
     assert(planes.len == 3, "and answers one plane for each of them");
 
     bool every_plane_named_a_shape_of_this_body = true;
@@ -638,7 +624,7 @@ struct MoverAcrossTheTrees {
 fn MoverAcrossTheTrees the_mover_collide_across_the_body_types() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.3 };
@@ -646,20 +632,20 @@ fn MoverAcrossTheTrees the_mover_collide_across_the_body_types() {
     b3::BodyDef static_def = b3::default_body_def();
     static_def.type = b3::BodyType.STATIC;
     static_def.position = { 0.45, 0.0, 0.0 };
-    world.create_body(&static_def)!!.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(b3::create_body(world, &static_def)!!, &shape_def, &sphere)!!;
     static_def.position = { -0.35, 0.0, 0.0 };
-    world.create_body(&static_def)!!.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(b3::create_body(world, &static_def)!!, &shape_def, &sphere)!!;
 
     b3::BodyDef kinematic_def = b3::default_body_def();
     kinematic_def.type = b3::BodyType.KINEMATIC;
     kinematic_def.position = { 0.0, 0.0, 0.4 };
-    world.create_body(&kinematic_def)!!.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(b3::create_body(world, &kinematic_def)!!, &shape_def, &sphere)!!;
 
     b3::BodyDef dynamic_def = b3::default_body_def();
     dynamic_def.type = b3::BodyType.DYNAMIC;
     dynamic_def.position = { 0.0, 0.0, -0.5 };
     dynamic_def.gravity_scale = 0.0;
-    world.create_body(&dynamic_def)!!.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(b3::create_body(world, &dynamic_def)!!, &shape_def, &sphere)!!;
 
     b3::Capsule mover = {
       .center1 = { 0.0, -0.1, 0.0 },
@@ -669,23 +655,19 @@ fn MoverAcrossTheTrees the_mover_collide_across_the_body_types() {
     b3::QueryFilter filter = b3::default_query_filter();
 
     MoverPlanes everything;
-    world.collide_mover(
-      origin: { 0.0, 0.0, 0.0 },
+    b3::world_collide_mover(world, origin: { 0.0, 0.0, 0.0 },
       mover: &mover,
       filter: filter,
       fcn: &collect_mover_planes,
-      context: &everything,
-    );
+      context: &everything,);
 
     MoverPlanes ended_early;
     ended_early.stop_at_the_first_shape = true;
-    world.collide_mover(
-      origin: { 0.0, 0.0, 0.0 },
+    b3::world_collide_mover(world, origin: { 0.0, 0.0, 0.0 },
       mover: &mover,
       filter: filter,
       fcn: &collect_mover_planes,
-      context: &ended_early,
-    );
+      context: &ended_early,);
 
     return {
       .shapes_reported = everything.call_count,
@@ -717,7 +699,7 @@ struct MeshPlaneCounts {
 fn MeshPlaneCounts the_plane_counts_of_one_mesh_shape() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::MeshData*? grid = b3::create_grid_mesh(
       x_count: A_GRID_SIDE,
@@ -726,15 +708,15 @@ fn MeshPlaneCounts the_plane_counts_of_one_mesh_shape() {
       material_count: 1,
       identify_edges: false,
     );
-    defer if (try grid) grid.destroy();
+    defer if (try grid) b3::destroy_mesh(grid);
     b3::MeshData* mesh = grid!!;
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = { 0.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
-    body.create_mesh_shape(&shape_def, mesh, { 1.0, 1.0, 1.0 })!!;
+    b3::create_mesh_shape(body, &shape_def, mesh, { 1.0, 1.0, 1.0 })!!;
 
     float[4] radii = { 0.06, 0.12, 0.3, 1.0 };
     int[4] counts;
@@ -745,13 +727,11 @@ fn MeshPlaneCounts the_plane_counts_of_one_mesh_shape() {
           .radius = radii[i],
         };
         MoverPlanes collected;
-        world.collide_mover(
-          origin: { 0.0, 0.0, 0.0 },
+        b3::world_collide_mover(world, origin: { 0.0, 0.0, 0.0 },
           mover: &mover,
           filter: b3::default_query_filter(),
           fcn: &collect_mover_planes,
-          context: &collected,
-        );
+          context: &collected,);
         counts[i] = collected.call_count == 1 ? collected.widest_call : -1;
     }
 
@@ -788,7 +768,7 @@ struct MoverQueryReadings {
 fn MoverQueryReadings the_readings_of_every_mover_query() {
     b3::ShapeId wall_shape;
     b3::WorldId world = a_world_holding_one_wall(&wall_shape);
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     MoverPlanes collected = the_planes_of_a_mover_pushed_into_a_wall(world);
     MoverCasts casts = the_casts_of_a_mover_at_a_wall(world, 2.0);
@@ -796,13 +776,11 @@ fn MoverQueryReadings the_readings_of_every_mover_query() {
     b3::BodyId body = a_body_carrying_three_spheres(world);
     b3::Capsule mover = a_mover_swallowing_three_spheres();
     b3::BodyPlaneResult[4] buffer;
-    b3::BodyPlaneResult[] planes = body.collide_mover(
-      buffer: buffer[..],
+    b3::BodyPlaneResult[] planes = b3::body_collide_mover(body, buffer: buffer[..],
       origin: { 0.0, 0.0, 0.0 },
       mover: &mover,
       filter: b3::default_query_filter(),
-      body_transform: body.transform(),
-    );
+      body_transform: body.transform(),);
 
     return {
       .planes_from_the_world = collected.plane_count,
@@ -835,7 +813,7 @@ struct MoverAgainstAMeshOnABody {
 fn MoverAgainstAMeshOnABody the_readings_of_a_body_carrying_a_mesh_and_a_sphere() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::MeshData*? grid = b3::create_grid_mesh(
       x_count: 4,
@@ -844,18 +822,18 @@ fn MoverAgainstAMeshOnABody the_readings_of_a_body_carrying_a_mesh_and_a_sphere(
       material_count: 1,
       identify_edges: false,
     );
-    defer if (try grid) grid.destroy();
+    defer if (try grid) b3::destroy_mesh(grid);
     b3::MeshData* mesh = grid!!;
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
     body_def.position = { 0.0, 0.0, 0.0 };
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
-    body.create_mesh_shape(&shape_def, mesh, { 1.0, 1.0, 1.0 })!!;
+    b3::create_mesh_shape(body, &shape_def, mesh, { 1.0, 1.0, 1.0 })!!;
     b3::Sphere sphere = { .center = { 0.0, 0.15, 0.0 }, .radius = 0.2 };
-    b3::ShapeId sphere_shape = body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId sphere_shape = b3::create_sphere_shape(body, &shape_def, &sphere)!!;
 
     b3::Capsule mover = {
       .center1 = { 0.0, 0.05, 0.0 },
@@ -865,22 +843,18 @@ fn MoverAgainstAMeshOnABody the_readings_of_a_body_carrying_a_mesh_and_a_sphere(
     b3::QueryFilter filter = b3::default_query_filter();
 
     b3::BodyPlaneResult[8] buffer;
-    b3::BodyPlaneResult[] planes = body.collide_mover(
-      buffer: buffer[..],
+    b3::BodyPlaneResult[] planes = b3::body_collide_mover(body, buffer: buffer[..],
       origin: { 0.0, 0.0, 0.0 },
       mover: &mover,
       filter: filter,
-      body_transform: body.transform(),
-    );
+      body_transform: body.transform(),);
 
     MoverPlanes collected;
-    world.collide_mover(
-      origin: { 0.0, 0.0, 0.0 },
+    b3::world_collide_mover(world, origin: { 0.0, 0.0, 0.0 },
       mover: &mover,
       filter: filter,
       fcn: &collect_mover_planes,
-      context: &collected,
-    );
+      context: &collected,);
 
     return {
       .planes_from_the_body = (int)planes.len,
@@ -994,11 +968,11 @@ fn b3::BodyId a_sphere_standing_at(b3::WorldId world, b3::Pos position, b3::Body
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = type;
     body_def.position = position;
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = A_RING_SPHERE_RADIUS };
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     return body;
 }
 
@@ -1016,7 +990,7 @@ fn b3::ExplosionDef a_blast_of(float impulse_per_area) {
 // mover queries walk, and no arrangement of dynamic bodies alone can show it.
 fn RingVelocities the_ring_under(float impulse_per_area) {
     b3::WorldId world = a_world_without_gravity();
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId east = a_sphere_standing_at(world, { A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
     b3::BodyId west = a_sphere_standing_at(world, { -A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
@@ -1025,7 +999,7 @@ fn RingVelocities the_ring_under(float impulse_per_area) {
     b3::BodyId standing = a_sphere_standing_at(world, { 0.0, 0.0, A_RING_DISTANCE }, b3::BodyType.STATIC);
 
     RingVelocities ring;
-    if (catch world.explode(a_blast_of(impulse_per_area))) return ring;
+    if (catch b3::world_explode(world, a_blast_of(impulse_per_area))) return ring;
 
     return {
       .the_blast_was_accepted = true,
@@ -1079,13 +1053,13 @@ fn void a_negative_impulse_per_area_pulls_the_ring_inward_instead() @test {
 // then the only thing left holding that sphere still.
 fn DefaultBlastReadings the_readings_of_a_default_explosion() {
     b3::WorldId world = a_world_without_gravity();
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId near = a_sphere_standing_at(world, { 0.0, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
     b3::BodyId far = a_sphere_standing_at(world, { A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
 
     DefaultBlastReadings readings;
-    if (catch world.explode(b3::default_explosion_def())) return readings;
+    if (catch b3::world_explode(world, b3::default_explosion_def())) return readings;
 
     readings.the_default_was_accepted = true;
     readings.nothing_moved_at_the_blast_point = stands_still(near.linear_velocity());
@@ -1093,7 +1067,7 @@ fn DefaultBlastReadings the_readings_of_a_default_explosion() {
 
     near.set_linear_velocity({ 0.0, 0.0, 0.0 });
     far.set_linear_velocity({ 0.0, 0.0, 0.0 });
-    world.explode(a_blast_of(AN_IMPULSE_PER_AREA))!!;
+    b3::world_explode(world, a_blast_of(AN_IMPULSE_PER_AREA))!!;
 
     readings.at_the_blast_point_when_filled_in = near.linear_velocity();
     readings.out_in_the_ring_when_filled_in = far.linear_velocity();
@@ -1122,7 +1096,7 @@ fn void the_default_explosion_definition_moves_nothing() @test {
 // against. The last two are the controls: an implosion and the default, neither of them asserted.
 fn BlastGuards the_definitions_an_explosion_is_refused_for() {
     b3::WorldId world = a_world_without_gravity();
-    defer world.destroy();
+    defer b3::destroy_world(world);
     a_sphere_standing_at(world, { A_RING_DISTANCE, 0.0, 0.0 }, b3::BodyType.DYNAMIC);
 
     float infinity = (float)1.0e40;
@@ -1132,33 +1106,33 @@ fn BlastGuards the_definitions_an_explosion_is_refused_for() {
     b3::ExplosionDef def = a_blast_of(AN_IMPULSE_PER_AREA);
 
     def.radius = -A_BLAST_RADIUS;
-    if (catch err = world.explode(def)) guards.negative_radius = err;
+    if (catch err = b3::world_explode(world, def)) guards.negative_radius = err;
     def.radius = infinity;
-    if (catch err = world.explode(def)) guards.infinite_radius = err;
+    if (catch err = b3::world_explode(world, def)) guards.infinite_radius = err;
     def.radius = nan;
-    if (catch err = world.explode(def)) guards.radius_not_a_number = err;
+    if (catch err = b3::world_explode(world, def)) guards.radius_not_a_number = err;
 
     def = a_blast_of(AN_IMPULSE_PER_AREA);
     def.falloff = -A_BLAST_FALLOFF;
-    if (catch err = world.explode(def)) guards.negative_falloff = err;
+    if (catch err = b3::world_explode(world, def)) guards.negative_falloff = err;
     def.falloff = infinity;
-    if (catch err = world.explode(def)) guards.infinite_falloff = err;
+    if (catch err = b3::world_explode(world, def)) guards.infinite_falloff = err;
     def.falloff = nan;
-    if (catch err = world.explode(def)) guards.falloff_not_a_number = err;
+    if (catch err = b3::world_explode(world, def)) guards.falloff_not_a_number = err;
 
     def = a_blast_of(infinity);
-    if (catch err = world.explode(def)) guards.infinite_impulse = err;
+    if (catch err = b3::world_explode(world, def)) guards.infinite_impulse = err;
     def = a_blast_of(nan);
-    if (catch err = world.explode(def)) guards.impulse_not_a_number = err;
+    if (catch err = b3::world_explode(world, def)) guards.impulse_not_a_number = err;
 
     def = a_blast_of(AN_IMPULSE_PER_AREA);
     def.position = { 0.0, 0.0, infinity };
-    if (catch err = world.explode(def)) guards.infinite_position = err;
+    if (catch err = b3::world_explode(world, def)) guards.infinite_position = err;
     def.position = { 0.0, nan, 0.0 };
-    if (catch err = world.explode(def)) guards.position_not_a_number = err;
+    if (catch err = b3::world_explode(world, def)) guards.position_not_a_number = err;
 
-    if (try world.explode(a_blast_of(-AN_IMPULSE_PER_AREA))) guards.negative_impulse_passed = true;
-    if (try world.explode(b3::default_explosion_def())) guards.the_default_definition_passed = true;
+    if (try b3::world_explode(world, a_blast_of(-AN_IMPULSE_PER_AREA))) guards.negative_impulse_passed = true;
+    if (try b3::world_explode(world, b3::default_explosion_def())) guards.the_default_definition_passed = true;
 
     return guards;
 }

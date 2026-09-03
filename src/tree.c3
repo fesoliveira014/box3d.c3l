@@ -11,9 +11,9 @@ module b3;
  @return `the id`
  @return? INVALID_DEFINITION : `the box is inverted or not finite`
 *>
-fn int? DynamicTree.create_proxy(&self, Aabb aabb, ulong category_bits, ulong user_data) {
+fn int? dynamic_tree_create_proxy(DynamicTree* tree, Aabb aabb, ulong category_bits, ulong user_data) {
     if (!is_valid_aabb(aabb)) return INVALID_DEFINITION~;
-    return create_proxy_raw(self, aabb, category_bits, user_data);
+    return dynamic_tree_create_proxy_raw(tree, aabb, category_bits, user_data);
 }
 
 <*
@@ -23,9 +23,9 @@ fn int? DynamicTree.create_proxy(&self, Aabb aabb, ulong category_bits, ulong us
 
  @return? check_proxy!
 *>
-fn void? DynamicTree.destroy_proxy(&self, int proxy_id) {
-    check_proxy(self, proxy_id)!;
-    destroy_proxy_raw(self, proxy_id);
+fn void? dynamic_tree_destroy_proxy(DynamicTree* tree, int proxy_id) {
+    check_proxy(tree, proxy_id)!;
+    dynamic_tree_destroy_proxy_raw(tree, proxy_id);
 }
 
 <*
@@ -35,10 +35,10 @@ fn void? DynamicTree.destroy_proxy(&self, int proxy_id) {
  @return? check_proxy!
  @return? INVALID_DEFINITION : `the box is inverted or not finite`
 *>
-fn void? DynamicTree.move_proxy(&self, int proxy_id, Aabb aabb) {
-    check_proxy(self, proxy_id)!;
+fn void? dynamic_tree_move_proxy(DynamicTree* tree, int proxy_id, Aabb aabb) {
+    check_proxy(tree, proxy_id)!;
     if (!is_valid_aabb(aabb)) return INVALID_DEFINITION~;
-    move_proxy_raw(self, proxy_id, aabb);
+    dynamic_tree_move_proxy_raw(tree, proxy_id, aabb);
 }
 
 <*
@@ -51,10 +51,10 @@ fn void? DynamicTree.move_proxy(&self, int proxy_id, Aabb aabb) {
  @return? check_proxy!
  @return? INVALID_DEFINITION : `the box is inverted or not finite`
 *>
-fn void? DynamicTree.enlarge_proxy(&self, int proxy_id, Aabb aabb) {
-    check_proxy(self, proxy_id)!;
+fn void? dynamic_tree_enlarge_proxy(DynamicTree* tree, int proxy_id, Aabb aabb) {
+    check_proxy(tree, proxy_id)!;
     if (!is_valid_aabb(aabb)) return INVALID_DEFINITION~;
-    enlarge_proxy_raw(self, proxy_id, aabb);
+    dynamic_tree_enlarge_proxy_raw(tree, proxy_id, aabb);
 }
 
 <*
@@ -115,8 +115,7 @@ fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
  @param search_bound : `the squared distance to search within; a large one reaches every proxy,
    and 0 admits none of them and reports no error`
 *>
-fn ClosestSearch DynamicTree.query_closest(
-  &self,
+fn ClosestSearch dynamic_tree_query_closest(DynamicTree* tree,
   Vec3 point,
   ulong mask_bits,
   bool require_all_bits,
@@ -124,8 +123,8 @@ fn ClosestSearch DynamicTree.query_closest(
   void* context,
   float search_bound,
 ) {
-    TreeStats stats = query_closest_raw(
-      tree: self,
+    TreeStats stats = dynamic_tree_query_closest_raw(
+      tree: tree,
       point: point,
       mask_bits: mask_bits,
       require_all_bits: require_all_bits,
@@ -148,7 +147,7 @@ fn ClosestSearch DynamicTree.query_closest(
  @return? FILE_UNAVAILABLE : `the path could not be read, or holds no tree this build knows`
 *>
 fn DynamicTree? load_tree(ZString path, float scale) {
-    DynamicTree tree = load_tree_raw(path, scale);
+    DynamicTree tree = dynamic_tree_load_raw(path, scale);
     if (tree.nodes == null) return FILE_UNAVAILABLE~;
     return tree;
 }

@@ -35,7 +35,7 @@ fn CannedMeshes the_canned_builders_that_produced_a_mesh() {
       material_count: 1,
       identify_edges: true,
     );
-    defer if (try grid) grid.destroy();
+    defer if (try grid) b3::destroy_mesh(grid);
 
     b3::MeshData*? wave = b3::create_wave_mesh(
       x_count: 4,
@@ -45,7 +45,7 @@ fn CannedMeshes the_canned_builders_that_produced_a_mesh() {
       row_frequency: 0.5,
       column_frequency: 0.5,
     );
-    defer if (try wave) wave.destroy();
+    defer if (try wave) b3::destroy_mesh(wave);
 
     b3::MeshData*? torus = b3::create_torus_mesh(
       radial_resolution: 8,
@@ -53,13 +53,13 @@ fn CannedMeshes the_canned_builders_that_produced_a_mesh() {
       radius: 1.0,
       thickness: 0.25,
     );
-    defer if (try torus) torus.destroy();
+    defer if (try torus) b3::destroy_mesh(torus);
 
     b3::MeshData*? box = b3::create_box_mesh(center, extent, true);
-    defer if (try box) box.destroy();
+    defer if (try box) b3::destroy_mesh(box);
 
     b3::MeshData*? hollow_box = b3::create_hollow_box_mesh(center, extent);
-    defer if (try hollow_box) hollow_box.destroy();
+    defer if (try hollow_box) b3::destroy_mesh(hollow_box);
 
     b3::MeshData*? platform = b3::create_platform_mesh(
       center: center,
@@ -67,10 +67,10 @@ fn CannedMeshes the_canned_builders_that_produced_a_mesh() {
       top_width: 1.0,
       bottom_width: 2.0,
     );
-    defer if (try platform) platform.destroy();
+    defer if (try platform) b3::destroy_mesh(platform);
 
     b3::MeshData*? soup = a_single_triangle_mesh();
-    defer if (try soup) soup.destroy();
+    defer if (try soup) b3::destroy_mesh(soup);
 
     return {
         .grid = @ok(grid),
@@ -119,7 +119,7 @@ fn bool[3] the_height_field_builders_that_produced_a_field() {
       scale: scale,
       make_holes: false,
     );
-    defer if (try grid) grid.destroy();
+    defer if (try grid) b3::destroy_height_field(grid);
 
     b3::HeightFieldData*? wave = b3::create_height_field_wave(
       row_count: 16,
@@ -129,10 +129,10 @@ fn bool[3] the_height_field_builders_that_produced_a_field() {
       column_frequency: 0.5,
       make_holes: false,
     );
-    defer if (try wave) wave.destroy();
+    defer if (try wave) b3::destroy_height_field(wave);
 
     b3::HeightFieldData*? measured = a_flat_three_by_three_height_field();
-    defer if (try measured) measured.destroy();
+    defer if (try measured) b3::destroy_height_field(measured);
 
     return { @ok(grid), @ok(wave), @ok(measured) };
 }
@@ -171,7 +171,7 @@ fn int[2] the_byte_count_around_a_live_grid_mesh() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     return { baseline, b3::byte_count() };
 }
@@ -185,7 +185,7 @@ fn int[2] the_byte_count_around_a_live_height_field() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     return { baseline, b3::byte_count() };
 }
@@ -216,7 +216,7 @@ fn Refusal the_refusal_of_a_mesh_definition(b3::MeshDef* def) {
     int baseline = b3::byte_count();
 
     b3::MeshData*? mesh = b3::create_mesh(def);
-    defer if (try mesh) mesh.destroy();
+    defer if (try mesh) b3::destroy_mesh(mesh);
 
     if (catch err = mesh) return { .refusal = err, .baseline = baseline, .after = b3::byte_count() };
     return { .refusal = {}, .baseline = baseline, .after = b3::byte_count() };
@@ -257,7 +257,7 @@ fn void a_mesh_definition_naming_fewer_than_three_vertices_is_refused() @test {
 // count_x * count_z floats straight through the pointer.
 fn fault the_refusal_of_a_height_field_definition(b3::HeightFieldDef* def) {
     b3::HeightFieldData*? field = b3::create_height_field(def);
-    defer if (try field) field.destroy();
+    defer if (try field) b3::destroy_height_field(field);
 
     if (catch err = field) return err;
     return {};
@@ -317,7 +317,7 @@ fn fault the_refusal_of_a_grid_of(int row_count, int column_count) {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     );
-    defer if (try field) field.destroy();
+    defer if (try field) b3::destroy_height_field(field);
 
     if (catch err = field) return err;
     return {};
@@ -332,7 +332,7 @@ fn fault the_refusal_of_a_wave_of(int row_count, int column_count) {
       column_frequency: 0.5,
       make_holes: false,
     );
-    defer if (try field) field.destroy();
+    defer if (try field) b3::destroy_height_field(field);
 
     if (catch err = field) return err;
     return {};
@@ -359,7 +359,7 @@ fn int[2] the_tree_heights_of_two_flat_grid_meshes() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer one_cell.destroy();
+    defer b3::destroy_mesh(one_cell);
 
     b3::MeshData* sixteen_cells = b3::create_grid_mesh(
       x_count: 4,
@@ -368,7 +368,7 @@ fn int[2] the_tree_heights_of_two_flat_grid_meshes() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer sixteen_cells.destroy();
+    defer b3::destroy_mesh(sixteen_cells);
 
     return { one_cell.tree_height(), sixteen_cells.tree_height() };
 }
@@ -403,31 +403,31 @@ fn RolledBall the_ball_after_two_seconds(bool attach_the_height_field) {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     if (attach_the_height_field) {
         b3::BodyDef ground_def = b3::default_body_def();
-        b3::BodyId ground = world.create_body(&ground_def)!!;
-        ground.create_height_field_shape(&shape_def, field)!!;
+        b3::BodyId ground = b3::create_body(world, &ground_def)!!;
+        b3::create_height_field_shape(ground, &shape_def, field)!!;
     }
 
     b3::BodyDef ball_def = b3::default_body_def();
     ball_def.type = b3::BodyType.DYNAMIC;
     ball_def.position = (b3::Pos){ 4.0, 1.0, 8.0 };
-    b3::BodyId ball = world.create_body(&ball_def)!!;
+    b3::BodyId ball = b3::create_body(world, &ball_def)!!;
 
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-    ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
     ball.set_linear_velocity((b3::Vec3){ 4.0, 0.0, 0.0 });
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     b3::Pos resting = ball.position();
@@ -468,7 +468,7 @@ fn b3::ShapeType[2] the_types_of_a_mesh_and_a_height_field_shape() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 4,
@@ -476,18 +476,18 @@ fn b3::ShapeType[2] the_types_of_a_mesh_and_a_height_field_shape() {
       scale: unit,
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
-    b3::ShapeId mesh_shape = ground.create_mesh_shape(&shape_def, mesh, unit)!!;
-    b3::ShapeId field_shape = ground.create_height_field_shape(&shape_def, field)!!;
+    b3::ShapeId mesh_shape = b3::create_mesh_shape(ground, &shape_def, mesh, unit)!!;
+    b3::ShapeId field_shape = b3::create_height_field_shape(ground, &shape_def, field)!!;
 
     return { mesh_shape.type(), field_shape.type() };
 }
@@ -509,7 +509,7 @@ fn fault[2] the_refusals_of_a_zeroed_shape_definition() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 4,
@@ -517,19 +517,19 @@ fn fault[2] the_refusals_of_a_zeroed_shape_definition() {
       scale: unit,
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef zeroed;
 
     fault[2] refusals;
-    if (catch err = ground.create_mesh_shape(&zeroed, mesh, unit)) refusals[0] = err;
-    if (catch err = ground.create_height_field_shape(&zeroed, field)) refusals[1] = err;
+    if (catch err = b3::create_mesh_shape(ground, &zeroed, mesh, unit)) refusals[0] = err;
+    if (catch err = b3::create_height_field_shape(ground, &zeroed, field)) refusals[1] = err;
     return refusals;
 }
 
@@ -544,15 +544,15 @@ fn void a_geometry_shape_without_the_definition_cookie_is_refused() @test {
 fn fault[2] the_refusals_of_a_null_geometry() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     fault[2] refusals;
-    if (catch err = ground.create_mesh_shape(&shape_def, null, (b3::Vec3){ 1.0, 1.0, 1.0 })) refusals[0] = err;
-    if (catch err = ground.create_height_field_shape(&shape_def, null)) refusals[1] = err;
+    if (catch err = b3::create_mesh_shape(ground, &shape_def, null, (b3::Vec3){ 1.0, 1.0, 1.0 })) refusals[0] = err;
+    if (catch err = b3::create_height_field_shape(ground, &shape_def, null)) refusals[1] = err;
     return refusals;
 }
 
@@ -578,20 +578,20 @@ fn int[5] the_byte_counts_around_a_mesh_shape() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
     int with_mesh = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     int with_world = b3::byte_count();
 
     b3::ShapeDef shape_def = b3::default_shape_def();
-    ground.create_mesh_shape(&shape_def, mesh, unit)!!;
+    b3::create_mesh_shape(ground, &shape_def, mesh, unit)!!;
     int with_shape = b3::byte_count();
 
-    world.destroy();
+    b3::destroy_world(world);
     return { baseline, with_mesh, with_world, with_shape, b3::byte_count() };
 }
 
@@ -604,20 +604,20 @@ fn int[5] the_byte_counts_around_a_height_field_shape() {
       scale: (b3::Vec3){ 1.0, 1.0, 1.0 },
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
     int with_field = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     int with_world = b3::byte_count();
 
     b3::ShapeDef shape_def = b3::default_shape_def();
-    ground.create_height_field_shape(&shape_def, field)!!;
+    b3::create_height_field_shape(ground, &shape_def, field)!!;
     int with_shape = b3::byte_count();
 
-    world.destroy();
+    b3::destroy_world(world);
     return { baseline, with_field, with_world, with_shape, b3::byte_count() };
 }
 
@@ -661,7 +661,7 @@ fn fault[4] the_refusals_of_the_geometry_getters_on_another_type() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 4,
@@ -669,20 +669,20 @@ fn fault[4] the_refusals_of_the_geometry_getters_on_another_type() {
       scale: unit,
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-    b3::ShapeId sphere_shape = ground.create_sphere_shape(&shape_def, &sphere)!!;
-    b3::ShapeId mesh_shape = ground.create_mesh_shape(&shape_def, mesh, unit)!!;
-    b3::ShapeId field_shape = ground.create_height_field_shape(&shape_def, field)!!;
+    b3::ShapeId sphere_shape = b3::create_sphere_shape(ground, &shape_def, &sphere)!!;
+    b3::ShapeId mesh_shape = b3::create_mesh_shape(ground, &shape_def, mesh, unit)!!;
+    b3::ShapeId field_shape = b3::create_height_field_shape(ground, &shape_def, field)!!;
 
     fault[4] refusals;
     if (catch err = sphere_shape.mesh()) refusals[0] = err;
@@ -720,7 +720,7 @@ fn LentGeometry the_geometry_two_shapes_lend_back() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 4,
@@ -728,18 +728,18 @@ fn LentGeometry the_geometry_two_shapes_lend_back() {
       scale: unit,
       make_holes: false,
     )!!;
-    defer field.destroy();
+    defer b3::destroy_height_field(field);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
-    b3::ShapeId mesh_shape = ground.create_mesh_shape(&shape_def, mesh, stretched)!!;
-    b3::ShapeId field_shape = ground.create_height_field_shape(&shape_def, field)!!;
+    b3::ShapeId mesh_shape = b3::create_mesh_shape(ground, &shape_def, mesh, stretched)!!;
+    b3::ShapeId field_shape = b3::create_height_field_shape(ground, &shape_def, field)!!;
 
     b3::Mesh lent = mesh_shape.mesh()!!;
     return {
@@ -777,14 +777,14 @@ fn MeshMaterials the_materials_of_a_three_material_mesh_shape() {
       material_count: 3,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
 
     b3::SurfaceMaterial[3] materials;
     for (int i = 0; i < 3; i++) {
@@ -795,7 +795,7 @@ fn MeshMaterials the_materials_of_a_three_material_mesh_shape() {
     shape_def.materials = &materials[0];
     shape_def.material_count = 3;
 
-    b3::ShapeId shape = ground.create_mesh_shape(&shape_def, mesh, (b3::Vec3){ 1.0, 1.0, 1.0 })!!;
+    b3::ShapeId shape = b3::create_mesh_shape(ground, &shape_def, mesh, (b3::Vec3){ 1.0, 1.0, 1.0 })!!;
 
     MeshMaterials read = { .count = shape.mesh_material_count() };
     if (read.count != 3) return read;
@@ -845,14 +845,14 @@ struct SphereMaterials {
 fn SphereMaterials the_materials_of_a_sphere_shape() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-    b3::ShapeId shape = ground.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId shape = b3::create_sphere_shape(ground, &shape_def, &sphere)!!;
 
     SphereMaterials read = { .count = shape.mesh_material_count() };
     if (read.count != 1) return read;
@@ -917,19 +917,19 @@ fn ReplacedGeometry the_shape_around_a_replaced_geometry() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ball_def = b3::default_body_def();
     ball_def.type = b3::BodyType.DYNAMIC;
-    b3::BodyId ball = world.create_body(&ball_def)!!;
+    b3::BodyId ball = b3::create_body(world, &ball_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-    b3::ShapeId shape = ball.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId shape = b3::create_sphere_shape(ball, &shape_def, &sphere)!!;
 
     ReplacedGeometry replaced = {
         .type_before = shape.type(),
@@ -944,7 +944,7 @@ fn ReplacedGeometry the_shape_around_a_replaced_geometry() {
     replaced.mass_after_set = ball.mass();
     if (try lent = shape.mesh()) replaced.lends_the_new_mesh = lent.data == mesh;
 
-    ball.apply_mass_from_shapes();
+    b3::body_apply_mass_from_shapes(ball);
     replaced.mass_after_apply = ball.mass();
     return replaced;
 }
@@ -981,7 +981,7 @@ fn int[5] the_byte_counts_around_a_replaced_mesh() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer first.destroy();
+    defer b3::destroy_mesh(first);
 
     b3::MeshData* second = b3::create_grid_mesh(
       x_count: 8,
@@ -990,22 +990,22 @@ fn int[5] the_byte_counts_around_a_replaced_mesh() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer second.destroy();
+    defer b3::destroy_mesh(second);
     int with_both = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
-    b3::ShapeId shape = ground.create_mesh_shape(&shape_def, first, unit)!!;
+    b3::ShapeId shape = b3::create_mesh_shape(ground, &shape_def, first, unit)!!;
     int with_shape = b3::byte_count();
 
     shape.set_mesh(second, unit)!!;
     int after_replacing = b3::byte_count();
 
-    world.destroy();
+    b3::destroy_world(world);
     return { baseline, with_both, with_shape, after_replacing, b3::byte_count() };
 }
 
@@ -1023,14 +1023,14 @@ fn void a_replaced_mesh_is_still_the_callers_to_destroy() @test {
 fn fault the_refusal_of_a_replacement_that_is_not_there() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-    b3::ShapeId shape = ground.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::ShapeId shape = b3::create_sphere_shape(ground, &shape_def, &sphere)!!;
 
     if (catch err = shape.set_mesh(null, (b3::Vec3){ 1.0, 1.0, 1.0 })) return err;
     return {};
@@ -1081,7 +1081,7 @@ fn int[2] the_byte_count_around_a_live_two_sphere_compound() {
     int baseline = b3::byte_count();
 
     b3::CompoundData* compound = b3::create_compound(&def)!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     return { baseline, b3::byte_count() };
 }
@@ -1105,7 +1105,7 @@ fn BuiltCompound the_compound_an_empty_definition_builds() {
     int baseline = b3::byte_count();
 
     b3::CompoundData*? compound = b3::create_compound(&empty);
-    defer if (try compound) compound.destroy();
+    defer if (try compound) b3::destroy_compound(compound);
 
     return {
       .built = @ok(compound),
@@ -1140,7 +1140,7 @@ fn BuiltCompound the_compound_every_child_kind_builds() {
       material_count: 1,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::CompoundSphereDef[1] spheres = {
       {
@@ -1182,7 +1182,7 @@ fn BuiltCompound the_compound_every_child_kind_builds() {
     def.mesh_count = 1;
 
     b3::CompoundData*? compound = b3::create_compound(&def);
-    defer if (try compound) compound.destroy();
+    defer if (try compound) b3::destroy_compound(compound);
 
     return {
       .built = @ok(compound),
@@ -1205,7 +1205,7 @@ fn Refusal the_refusal_of_a_compound_definition(b3::CompoundDef* def) {
     int baseline = b3::byte_count();
 
     b3::CompoundData*? compound = b3::create_compound(def);
-    defer if (try compound) compound.destroy();
+    defer if (try compound) b3::destroy_compound(compound);
 
     if (catch err = compound) return { .refusal = err, .baseline = baseline, .after = b3::byte_count() };
     return { .refusal = {}, .baseline = baseline, .after = b3::byte_count() };
@@ -1324,7 +1324,7 @@ fn Refusal the_refusal_of_a_mesh_child_carrying(int material_count) {
       material_count: b3::MAX_COMPOUND_MESH_MATERIALS,
       identify_edges: true,
     )!!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::CompoundMeshDef[1] meshes = {
       {
@@ -1408,18 +1408,18 @@ struct AttachedCompound {
 
 fn AttachedCompound the_compound_shape_a_body_of_type_takes(b3::BodyType type) {
     b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = type;
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
-    b3::ShapeId? shape = body.create_baked_compound_shape(&shape_def, compound);
+    b3::ShapeId? shape = b3::create_baked_compound_shape(body, &shape_def, compound);
     if (catch err = shape) return { .refusal = err };
     return { .attached = true, .type = shape.type() };
 }
@@ -1465,7 +1465,7 @@ struct CompoundShapeReading {
 }
 
 fn CompoundCast the_cast_straight_down_at(b3::ShapeId shape, float x) {
-    b3::WorldCastOutput? hit = shape.ray_cast((b3::Pos){ x, 3.0, 0.0 }, (b3::Vec3){ 0.0, -6.0, 0.0 });
+    b3::WorldCastOutput? hit = b3::shape_ray_cast(shape, (b3::Pos){ x, 3.0, 0.0 }, (b3::Vec3){ 0.0, -6.0, 0.0 });
     if (try hit) {
         return {
           .hit = true,
@@ -1485,16 +1485,16 @@ fn CompoundCast the_cast_straight_down_at(b3::ShapeId shape, float x) {
 // exists for, and a helper that asserted instead would strand the compound on byte_count().
 fn CompoundShapeReading the_children_a_compound_shape_reports() {
     b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     b3::ShapeDef shape_def = b3::default_shape_def();
-    b3::ShapeId shape = ground.create_baked_compound_shape(&shape_def, compound)!!;
+    b3::ShapeId shape = b3::create_baked_compound_shape(ground, &shape_def, compound)!!;
 
     CompoundShapeReading read = {
       .material_count = shape.mesh_material_count(),
@@ -1546,21 +1546,21 @@ fn void a_compound_shape_reports_the_children_it_was_built_from() @test {
 
 fn fault[2] the_refusals_of_a_baked_compound_shape() {
     b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
 
     b3::ShapeDef zeroed;
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     fault[2] refusals;
-    if (catch err = ground.create_baked_compound_shape(&zeroed, compound)) refusals[0] = err;
-    if (catch err = ground.create_baked_compound_shape(&shape_def, null)) refusals[1] = err;
+    if (catch err = b3::create_baked_compound_shape(ground, &zeroed, compound)) refusals[0] = err;
+    if (catch err = b3::create_baked_compound_shape(ground, &shape_def, null)) refusals[1] = err;
     return refusals;
 }
 
@@ -1579,20 +1579,20 @@ fn int[5] the_byte_counts_around_a_compound_shape() {
     int baseline = b3::byte_count();
 
     b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
     int with_compound = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
-    b3::BodyId ground = world.create_body(&ground_def)!!;
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
     int with_world = b3::byte_count();
 
     b3::ShapeDef shape_def = b3::default_shape_def();
-    ground.create_baked_compound_shape(&shape_def, compound)!!;
+    b3::create_baked_compound_shape(ground, &shape_def, compound)!!;
     int with_shape = b3::byte_count();
 
-    world.destroy();
+    b3::destroy_world(world);
     return { baseline, with_compound, with_world, with_shape, b3::byte_count() };
 }
 
@@ -1642,18 +1642,18 @@ fn RestingBalls the_balls_after_three_seconds(bool attach_the_compound) {
     def.hull_count = 2;
 
     b3::CompoundData* compound = b3::create_compound(&def)!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::ShapeDef shape_def = b3::default_shape_def();
 
     if (attach_the_compound) {
         b3::BodyDef ground_def = b3::default_body_def();
-        b3::BodyId ground = world.create_body(&ground_def)!!;
-        ground.create_baked_compound_shape(&shape_def, compound)!!;
+        b3::BodyId ground = b3::create_body(world, &ground_def)!!;
+        b3::create_baked_compound_shape(ground, &shape_def, compound)!!;
     }
 
     b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
@@ -1661,17 +1661,17 @@ fn RestingBalls the_balls_after_three_seconds(bool attach_the_compound) {
     b3::BodyDef over_the_low_def = b3::default_body_def();
     over_the_low_def.type = b3::BodyType.DYNAMIC;
     over_the_low_def.position = (b3::Pos){ -2.0, 3.0, 0.0 };
-    b3::BodyId over_the_low = world.create_body(&over_the_low_def)!!;
-    over_the_low.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::BodyId over_the_low = b3::create_body(world, &over_the_low_def)!!;
+    b3::create_sphere_shape(over_the_low, &shape_def, &sphere)!!;
 
     b3::BodyDef over_the_high_def = b3::default_body_def();
     over_the_high_def.type = b3::BodyType.DYNAMIC;
     over_the_high_def.position = (b3::Pos){ 2.0, 4.0, 0.0 };
-    b3::BodyId over_the_high = world.create_body(&over_the_high_def)!!;
-    over_the_high.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::BodyId over_the_high = b3::create_body(world, &over_the_high_def)!!;
+    b3::create_sphere_shape(over_the_high, &shape_def, &sphere)!!;
 
     for (int i = 0; i < 180; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     b3::Pos low_resting = over_the_low.position();
@@ -1736,7 +1736,7 @@ fn b3::CompoundData*? a_compound_of_one_child_of_every_kind() {
       material_count: 2,
       identify_edges: true,
     )!;
-    defer mesh.destroy();
+    defer b3::destroy_mesh(mesh);
 
     b3::SurfaceMaterial[2] mesh_materials = { mid, slick };
 
@@ -1805,7 +1805,7 @@ struct FlatChildren {
 
 fn FlatChildren the_children_a_compound_reports_in_order() {
     b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     FlatChildren read = {
       .capsule_count = compound.capsule_count,
@@ -1897,7 +1897,7 @@ struct PerKindChildren {
 
 fn PerKindChildren the_children_the_per_kind_accessors_report() {
     b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     // Seeded away from zero so a material index that reads 0 proves the accessor ran, rather than
     // agreeing with the struct's own default.
@@ -1976,7 +1976,7 @@ struct CompoundMaterialsRead {
 
 fn CompoundMaterialsRead the_materials_a_compound_reports() {
     b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     b3::SurfaceMaterial[] materials = compound.materials();
 
@@ -2005,7 +2005,7 @@ fn void a_compound_reports_one_material_per_distinct_child_surface() @test {
 
 fn fault[10] the_refusals_of_the_child_accessors() {
     b3::CompoundData* compound = a_compound_of_one_child_of_every_kind()!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     fault[10] refusals;
     if (catch err = compound.child(-1)) refusals[0] = err;
@@ -2050,7 +2050,7 @@ struct EmptyCompoundRead {
 fn EmptyCompoundRead the_readings_of_an_empty_compound() {
     b3::CompoundDef empty;
     b3::CompoundData* compound = b3::create_compound(&empty)!!;
-    defer compound.destroy();
+    defer b3::destroy_compound(compound);
 
     EmptyCompoundRead read = {
       .child_count = compound.child_count(),
@@ -2129,13 +2129,13 @@ fn CompoundThroughBytes the_readings_from_a_compound_through_its_bytes() {
     trip.baseline = b3::byte_count();
     b3::CompoundData*? built = b3::create_compound(&def);
     if (catch built) return trip;
-    defer built.destroy();
+    defer b3::destroy_compound(built);
     trip.bytes_with_the_compound = b3::byte_count();
 
     trip.the_tree_was_live_before = built.tree.nodes != null;
     if (try bounds = built.compute_aabb(CHILD_TRANSFORM)) trip.bounds_written = bounds;
 
-    char[] bytes = built.to_bytes();
+    char[] bytes = b3::convert_compound_to_bytes(built);
     trip.byte_length = (int)bytes.len;
     trip.the_tree_was_nulled_by_the_conversion = built.tree.nodes == null;
 
@@ -2273,19 +2273,19 @@ fn HeightFieldThroughAFile the_readings_from_a_height_field_through_a_file() {
     trip.baseline = b3::byte_count();
     b3::HeightFieldData*? direct = b3::create_height_field(&def);
     if (catch direct) return trip;
-    defer direct.destroy();
+    defer b3::destroy_height_field(direct);
 
     trip.bounds_written = direct.compute_aabb(CHILD_TRANSFORM);
-    if (try struck = direct.ray_cast(straight_down)) trip.struck_the_written_at = struck.point.y;
+    if (try struck = b3::ray_cast_height_field(direct, straight_down)) trip.struck_the_written_at = struck.point.y;
 
     trip.the_dump_was_accepted = @ok(b3::dump_height_data(&def, file.zstr_tcopy()));
     b3::HeightFieldData*? reread = b3::load_height_field(file.zstr_tcopy());
     if (catch reread) return trip;
-    defer reread.destroy();
+    defer b3::destroy_height_field(reread);
     trip.bytes_with_both = b3::byte_count();
 
     trip.bounds_read = reread.compute_aabb(CHILD_TRANSFORM);
-    if (try struck = reread.ray_cast(straight_down)) trip.struck_the_read_at = struck.point.y;
+    if (try struck = b3::ray_cast_height_field(reread, straight_down)) trip.struck_the_read_at = struck.point.y;
 
     b3::HeightFieldDef unmaterialed = def;
     unmaterialed.material_indices = null;
@@ -2295,7 +2295,7 @@ fn HeightFieldThroughAFile the_readings_from_a_height_field_through_a_file() {
     b3::HeightFieldData*? without_materials = b3::create_height_field(&unmaterialed);
     if (try built = without_materials) {
         trip.a_grid_with_no_materials_still_builds = true;
-        built.destroy();
+        b3::destroy_height_field(built);
     }
 
     b3::HeightFieldDef one_row = def;

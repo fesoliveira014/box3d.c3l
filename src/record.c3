@@ -20,9 +20,9 @@ fn char[] Recording.data(&self) {
    empty when box3d refuses reads as accepted, including the one this world is already recording
    into and one just loaded from a file`
 *>
-fn void? WorldId.start_recording(self, Recording* recording) {
+fn void? world_start_recording(WorldId world, Recording* recording) {
     if (recording == null) return b3::NOT_A_RECORDING~;
-    start_recording_raw(self, recording);
+    world_start_recording_raw(world, recording);
     if (recording_size_raw(recording) == 0) return b3::NOT_A_RECORDING~;
 }
 
@@ -33,8 +33,8 @@ fn void? WorldId.start_recording(self, Recording* recording) {
 
  @return? b3::FILE_UNAVAILABLE : `box3d could not open the path, or the write fell short`
 *>
-fn void? Recording.save(&self, ZString path) {
-    if (!save_recording_raw(self, path)) return b3::FILE_UNAVAILABLE~;
+fn void? save_recording_to_file(Recording* recording, ZString path) {
+    if (!save_recording_to_file_raw(recording, path)) return b3::FILE_UNAVAILABLE~;
 }
 
 <*
@@ -47,7 +47,7 @@ fn void? Recording.save(&self, ZString path) {
    does not distinguish`
 *>
 fn Recording*? load_recording(ZString path) {
-    Recording* recording = load_recording_raw(path);
+    Recording* recording = load_recording_from_file_raw(path);
     if (recording == null) return b3::FILE_UNAVAILABLE~;
     return recording;
 }

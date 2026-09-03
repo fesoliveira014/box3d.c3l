@@ -62,17 +62,17 @@ fn void a_custom_allocator_serves_every_allocation_a_world_makes() @test {
         b3::BodyDef body_def = b3::default_body_def();
         body_def.type = b3::BodyType.DYNAMIC;
         body_def.position = { 0.0, 10.0, 0.0 };
-        if (try body = world.create_body(&body_def)) {
+        if (try body = b3::create_body(world, &body_def)) {
             b3::ShapeDef shape_def = b3::default_shape_def();
             b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 };
-            if (try shape = body.create_sphere_shape(&shape_def, &sphere)) {
+            if (try shape = b3::create_sphere_shape(body, &shape_def, &sphere)) {
                 for (int i = 0; i < 30; i++) {
-                    world.step(1.0f / 60.0f, 4);
+                    b3::world_step(world, 1.0f / 60.0f, 4);
                 }
                 simulated = shape.is_valid();
             }
         }
-        world.destroy();
+        b3::destroy_world(world);
     }
 
     b3::set_allocator(null, null);
@@ -112,7 +112,7 @@ fn void an_installed_log_handler_receives_the_diagnostics_box3d_emits() @test {
     }
 
     for (int i = 0; i < b3::MAX_WORLDS; i++) {
-        worlds[i].destroy();
+        b3::destroy_world(worlds[i]);
     }
 
     String logged = ((ZString)&last_log_message).str_view();
@@ -130,7 +130,7 @@ fn void an_assert_handler_can_be_installed() @test {
 
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     assert(world.is_valid(), "a world builds normally with an assert handler installed");
 }

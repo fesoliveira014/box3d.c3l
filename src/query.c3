@@ -15,15 +15,15 @@ struct OverlapCollector @private {
 
  The ray runs from origin to origin + translation, so the returned fraction multiplies
  translation, not a normalised direction. Initial overlap is ignored: a ray starting inside a
- shape does not report that shape. WorldId.cast_ray() with a callback is the general form.
+ shape does not report that shape. body_cast_ray(WorldId) with a callback is the general form.
 
  @param filter : `obtained from default_query_filter(); an unmodified filter considers every shape`
  @return `the closest hit`
  @return? NO_HIT : `the ray struck nothing`
 *>
-fn RayResult? WorldId.cast_ray_closest(self, Pos origin, Vec3 translation, QueryFilter filter) {
-    RayResult result = cast_ray_closest_raw(
-      world_id: self,
+fn RayResult? world_cast_ray_closest(WorldId world, Pos origin, Vec3 translation, QueryFilter filter) {
+    RayResult result = world_cast_ray_closest_raw(
+      world_id: world,
       origin: origin,
       translation: translation,
       filter: filter,
@@ -38,8 +38,8 @@ fn RayResult? WorldId.cast_ray_closest(self, Pos origin, Vec3 translation, Query
  @return `the hit`
  @return? NO_HIT : `the ray missed the shape`
 *>
-fn WorldCastOutput? ShapeId.ray_cast(self, Pos origin, Vec3 translation) {
-    WorldCastOutput result = shape_ray_cast_raw(self, origin, translation);
+fn WorldCastOutput? shape_ray_cast(ShapeId shape, Pos origin, Vec3 translation) {
+    WorldCastOutput result = shape_ray_cast_raw(shape, origin, translation);
     if (!result.hit) return NO_HIT~;
     return result;
 }
@@ -49,15 +49,14 @@ fn WorldCastOutput? ShapeId.ray_cast(self, Pos origin, Vec3 translation) {
  body's current one — passing a future transform is how a cast against a predicted pose is done.
 
  A max_fraction above 1 is refused: a mesh or height field shape on this body would answer a miss
- as a hit at exactly 1 — see Mesh.ray_cast.
+ as a hit at exactly 1 — see ray_cast_mesh.
 
  @param max_fraction : `the portion of translation to consider, which must not exceed 1`
  @return `the closest hit on this body`
  @return? NO_HIT : `the ray missed it`
  @return? INVALID_DEFINITION : `max_fraction is above 1`
 *>
-fn BodyCastResult? BodyId.cast_ray(
-  self,
+fn BodyCastResult? body_cast_ray(BodyId body,
   Pos origin,
   Vec3 translation,
   QueryFilter filter,
@@ -66,7 +65,7 @@ fn BodyCastResult? BodyId.cast_ray(
 ) {
     if (max_fraction > 1.0f) return INVALID_DEFINITION~;
     BodyCastResult result = body_cast_ray_raw(
-      body_id: self,
+      body_id: body,
       origin: origin,
       translation: translation,
       filter: filter,
@@ -80,7 +79,7 @@ fn BodyCastResult? BodyId.cast_ray(
 <*
  Sweeps a convex proxy at this body alone using a transform the caller supplies. The proxy's
  points are borrowed for the duration of the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. The reported fraction carries the closing slop WorldId.cast_shape derives
+ MAX_SHAPE_CAST_POINTS. The reported fraction carries the closing slop world_cast_shape derives
  from the two radii, so an exact geometric expectation will not match. A max_fraction above 1 is
  refused for the reason cast_ray gives.
 
@@ -90,8 +89,7 @@ fn BodyCastResult? BodyId.cast_ray(
  @return? NO_HIT : `the sweep missed it`
  @return? INVALID_DEFINITION : `max_fraction is above 1`
 *>
-fn BodyCastResult? BodyId.cast_shape(
-  self,
+fn BodyCastResult? body_cast_shape(BodyId body,
   Pos origin,
   ShapeProxy* proxy,
   Vec3 translation,
@@ -102,7 +100,7 @@ fn BodyCastResult? BodyId.cast_shape(
 ) {
     if (max_fraction > 1.0f) return INVALID_DEFINITION~;
     BodyCastResult result = body_cast_shape_raw(
-      body_id: self,
+      body_id: body,
       origin: origin,
       proxy: proxy,
       translation: translation,
@@ -140,21 +138,18 @@ fn ClosestPoint BodyId.closest_point(self, Vec3 target) {
 
  @return `the prefix of buffer that was filled`
 *>
-fn CastHit[] WorldId.cast_ray_all(
-  self,
+fn CastHit[] world_cast_ray_all(WorldId world,
   Pos origin,
   Vec3 translation,
   QueryFilter filter,
   CastHit[] buffer,
 ) {
     CastCollector collector = { .buffer = buffer, .count = 0 };
-    self.cast_ray(
-      origin: origin,
+    world_cast_ray(world, origin: origin,
       translation: translation,
       filter: filter,
       fcn: &collect_cast_hit,
-      context: &collector,
-    );
+      context: &collector,);
     return buffer[:collector.count];
 }
 
@@ -162,12 +157,11 @@ fn CastHit[] WorldId.cast_ray_all(
  Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
  buffer. The proxy's points are borrowed for the call and its count must not exceed
  MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions carry the
- closing slop WorldId.cast_shape derives from the two radii.
+ closing slop world_cast_shape derives from the two radii.
 
  @return `the prefix of buffer that was filled`
 *>
-fn CastHit[] WorldId.cast_shape_all(
-  self,
+fn CastHit[] world_cast_shape_all(WorldId world,
   Pos origin,
   ShapeProxy* proxy,
   Vec3 translation,
@@ -175,14 +169,12 @@ fn CastHit[] WorldId.cast_shape_all(
   CastHit[] buffer,
 ) {
     CastCollector collector = { .buffer = buffer, .count = 0 };
-    self.cast_shape(
-      origin: origin,
+    world_cast_shape(world, origin: origin,
       proxy: proxy,
       translation: translation,
       filter: filter,
       fcn: &collect_cast_hit,
-      context: &collector,
-    );
+      context: &collector,);
     return buffer[:collector.count];
 }
 
@@ -192,14 +184,12 @@ fn CastHit[] WorldId.cast_shape_all(
 
  @return `the prefix of buffer that was filled`
 *>
-fn ShapeId[] WorldId.overlap_aabb_all(self, Aabb aabb, QueryFilter filter, ShapeId[] buffer) {
+fn ShapeId[] world_overlap_aabb_all(WorldId world, Aabb aabb, QueryFilter filter, ShapeId[] buffer) {
     OverlapCollector collector = { .buffer = buffer, .count = 0 };
-    self.overlap_aabb(
-      aabb: aabb,
+    world_overlap_aabb(world, aabb: aabb,
       filter: filter,
       fcn: &collect_overlap,
-      context: &collector,
-    );
+      context: &collector,);
     return buffer[:collector.count];
 }
 
@@ -210,21 +200,18 @@ fn ShapeId[] WorldId.overlap_aabb_all(self, Aabb aabb, QueryFilter filter, Shape
 
  @return `the prefix of buffer that was filled`
 *>
-fn ShapeId[] WorldId.overlap_shape_all(
-  self,
+fn ShapeId[] world_overlap_shape_all(WorldId world,
   Pos origin,
   ShapeProxy* proxy,
   QueryFilter filter,
   ShapeId[] buffer,
 ) {
     OverlapCollector collector = { .buffer = buffer, .count = 0 };
-    self.overlap_shape(
-      origin: origin,
+    world_overlap_shape(world, origin: origin,
       proxy: proxy,
       filter: filter,
       fcn: &collect_overlap,
-      context: &collector,
-    );
+      context: &collector,);
     return buffer[:collector.count];
 }
 

@@ -30,7 +30,7 @@ enum ShapeType : int {
 }
 
 <*
- A shape definition. Must come from default_shape_def() — see BodyId.create_sphere_shape.
+ A shape definition. Must come from default_shape_def() — see create_sphere_shape.
 *>
 struct ShapeDef {
     ZString name;
@@ -103,7 +103,7 @@ extern fn Aabb Capsule.compute_aabb(&self, Transform transform) @cname("b3Comput
 
 <*
  Raw shape constructors. Each bypasses the definition-cookie guard its wrapper in
- box3d_shape.c3 applies, so they are private to the module.
+ src/shape.c3 applies, so they are private to the module.
 *>
 extern fn ShapeId create_sphere_shape_raw(BodyId body_id, ShapeDef* def, Sphere* sphere) @cname("b3CreateSphereShape") @private;
 extern fn ShapeId create_capsule_shape_raw(BodyId body_id, ShapeDef* def, Capsule* capsule) @cname("b3CreateCapsuleShape") @private;
@@ -112,7 +112,7 @@ extern fn ShapeId create_transformed_hull_shape_raw(BodyId body_id, ShapeDef* de
 
 <*
  Raw mesh and height field shape constructors, private because they bypass the null-geometry guard
- their wrappers in box3d_mesh.c3 apply — box3d reads a version field through the pointer before it
+ their wrappers in src/mesh.c3 apply — box3d reads a version field through the pointer before it
  tests anything.
 *>
 extern fn ShapeId create_mesh_shape_raw(
@@ -130,7 +130,7 @@ extern fn ShapeId create_height_field_shape_raw(
 
 <*
  Raw baked compound shape constructor. It reads the compound's version field before it tests
- anything, so it shares the null hazard of the two above, and the wrapper in box3d_compound.c3
+ anything, so it shares the null hazard of the two above, and the wrapper in src/compound.c3
  carries the same guards. Private for that reason.
 *>
 extern fn ShapeId create_baked_compound_shape_raw(
@@ -139,7 +139,7 @@ extern fn ShapeId create_baked_compound_shape_raw(
   CompoundData* compound,
 ) @cname("b3CreateBakedCompoundShape") @private;
 
-extern fn void ShapeId.destroy(self, bool update_body_mass) @cname("b3DestroyShape");
+extern fn void destroy_shape(ShapeId shape, bool update_body_mass) @cname("b3DestroyShape");
 extern fn bool ShapeId.is_valid(self) @cname("b3Shape_IsValid");
 extern fn ShapeType ShapeId.type(self) @cname("b3Shape_GetType");
 extern fn BodyId ShapeId.body(self) @cname("b3Shape_GetBody");
@@ -182,7 +182,7 @@ extern fn int ShapeId.mesh_material_count(self) @cname("b3Shape_GetMeshMaterialC
 <*
  Raw indexed material accessors. box3d asserts the index is in range and this release build
  compiles that assertion out, leaving a read and a write past the end of the shape's material
- array, so the wrappers in box3d_shape.c3 are the only public way in.
+ array, so the wrappers in src/shape.c3 are the only public way in.
 *>
 extern fn SurfaceMaterial mesh_surface_material_raw(ShapeId shape_id, int index) @cname("b3Shape_GetMeshSurfaceMaterial") @private;
 extern fn void set_mesh_material_raw(ShapeId shape_id, SurfaceMaterial surface_material, int index) @cname("b3Shape_SetMeshMaterial") @private;
@@ -199,7 +199,7 @@ extern fn bool ShapeId.are_hit_events_enabled(self) @cname("b3Shape_AreHitEvents
 <*
  Raw geometry accessors. Each reads a union member box3d selects by shape type and asserts, in a
  debug build, that the type matches; that assertion is compiled out here, so the checked getters
- in box3d_shape.c3 are the only public way in.
+ in src/shape.c3 are the only public way in.
 *>
 extern fn Sphere sphere_raw(ShapeId shape_id) @cname("b3Shape_GetSphere") @private;
 extern fn Capsule capsule_raw(ShapeId shape_id) @cname("b3Shape_GetCapsule") @private;
@@ -209,7 +209,7 @@ extern fn HeightFieldData* height_field_raw(ShapeId shape_id) @cname("b3Shape_Ge
 
 <*
  Sets the shape's geometry and, with it, its type — a capsule handed a sphere becomes a sphere.
- The body's mass is not recomputed until BodyId.apply_mass_from_shapes() is called.
+ The body's mass is not recomputed until body_apply_mass_from_shapes() is called.
 *>
 extern fn void ShapeId.set_sphere(self, Sphere* sphere) @cname("b3Shape_SetSphere");
 extern fn void ShapeId.set_capsule(self, Capsule* capsule) @cname("b3Shape_SetCapsule");
@@ -218,7 +218,7 @@ extern fn void ShapeId.set_hull(self, HullData* hull) @cname("b3Shape_SetHull");
 <*
  Raw mesh setter. Private because a null mesh here is a segmentation fault rather than a refusal —
  box3d recomputes the shape's bounds through the pointer as part of the change — so the wrapper in
- box3d_shape.c3 is the only public way in.
+ src/shape.c3 is the only public way in.
 *>
 extern fn void set_mesh_raw(ShapeId shape_id, MeshData* mesh, Vec3 scale) @cname("b3Shape_SetMesh") @private;
 
@@ -230,4 +230,4 @@ extern fn void set_mesh_raw(ShapeId shape_id, MeshData* mesh, Vec3 scale) @cname
 extern fn Aabb ShapeId.aabb(self) @cname("b3Shape_GetAABB");
 extern fn MassData ShapeId.compute_mass_data(self) @cname("b3Shape_ComputeMassData");
 extern fn Vec3 ShapeId.closest_point(self, Vec3 target) @cname("b3Shape_GetClosestPoint");
-extern fn void ShapeId.apply_wind(self, Vec3 wind, float drag, float lift, float max_speed, bool wake) @cname("b3Shape_ApplyWind");
+extern fn void shape_apply_wind(ShapeId shape, Vec3 wind, float drag, float lift, float max_speed, bool wake) @cname("b3Shape_ApplyWind");

@@ -20,7 +20,7 @@ const ushort TREE_NODE_LEAF = 0x0004;
 
 <*
  One node of a dynamic tree, declared because the tree's two proxy accessors are inline in box3d's
- header rather than exported, so box3d_tree.c3 reimplements them over these fields.
+ header rather than exported, so src/tree.c3 reimplements them over these fields.
 
  A node is a leaf, an internal node or a free slot: the shared eight bytes are a proxy's user
  data, two child indices, or the next free slot. flags says which — TREE_NODE_LEAF is the only
@@ -74,7 +74,7 @@ struct DynamicTree {
  exactly once, and see DynamicTree for what a copy means. The 80-byte struct is the caller's own
  storage; the node pool is on byte_count(), as a world or a mesh is.
 *>
-extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Create");
+extern fn DynamicTree dynamic_tree_create(int proxy_capacity) @cname("b3DynamicTree_Create");
 
 <*
  Releases the node pool and the rebuild arrays, then zeroes the tree, so a second call on the
@@ -85,22 +85,22 @@ extern fn DynamicTree create_tree(int proxy_capacity) @cname("b3DynamicTree_Crea
  area_ratio() and root_bounds() read a freed pool afterwards and crash. Everything else here is
  safe on it: the rest test the node count, which the zeroing sets to 0.
 *>
-extern fn void DynamicTree.destroy(&self) @cname("b3DynamicTree_Destroy");
+extern fn void dynamic_tree_destroy(DynamicTree* tree) @cname("b3DynamicTree_Destroy");
 
 <*
  Writes the tree to the path: the struct with its pointers and rebuild scratch zeroed, then the
  whole node pool including the free list. A path box3d cannot open is a silent no-op — it returns
  nothing a caller could read, which is why this takes no fault where load_tree() does.
 *>
-extern fn void DynamicTree.save(&self, ZString path) @cname("b3DynamicTree_Save");
+extern fn void dynamic_tree_save(DynamicTree* tree, ZString path) @cname("b3DynamicTree_Save");
 
 <*
  Raw tree load. Private because load_tree() reads the zeroed tree box3d answers every refusal
  with as the fault it is.
 *>
-extern fn DynamicTree load_tree_raw(ZString path, float scale) @cname("b3DynamicTree_Load") @private;
+extern fn DynamicTree dynamic_tree_load_raw(ZString path, float scale) @cname("b3DynamicTree_Load") @private;
 
-extern fn int create_proxy_raw(
+extern fn int dynamic_tree_create_proxy_raw(
   DynamicTree* tree,
   Aabb aabb,
   ulong category_bits,
@@ -109,11 +109,11 @@ extern fn int create_proxy_raw(
 
 <*
  Raw proxy calls that index the node array on an id the caller supplies, under assertions this
- build compiles out. box3d_tree.c3 carries the guards and is the only public way in.
+ build compiles out. src/tree.c3 carries the guards and is the only public way in.
 *>
-extern fn void destroy_proxy_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_DestroyProxy") @private;
-extern fn void move_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_MoveProxy") @private;
-extern fn void enlarge_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_EnlargeProxy") @private;
+extern fn void dynamic_tree_destroy_proxy_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_DestroyProxy") @private;
+extern fn void dynamic_tree_move_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_MoveProxy") @private;
+extern fn void dynamic_tree_enlarge_proxy_raw(DynamicTree* tree, int proxy_id, Aabb aabb) @cname("b3DynamicTree_EnlargeProxy") @private;
 extern fn void set_category_bits_raw(DynamicTree* tree, int proxy_id, ulong category_bits) @cname("b3DynamicTree_SetCategoryBits") @private;
 extern fn ulong category_bits_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_GetCategoryBits") @private;
 
@@ -150,7 +150,7 @@ extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount")
  enlarge_proxy() marks the whole ancestor chain, so one of those undoes the saving. Either build
  allocates the rebuild arrays when it has something to sort, and byte_count() carries them.
 *>
-extern fn int DynamicTree.rebuild(&self, bool full_build) @cname("b3DynamicTree_Rebuild");
+extern fn int dynamic_tree_rebuild(DynamicTree* tree, bool full_build) @cname("b3DynamicTree_Rebuild");
 
 <*
  Called once for each proxy a query finds. Returning false ends the traversal, and the tree must
@@ -162,7 +162,7 @@ alias TreeQueryFn = fn bool(int proxy_id, ulong user_data, void* context);
 <*
  Called once for each proxy a closest query reaches, given the search bound as it stands. Only a
  return value below that bound takes effect, so the callback is what measures anything — see
- DynamicTree.query_closest(). TreeQueryFn's rule against modifying the tree holds here too, and
+ dynamic_tree_query_closest(). TreeQueryFn's rule against modifying the tree holds here too, and
  for the same reason.
 *>
 alias TreeClosestFn = fn float(float search_bound, int proxy_id, ulong user_data, void* context);
@@ -176,8 +176,7 @@ alias TreeClosestFn = fn float(float search_bound, int proxy_id, ulong user_data
  every bit of the mask, and only a single-bit mask agrees for every proxy. A zero mask reports
  nothing loosely and everything strictly.
 *>
-extern fn TreeStats DynamicTree.query(
-  &self,
+extern fn TreeStats dynamic_tree_query(DynamicTree* tree,
   Aabb aabb,
   ulong mask_bits,
   bool require_all_bits,
@@ -186,10 +185,10 @@ extern fn TreeStats DynamicTree.query(
 ) @cname("b3DynamicTree_Query");
 
 <*
- The closest traversal, whose in-out float box3d calls minDistanceSqr. box3d_tree.c3 takes that
+ The closest traversal, whose in-out float box3d calls minDistanceSqr. src/tree.c3 takes that
  bound by value and is the only public way in.
 *>
-extern fn TreeStats query_closest_raw(
+extern fn TreeStats dynamic_tree_query_closest_raw(
   DynamicTree* tree,
   Vec3 point,
   ulong mask_bits,
@@ -211,7 +210,7 @@ struct ClosestSearch {
 
 <*
  An axis-aligned box swept along translation, in the tree's own frame. The box never rotates, and
- what travels is its centre: DynamicTree.box_cast() grows each node box by this one's half-extents
+ what travels is its centre: dynamic_tree_box_cast() grows each node box by this one's half-extents
  on all three axes and runs the centre's line through that, so the box enters the sweep only as a
  centre and a size.
 *>
@@ -241,8 +240,7 @@ alias TreeBoxCastFn = fn float(BoxCastInput* input, int proxy_id, ulong user_dat
  box holds is the callback's work. query() gives the mask flags and the traversal stack's limit,
  which apply here too, and TreeRayCastFn gives what fcn's return does.
 *>
-extern fn TreeStats DynamicTree.ray_cast(
-  &self,
+extern fn TreeStats dynamic_tree_ray_cast(DynamicTree* tree,
   RayCastInput* input,
   ulong mask_bits,
   bool require_all_bits,
@@ -255,8 +253,7 @@ extern fn TreeStats DynamicTree.ray_cast(
  ray_cast() states and with TreeBoxCastFn in place of TreeRayCastFn. See BoxCastInput for what
  box3d sweeps, which is not the box itself.
 *>
-extern fn TreeStats DynamicTree.box_cast(
-  &self,
+extern fn TreeStats dynamic_tree_box_cast(DynamicTree* tree,
   BoxCastInput* input,
   ulong mask_bits,
   bool require_all_bits,

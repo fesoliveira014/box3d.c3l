@@ -32,9 +32,9 @@ struct PrismaticJointDef {
 extern fn PrismaticJointDef default_prismatic_joint_def() @cname("b3DefaultPrismaticJointDef");
 
 <*
- Raw prismatic joint constructor. Bypasses WorldId.create_prismatic_joint's definition guard and
+ Raw prismatic joint constructor. Bypasses create_prismatic_joint's definition guard and
  hands back a joint of no particular type, so it is private to the module —
- box3d_joint_prismatic.c3's WorldId.create_prismatic_joint is the only caller and is the only
+ src/joint_prismatic.c3's create_prismatic_joint is the only caller and is the only
  public way to a live prismatic joint.
 *>
 extern fn JointId create_prismatic_joint_raw(

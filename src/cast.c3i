@@ -37,37 +37,37 @@ extern fn bool RayCastInput.is_valid(&self) @cname("b3IsValidRay");
 <*
  Raw local-space ray casts. Private because a miss comes back as a struct whose remaining fields
  are undefined — the mesh returns the input's own max_fraction in one of them — and the wrappers
- in box3d_cast.c3 turn a miss into a fault.
+ in src/cast.c3 turn a miss into a fault.
 *>
-extern fn CastOutput sphere_ray_cast_raw(Sphere* shape, RayCastInput* input) @cname("b3RayCastSphere") @private;
-extern fn CastOutput hollow_sphere_ray_cast_raw(Sphere* shape, RayCastInput* input) @cname("b3RayCastHollowSphere") @private;
-extern fn CastOutput capsule_ray_cast_raw(Capsule* shape, RayCastInput* input) @cname("b3RayCastCapsule") @private;
-extern fn CastOutput compound_ray_cast_raw(CompoundData* shape, RayCastInput* input) @cname("b3RayCastCompound") @private;
-extern fn CastOutput hull_ray_cast_raw(HullData* shape, RayCastInput* input) @cname("b3RayCastHull") @private;
-extern fn CastOutput mesh_ray_cast_raw(Mesh* shape, RayCastInput* input) @cname("b3RayCastMesh") @private;
-extern fn CastOutput height_field_ray_cast_raw(HeightFieldData* shape, RayCastInput* input) @cname("b3RayCastHeightField") @private;
+extern fn CastOutput ray_cast_sphere_raw(Sphere* shape, RayCastInput* input) @cname("b3RayCastSphere") @private;
+extern fn CastOutput ray_cast_hollow_sphere_raw(Sphere* shape, RayCastInput* input) @cname("b3RayCastHollowSphere") @private;
+extern fn CastOutput ray_cast_capsule_raw(Capsule* shape, RayCastInput* input) @cname("b3RayCastCapsule") @private;
+extern fn CastOutput ray_cast_compound_raw(CompoundData* shape, RayCastInput* input) @cname("b3RayCastCompound") @private;
+extern fn CastOutput ray_cast_hull_raw(HullData* shape, RayCastInput* input) @cname("b3RayCastHull") @private;
+extern fn CastOutput ray_cast_mesh_raw(Mesh* shape, RayCastInput* input) @cname("b3RayCastMesh") @private;
+extern fn CastOutput ray_cast_height_field_raw(HeightFieldData* shape, RayCastInput* input) @cname("b3RayCastHeightField") @private;
 
 <*
  Raw local-space shape casts. Private for the reason the raw ray casts are, and for one more: a
  proxy holding no points is read as though it held its first point rather than refused, so the
  answer looks ordinary while describing geometry the caller never named. The wrappers in
- box3d_cast.c3 check the proxy first.
+ src/cast.c3 check the proxy first.
 *>
-extern fn CastOutput sphere_shape_cast_raw(Sphere* shape, ShapeCastInput* input) @cname("b3ShapeCastSphere") @private;
-extern fn CastOutput capsule_shape_cast_raw(Capsule* shape, ShapeCastInput* input) @cname("b3ShapeCastCapsule") @private;
-extern fn CastOutput compound_shape_cast_raw(CompoundData* shape, ShapeCastInput* input) @cname("b3ShapeCastCompound") @private;
-extern fn CastOutput hull_shape_cast_raw(HullData* shape, ShapeCastInput* input) @cname("b3ShapeCastHull") @private;
-extern fn CastOutput mesh_shape_cast_raw(Mesh* shape, ShapeCastInput* input) @cname("b3ShapeCastMesh") @private;
-extern fn CastOutput height_field_shape_cast_raw(HeightFieldData* shape, ShapeCastInput* input) @cname("b3ShapeCastHeightField") @private;
+extern fn CastOutput shape_cast_sphere_raw(Sphere* shape, ShapeCastInput* input) @cname("b3ShapeCastSphere") @private;
+extern fn CastOutput shape_cast_capsule_raw(Capsule* shape, ShapeCastInput* input) @cname("b3ShapeCastCapsule") @private;
+extern fn CastOutput shape_cast_compound_raw(CompoundData* shape, ShapeCastInput* input) @cname("b3ShapeCastCompound") @private;
+extern fn CastOutput shape_cast_hull_raw(HullData* shape, ShapeCastInput* input) @cname("b3ShapeCastHull") @private;
+extern fn CastOutput shape_cast_mesh_raw(Mesh* shape, ShapeCastInput* input) @cname("b3ShapeCastMesh") @private;
+extern fn CastOutput shape_cast_height_field_raw(HeightFieldData* shape, ShapeCastInput* input) @cname("b3ShapeCastHeightField") @private;
 
 <*
  Raw overlap predicates. Private because a proxy holding no points is not refused: four kinds read
  it as though it held its first point, and the mesh and the height field answer from a stack buffer
  nothing wrote, so the result follows the caller's stray memory. The wrappers refuse it.
 *>
-extern fn bool sphere_overlap_raw(Sphere* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapSphere") @private;
-extern fn bool capsule_overlap_raw(Capsule* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCapsule") @private;
-extern fn bool compound_overlap_raw(CompoundData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCompound") @private;
-extern fn bool hull_overlap_raw(HullData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHull") @private;
-extern fn bool mesh_overlap_raw(Mesh* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapMesh") @private;
-extern fn bool height_field_overlap_raw(HeightFieldData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHeightField") @private;
+extern fn bool overlap_sphere_raw(Sphere* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapSphere") @private;
+extern fn bool overlap_capsule_raw(Capsule* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCapsule") @private;
+extern fn bool overlap_compound_raw(CompoundData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapCompound") @private;
+extern fn bool overlap_hull_raw(HullData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHull") @private;
+extern fn bool overlap_mesh_raw(Mesh* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapMesh") @private;
+extern fn bool overlap_height_field_raw(HeightFieldData* shape, Transform transform, ShapeProxy* proxy) @cname("b3OverlapHeightField") @private;

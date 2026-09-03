@@ -55,9 +55,9 @@ fn SpherePairReadings the_readings_of_two_half_metre_spheres() {
     b3::Sphere b = a_half_metre_sphere();
 
     return {
-      .overlapping = the_reading_of(a.collide_sphere(b, a_placement_at({ 0.75, 0.0, 0.0 }))),
-      .apart = the_reading_of(a.collide_sphere(b, a_placement_at({ 3.0, 0.0, 0.0 }))),
-      .just_clear = the_reading_of(a.collide_sphere(b, a_placement_at({ 1.01, 0.0, 0.0 }))),
+      .overlapping = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 0.75, 0.0, 0.0 }))),
+      .apart = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 3.0, 0.0, 0.0 }))),
+      .just_clear = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 1.01, 0.0, 0.0 }))),
     };
 }
 
@@ -113,9 +113,9 @@ fn CapsuleAndSphereReadings the_readings_of_a_capsule_under_a_sphere() {
     b3::Sphere sphere = a_half_metre_sphere();
 
     return {
-      .overlapping = the_reading_of(capsule.collide_sphere(sphere, a_placement_at({ 0.0, 0.6, 0.0 }))),
-      .just_clear = the_reading_of(capsule.collide_sphere(sphere, a_placement_at({ 0.0, 0.76, 0.0 }))),
-      .centres_coincident = the_reading_of(collapsed.collide_sphere(sphere, a_placement_at({ 0.0, 0.6, 0.0 }))),
+      .overlapping = the_reading_of(b3::collide_capsule_and_sphere(&capsule, sphere, a_placement_at({ 0.0, 0.6, 0.0 }))),
+      .just_clear = the_reading_of(b3::collide_capsule_and_sphere(&capsule, sphere, a_placement_at({ 0.0, 0.76, 0.0 }))),
+      .centres_coincident = the_reading_of(b3::collide_capsule_and_sphere(&collapsed, sphere, a_placement_at({ 0.0, 0.6, 0.0 }))),
     };
 }
 
@@ -168,10 +168,10 @@ fn HullAndSphereReadings the_readings_of_a_box_hull_under_a_sphere() {
     b3::Sphere sphere = a_half_metre_sphere();
 
     return {
-      .overlapping = the_reading_of(box.base.collide_sphere(sphere, a_placement_at({ 0.0, 0.9, 0.0 }))),
-      .just_clear = the_reading_of(box.base.collide_sphere(sphere, a_placement_at({ 0.0, 1.01, 0.0 }))),
-      .centre_inside = the_reading_of(box.base.collide_sphere(sphere, a_placement_at({ 0.0, 0.2, 0.0 }))),
-      .apart = the_reading_of(box.base.collide_sphere(sphere, a_placement_at({ 0.0, 3.0, 0.0 }))),
+      .overlapping = the_reading_of(b3::collide_hull_and_sphere(&box.base, sphere, a_placement_at({ 0.0, 0.9, 0.0 }))),
+      .just_clear = the_reading_of(b3::collide_hull_and_sphere(&box.base, sphere, a_placement_at({ 0.0, 1.01, 0.0 }))),
+      .centre_inside = the_reading_of(b3::collide_hull_and_sphere(&box.base, sphere, a_placement_at({ 0.0, 0.2, 0.0 }))),
+      .apart = the_reading_of(b3::collide_hull_and_sphere(&box.base, sphere, a_placement_at({ 0.0, 3.0, 0.0 }))),
     };
 }
 
@@ -247,11 +247,11 @@ fn CapsulePairReadings the_readings_of_two_parallel_capsules() {
     b3::Transform above = a_placement_at({ 0.0, 0.4, 0.0 });
 
     return {
-      .parallel = the_reading_of(a.collide_capsule(b, above)),
-      .crossing = the_reading_of(a.collide_capsule(along_z, a_placement_at({ 0.0, 0.0, 0.0 }))),
-      .a_too_short = the_reading_of(too_short.collide_capsule(b, above)),
-      .b_too_short = the_reading_of(a.collide_capsule(too_short, above)),
-      .a_short_enough = the_reading_of(short_enough.collide_capsule(b, above)),
+      .parallel = the_reading_of(b3::collide_capsules(&a, b, above)),
+      .crossing = the_reading_of(b3::collide_capsules(&a, along_z, a_placement_at({ 0.0, 0.0, 0.0 }))),
+      .a_too_short = the_reading_of(b3::collide_capsules(&too_short, b, above)),
+      .b_too_short = the_reading_of(b3::collide_capsules(&a, too_short, above)),
+      .a_short_enough = the_reading_of(b3::collide_capsules(&short_enough, b, above)),
     };
 }
 
@@ -342,10 +342,10 @@ fn HullAndCapsuleReadings the_readings_of_a_box_hull_under_a_capsule() {
     b3::Capsule lifted = { .center1 = { -0.3, 0.0, 0.0 }, .center2 = { 0.3, 1.0, 0.0 }, .radius = 0.25 };
 
     return {
-      .overlapping = the_reading_of(box.base.collide_capsule(capsule, a_placement_at({ 0.0, 0.7, 0.0 }))),
-      .just_clear = the_reading_of(box.base.collide_capsule(capsule, a_placement_at({ 0.0, 0.76, 0.0 }))),
-      .apart = the_reading_of(box.base.collide_capsule(capsule, a_placement_at({ 0.0, 0.78, 0.0 }))),
-      .one_end_lifted = the_reading_of(box.base.collide_capsule(lifted, a_placement_at({ 0.0, 0.7, 0.0 }))),
+      .overlapping = the_reading_of(b3::collide_hull_and_capsule(&box.base, capsule, a_placement_at({ 0.0, 0.7, 0.0 }))),
+      .just_clear = the_reading_of(b3::collide_hull_and_capsule(&box.base, capsule, a_placement_at({ 0.0, 0.76, 0.0 }))),
+      .apart = the_reading_of(b3::collide_hull_and_capsule(&box.base, capsule, a_placement_at({ 0.0, 0.78, 0.0 }))),
+      .one_end_lifted = the_reading_of(b3::collide_hull_and_capsule(&box.base, lifted, a_placement_at({ 0.0, 0.7, 0.0 }))),
     };
 }
 
@@ -414,13 +414,13 @@ fn HullPairReadings the_readings_of_two_box_hulls() {
     b3::BoxHull a = b3::make_box_hull(0.5, 0.5, 0.5);
     b3::BoxHull b = b3::make_box_hull(0.5, 0.5, 0.5);
     HullPairReadings readings = {
-      .overlapping = the_reading_of(a.base.collide_hull(&b.base, a_placement_at({ 0.9, 0.0, 0.0 }))!!),
-      .touching = the_reading_of(a.base.collide_hull(&b.base, a_placement_at({ 1.0, 0.0, 0.0 }))!!),
-      .just_clear = the_reading_of(a.base.collide_hull(&b.base, a_placement_at({ 1.01, 0.0, 0.0 }))!!),
-      .apart = the_reading_of(a.base.collide_hull(&b.base, a_placement_at({ 3.0, 0.0, 0.0 }))!!),
+      .overlapping = the_reading_of(b3::collide_hulls(&a.base, &b.base, a_placement_at({ 0.9, 0.0, 0.0 }))!!),
+      .touching = the_reading_of(b3::collide_hulls(&a.base, &b.base, a_placement_at({ 1.0, 0.0, 0.0 }))!!),
+      .just_clear = the_reading_of(b3::collide_hulls(&a.base, &b.base, a_placement_at({ 1.01, 0.0, 0.0 }))!!),
+      .apart = the_reading_of(b3::collide_hulls(&a.base, &b.base, a_placement_at({ 3.0, 0.0, 0.0 }))!!),
     };
 
-    if (catch err = a.base.collide_hull(null, a_placement_at({ 0.9, 0.0, 0.0 }))) readings.null_hull = err;
+    if (catch err = b3::collide_hulls(&a.base, null, a_placement_at({ 0.9, 0.0, 0.0 }))) readings.null_hull = err;
     return readings;
 }
 
@@ -492,11 +492,11 @@ fn TriangleAndSphereReadings the_readings_of_a_triangle_under_a_sphere() {
     b3::Sphere behind = { .center = { 0.0, -0.4, 0.0 }, .radius = 0.5 };
 
     return {
-      .overlapping = the_reading_of(triangle.collide_sphere(overlapping)!!),
-      .touching = the_reading_of(triangle.collide_sphere(touching)!!),
-      .just_clear = the_reading_of(triangle.collide_sphere(just_clear)!!),
-      .apart = the_reading_of(triangle.collide_sphere(apart)!!),
-      .behind = the_reading_of(triangle.collide_sphere(behind)!!),
+      .overlapping = the_reading_of(b3::collide_triangle_and_sphere(&triangle, overlapping)!!),
+      .touching = the_reading_of(b3::collide_triangle_and_sphere(&triangle, touching)!!),
+      .just_clear = the_reading_of(b3::collide_triangle_and_sphere(&triangle, just_clear)!!),
+      .apart = the_reading_of(b3::collide_triangle_and_sphere(&triangle, apart)!!),
+      .behind = the_reading_of(b3::collide_triangle_and_sphere(&triangle, behind)!!),
     };
 }
 
@@ -567,11 +567,11 @@ fn TriangleAndCapsuleReadings the_readings_of_a_triangle_under_a_capsule() {
     b3::Capsule tipped = { .center1 = { -0.3, 0.2, 0.0 }, .center2 = { 0.3, -0.4, 0.0 }, .radius = 0.25 };
 
     return {
-      .overlapping = the_reading_of(triangle.collide_capsule(overlapping)!!),
-      .just_clear = the_reading_of(triangle.collide_capsule(just_clear)!!),
-      .apart = the_reading_of(triangle.collide_capsule(apart)!!),
-      .behind = the_reading_of(triangle.collide_capsule(behind)!!),
-      .midpoint_behind = the_reading_of(triangle.collide_capsule(tipped)!!),
+      .overlapping = the_reading_of(b3::collide_triangle_and_capsule(&triangle, overlapping)!!),
+      .just_clear = the_reading_of(b3::collide_triangle_and_capsule(&triangle, just_clear)!!),
+      .apart = the_reading_of(b3::collide_triangle_and_capsule(&triangle, apart)!!),
+      .behind = the_reading_of(b3::collide_triangle_and_capsule(&triangle, behind)!!),
+      .midpoint_behind = the_reading_of(b3::collide_triangle_and_capsule(&triangle, tipped)!!),
     };
 }
 
@@ -640,7 +640,7 @@ fn ClippedReading the_clipped_reading_of(
   usz slots,
 ) {
     b3::LocalManifoldPoint[CLIPPED_POINT_SLOTS] buffer;
-    b3::CollisionManifoldView view = triangle.collide_hull(hull, enable_speculative, buffer[:slots])!!;
+    b3::CollisionManifoldView view = b3::collide_triangle_and_hull(&triangle, hull, enable_speculative, buffer[:slots])!!;
 
     ClippedReading reading = { .count = view.points.len, .normal = view.normal };
     foreach (index, point : view.points) {
@@ -781,12 +781,12 @@ fn ClippedRefusals the_refusals_of_a_triangle_and_hull_call() {
     b3::LocalManifoldPoint[CLIPPED_POINT_SLOTS] buffer;
     ClippedRefusals refusals;
 
-    if (catch err = triangle.collide_hull(null, true, buffer[..])) refusals.null_hull = err;
-    if (catch err = triangle.collide_hull(&box.base, true, buffer[:(usz)b3::MAX_MANIFOLD_POINTS - 1])) {
+    if (catch err = b3::collide_triangle_and_hull(&triangle, null, true, buffer[..])) refusals.null_hull = err;
+    if (catch err = b3::collide_triangle_and_hull(&triangle, &box.base, true, buffer[:(usz)b3::MAX_MANIFOLD_POINTS - 1])) {
         refusals.short_buffer = err;
     }
 
-    b3::CollisionManifoldView answered = triangle.collide_hull(&box.base, true, buffer[..])!!;
+    b3::CollisionManifoldView answered = b3::collide_triangle_and_hull(&triangle, &box.base, true, buffer[..])!!;
     refusals.answered = answered.points.len;
     return refusals;
 }
@@ -846,12 +846,12 @@ fn DegenerateTriangleRefusals the_refusals_of_a_triangle_with_no_area() {
     b3::LocalManifoldPoint[8] buffer;
 
     DegenerateTriangleRefusals refused;
-    if (catch err = flat.collide_sphere(ball)) refused.sphere = err;
-    if (catch err = flat.collide_capsule(rod)) refused.capsule = err;
-    if (catch err = flat.collide_hull(&cube.base, true, buffer[..])) refused.hull = err;
+    if (catch err = b3::collide_triangle_and_sphere(&flat, ball)) refused.sphere = err;
+    if (catch err = b3::collide_triangle_and_capsule(&flat, rod)) refused.capsule = err;
+    if (catch err = b3::collide_triangle_and_hull(&flat, &cube.base, true, buffer[..])) refused.hull = err;
 
     b3::Triangle real = a_wide_triangle_facing_up();
-    if (try contact = real.collide_sphere(ball)) refused.anchor_points = contact.point_count;
+    if (try contact = b3::collide_triangle_and_sphere(&real, ball)) refused.anchor_points = contact.point_count;
 
     return refused;
 }

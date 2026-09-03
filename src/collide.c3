@@ -38,12 +38,12 @@ fn bool triangle_has_area(Triangle* triangle) @private {
  zero where the surfaces meet, negative once they overlap. Coincident centres report minus the
  summed radii under a +y normal, box3d's fallback direction rather than a measured one.
 *>
-fn CollisionManifold Sphere.collide_sphere(&self, Sphere other, Transform transform_b_to_a) {
+fn CollisionManifold collide_spheres(Sphere* sphere, Sphere other, Transform transform_b_to_a) {
     return @manifold_from(; LocalManifold* m) {
         collide_spheres_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          sphere_a: self,
+          sphere_a: sphere,
           sphere_b: &other,
           transform_b_to_a: transform_b_to_a,
         );
@@ -58,12 +58,12 @@ fn CollisionManifold Sphere.collide_sphere(&self, Sphere other, Transform transf
  the surfaces meet. A capsule whose centres coincide is collided as the sphere they name, and a
  sphere on the capsule's axis reports a +y normal, box3d's fallback where there is none to measure.
 *>
-fn CollisionManifold Capsule.collide_sphere(&self, Sphere sphere, Transform transform_b_to_a) {
+fn CollisionManifold collide_capsule_and_sphere(Capsule* capsule, Sphere sphere, Transform transform_b_to_a) {
     return @manifold_from(; LocalManifold* m) {
         collide_capsule_and_sphere_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          capsule_a: self,
+          capsule_a: capsule,
           sphere_b: &sphere,
           transform_b_to_a: transform_b_to_a,
         );
@@ -78,13 +78,13 @@ fn CollisionManifold Capsule.collide_sphere(&self, Sphere sphere, Transform tran
  not yet touching. A sphere centre inside the hull is answered from the nearest face — box3d takes
  the greatest separation, which inside is the least negative.
 *>
-fn CollisionManifold HullData.collide_sphere(&self, Sphere sphere, Transform transform_b_to_a) {
+fn CollisionManifold collide_hull_and_sphere(HullData* hull, Sphere sphere, Transform transform_b_to_a) {
     SimplexCache warm_start;
     return @manifold_from(; LocalManifold* m) {
         collide_hull_and_sphere_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          hull_a: self,
+          hull_a: hull,
           sphere_b: &sphere,
           transform_b_to_a: transform_b_to_a,
           cache: &warm_start,
@@ -99,12 +99,12 @@ fn CollisionManifold HullData.collide_sphere(&self, Sphere sphere, Transform tra
  the one-point branch. Nothing at all is reported when either capsule is shorter than a linear
  slop, or the axes pass within a hundredth of one of each other — coaxial as well as crossing.
 *>
-fn CollisionManifold Capsule.collide_capsule(&self, Capsule other, Transform transform_b_to_a) {
+fn CollisionManifold collide_capsules(Capsule* capsule, Capsule other, Transform transform_b_to_a) {
     return @manifold_from(; LocalManifold* m) {
         collide_capsules_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          capsule_a: self,
+          capsule_a: capsule,
           capsule_b: &other,
           transform_b_to_a: transform_b_to_a,
         );
@@ -119,13 +119,13 @@ fn CollisionManifold Capsule.collide_capsule(&self, Capsule other, Transform tra
  Two points come from clipping the capsule's segment onto a face, which box3d admits on either end
  alone and then reports both of, so the second can be far from contact — measured at +0.95.
 *>
-fn CollisionManifold HullData.collide_capsule(&self, Capsule capsule, Transform transform_b_to_a) {
+fn CollisionManifold collide_hull_and_capsule(HullData* hull, Capsule capsule, Transform transform_b_to_a) {
     SimplexCache warm_start;
     return @manifold_from(; LocalManifold* m) {
         collide_hull_and_capsule_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          hull_a: self,
+          hull_a: hull,
           capsule_b: &capsule,
           transform_b_to_a: transform_b_to_a,
           cache: &warm_start,
@@ -143,7 +143,7 @@ fn CollisionManifold HullData.collide_capsule(&self, Capsule capsule, Transform 
  @return `the contact`
  @return? INVALID_DEFINITION : `other is null`
 *>
-fn CollisionManifold? HullData.collide_hull(&self, HullData* other, Transform transform_b_to_a) {
+fn CollisionManifold? collide_hulls(HullData* hull, HullData* other, Transform transform_b_to_a) {
     if (other == null) return INVALID_DEFINITION~;
 
     SatCache warm_start;
@@ -151,7 +151,7 @@ fn CollisionManifold? HullData.collide_hull(&self, HullData* other, Transform tr
         collide_hulls_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          hull_a: self,
+          hull_a: hull,
           hull_b: other,
           transform_b_to_a: transform_b_to_a,
           cache: &warm_start,
@@ -169,13 +169,13 @@ fn CollisionManifold? HullData.collide_hull(&self, HullData* other, Transform tr
  @return `the contact`
  @return? DEGENERATE_GEOMETRY : `the triangle has no area`
 *>
-fn CollisionManifold? Triangle.collide_sphere(&self, Sphere sphere) {
-    if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
+fn CollisionManifold? collide_triangle_and_sphere(Triangle* triangle, Sphere sphere) {
+    if (!triangle_has_area(triangle)) return DEGENERATE_GEOMETRY~;
     return @manifold_from(; LocalManifold* m) {
         collide_triangle_and_sphere_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          triangle_a: (Vec3*)self,
+          triangle_a: (Vec3*)triangle,
           sphere_b: &sphere,
         );
     };
@@ -190,14 +190,14 @@ fn CollisionManifold? Triangle.collide_sphere(&self, Sphere sphere) {
  @return `the contact`
  @return? DEGENERATE_GEOMETRY : `the triangle has no area`
 *>
-fn CollisionManifold? Triangle.collide_capsule(&self, Capsule capsule) {
-    if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
+fn CollisionManifold? collide_triangle_and_capsule(Triangle* triangle, Capsule capsule) {
+    if (!triangle_has_area(triangle)) return DEGENERATE_GEOMETRY~;
     SimplexCache warm_start;
     return @manifold_from(; LocalManifold* m) {
         collide_triangle_and_capsule_raw(
           manifold: m,
           capacity: MAX_MANIFOLD_POINTS,
-          triangle_a: (Vec3*)self,
+          triangle_a: (Vec3*)triangle,
           capsule_b: &capsule,
           cache: &warm_start,
         );
@@ -219,19 +219,18 @@ fn CollisionManifold? Triangle.collide_capsule(&self, Capsule capsule) {
  @return? INVALID_DEFINITION : `hull is null`
  @return? BUFFER_TOO_SMALL : `buffer holds fewer than MAX_MANIFOLD_POINTS`
 *>
-fn CollisionManifoldView? Triangle.collide_hull(
-  &self,
+fn CollisionManifoldView? collide_triangle_and_hull(Triangle* triangle,
   HullData* hull,
   bool enable_speculative,
   LocalManifoldPoint[] buffer,
 ) {
-    if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
+    if (!triangle_has_area(triangle)) return DEGENERATE_GEOMETRY~;
     if (hull == null) return INVALID_DEFINITION~;
     if (buffer.len < (usz)MAX_MANIFOLD_POINTS) return BUFFER_TOO_SMALL~;
 
     LocalManifold manifold = { .points = buffer.ptr };
     SatCache warm_start;
-    Vec3* vertices = (Vec3*)self;
+    Vec3* vertices = (Vec3*)triangle;
     collide_triangle_and_hull_raw(
       manifold: &manifold,
       capacity: (int)buffer.len,

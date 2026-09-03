@@ -137,9 +137,9 @@ fn b3::WorldId a_world_of_three_spheres(DrawTally* tally, bool answer_for_its_sh
         b3::BodyDef body_def = b3::default_body_def();
         body_def.position = placement.position;
         body_def.rotation = placement.rotation;
-        b3::BodyId body = world.create_body(&body_def)!!;
+        b3::BodyId body = b3::create_body(world, &body_def)!!;
         b3::Sphere sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = placement.radius };
-        body.create_sphere_shape(&shape_def, &sphere)!!;
+        b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     }
     return world;
 }
@@ -174,30 +174,30 @@ fn DrawPasses the_readings_from_five_draw_passes_over_three_spheres() {
     DrawPasses passes;
 
     draw::DebugDraw nothing_raised = a_renderer_wired_to(&tally);
-    world.draw(&nothing_raised, ulong::max);
+    draw::world_draw(world, &nothing_raised, ulong::max);
     passes.offered_under_the_default_flags = tally.offered;
     passes.drawn_under_the_default_flags = tally.shapes_drawn;
     passes.bounds_under_the_default_flags = tally.bounds_drawn;
 
     draw::DebugDraw bounds_raised = a_renderer_wired_to(&tally);
     bounds_raised.draw_bounds = true;
-    world.draw(&bounds_raised, ulong::max);
+    draw::world_draw(world, &bounds_raised, ulong::max);
     passes.bounds_with_bounds_raised = tally.bounds_drawn;
     passes.shapes_with_bounds_raised = tally.shapes_drawn;
     passes.bounds_union = tally.bounds_union;
 
     draw::DebugDraw shapes_raised = a_renderer_wired_to(&tally);
     shapes_raised.draw_shapes = true;
-    world.draw(&shapes_raised, ulong::max);
+    draw::world_draw(world, &shapes_raised, ulong::max);
     passes.offered_with_shapes_raised = tally.offered;
     passes.drawn_with_shapes_raised = tally.shapes_drawn;
 
-    world.draw(&shapes_raised, ulong::max);
+    draw::world_draw(world, &shapes_raised, ulong::max);
     passes.offered_by_a_second_pass = tally.offered - passes.offered_with_shapes_raised;
     passes.drawn_by_a_second_pass = tally.shapes_drawn - passes.drawn_with_shapes_raised;
 
     int drawn_before_the_zero_mask = tally.shapes_drawn;
-    world.draw(&shapes_raised, 0);
+    draw::world_draw(world, &shapes_raised, 0);
     passes.drawn_under_a_zero_mask = tally.shapes_drawn - drawn_before_the_zero_mask;
 
     for (int index = 0; index < tally.offered; index++) {
@@ -205,7 +205,7 @@ fn DrawPasses the_readings_from_five_draw_passes_over_three_spheres() {
     }
     passes.shapes = tally.shapes;
 
-    world.destroy();
+    b3::destroy_world(world);
     passes.withdrawn_by_destroying_the_world = tally.withdrawn;
     return passes;
 }
@@ -293,8 +293,8 @@ fn TwoSwitches the_readings_from_a_world_that_answers_for_its_shapes_and_one_tha
     draw::DebugDraw over_the_answering = a_renderer_wired_to(&answering);
     over_the_answering.draw_shapes = true;
     over_the_answering.draw_bounds = true;
-    answers.draw(&over_the_answering, ulong::max);
-    answers.destroy();
+    draw::world_draw(answers, &over_the_answering, ulong::max);
+    b3::destroy_world(answers);
     switches.offered_by_a_world_that_answers = answering.offered;
     switches.drawn_by_a_world_that_answers = answering.shapes_drawn;
 
@@ -303,8 +303,8 @@ fn TwoSwitches the_readings_from_a_world_that_answers_for_its_shapes_and_one_tha
     draw::DebugDraw over_the_silent = a_renderer_wired_to(&silent);
     over_the_silent.draw_shapes = true;
     over_the_silent.draw_bounds = true;
-    does_not.draw(&over_the_silent, ulong::max);
-    does_not.destroy();
+    draw::world_draw(does_not, &over_the_silent, ulong::max);
+    b3::destroy_world(does_not);
     switches.drawn_by_a_world_that_does_not = silent.shapes_drawn;
     switches.bounds_by_a_world_that_does_not = silent.bounds_drawn;
 
@@ -370,10 +370,10 @@ fn DrawnQueries the_readings_from_drawing_a_replayed_frames_queries() {
     DrawnQueries drawn;
 
     record::Recording* recording = record::create_recording(0);
-    defer recording.destroy();
+    defer record::destroy_recording(recording);
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
-    defer pair.world.destroy();
+    defer b3::destroy_world(pair.world);
 
     if (!a_busy_session_recorded_into(pair, recording)) return drawn;
 
@@ -383,9 +383,9 @@ fn DrawnQueries the_readings_from_drawing_a_replayed_frames_queries() {
     DrawTally tally;
     draw::DebugDraw draw = a_renderer_wired_to(&tally);
 
-    player.seek_frame(A_QUERY_FRAME);
+    record::player_seek_frame(player, A_QUERY_FRAME);
     drawn.queries_at_the_frame = player.frame_query_count();
-    player.draw_frame_queries(&draw, -1, -1);
+    record::player_draw_frame_queries(player, &draw, -1, -1);
     drawn.segments_over_the_frame = tally.segments_drawn;
     drawn.points_over_the_frame = tally.points_drawn;
     drawn.bounds_over_the_frame = tally.bounds_drawn;
@@ -393,20 +393,20 @@ fn DrawnQueries the_readings_from_drawing_a_replayed_frames_queries() {
 
     int segments_before_one = tally.segments_drawn;
     int bounds_before_one = tally.bounds_drawn;
-    player.draw_frame_queries(&draw, 0, -1);
+    record::player_draw_frame_queries(player, &draw, 0, -1);
     drawn.segments_for_one_named_query = tally.segments_drawn - segments_before_one;
     drawn.bounds_for_one_named_query = tally.bounds_drawn - bounds_before_one;
 
     int strings_before_a_selection = tally.strings_drawn;
-    player.draw_frame_queries(&draw, -1, 0);
+    record::player_draw_frame_queries(player, &draw, -1, 0);
     drawn.strings_for_a_selected_query = tally.strings_drawn - strings_before_a_selection;
 
     int segments_before_an_empty_frame = tally.segments_drawn;
-    player.seek_frame(A_QUERY_FRAME + 1);
-    player.draw_frame_queries(&draw, -1, -1);
+    record::player_seek_frame(player, A_QUERY_FRAME + 1);
+    record::player_draw_frame_queries(player, &draw, -1, -1);
     drawn.segments_over_a_frame_that_issued_none = tally.segments_drawn - segments_before_an_empty_frame;
 
-    player.destroy();
+    record::destroy_player(player);
     return drawn;
 }
 

@@ -14,7 +14,7 @@ enum JointType : int {
 
 <*
  The definition every joint type builds on. Must come from default_filter_joint_def(), or from
- another type's default — see WorldId.create_filter_joint. Both local frames are measured from
+ another type's default — see create_filter_joint. Both local frames are measured from
  their body's origin rather than its centre of mass, so recomputing a body's mass leaves the
  joint where it was. default_filter_joint_def() sets force_threshold and torque_threshold to
  float::max, and a joint whose thresholds both keep that value is never checked at all: either one
@@ -55,8 +55,8 @@ struct ConstraintTuning {
 }
 
 <*
- Raw filter joint constructor. Bypasses WorldId.create_filter_joint's definition guard, so it is
- private to the module — box3d_joint.c3's WorldId.create_filter_joint is the only caller and is the
+ Raw filter joint constructor. Bypasses create_filter_joint's definition guard, so it is
+ private to the module — src/joint.c3's create_filter_joint is the only caller and is the
  only public way to a live filter joint.
 *>
 extern fn JointId create_filter_joint_raw(
@@ -72,7 +72,7 @@ extern fn JointId create_filter_joint_raw(
 
  @param wake_attached : `false leaves two sleeping attached bodies asleep; true wakes both`
 *>
-extern fn void JointId.destroy(self, bool wake_attached) @cname("b3DestroyJoint");
+extern fn void destroy_joint(JointId joint, bool wake_attached) @cname("b3DestroyJoint");
 
 <*
  This joint's type, which box3d fixes when the joint is created and offers no way to change.
@@ -138,9 +138,9 @@ extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
 <*
  Wakes both bodies this joint links, not only one — though two dynamic bodies a joint links share
  one island, so waking either of them wakes the other anyway. Silently does nothing while the
- world is locked, mid WorldId.step or inside a callback box3d runs during one.
+ world is locked, mid world_step or inside a callback box3d runs during one.
 *>
-extern fn void JointId.wake_bodies(self) @cname("b3Joint_WakeBodies");
+extern fn void joint_wake_bodies(JointId joint) @cname("b3Joint_WakeBodies");
 
 <*
  The force this joint is applying to hold its constraint, in newtons. box3d branches on the
@@ -192,7 +192,7 @@ extern fn void JointId.set_constraint_tuning(self, float hertz, float damping_ra
 
 <*
  Raw constraint tuning accessor. Private because it reports the pair through two out-parameters;
- box3d_joint.c3's JointId.constraint_tuning() returns them as one value.
+ src/joint.c3's JointId.constraint_tuning() returns them as one value.
 *>
 extern fn void constraint_tuning_raw(
   JointId joint_id,

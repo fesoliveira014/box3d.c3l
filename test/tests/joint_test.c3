@@ -71,11 +71,11 @@ fn b3::BodyId a_dynamic_sphere_at(b3::WorldId world, float x) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {x, 0.0, 0.0};
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     return body;
 }
 
@@ -83,7 +83,7 @@ fn b3::JointId link_with_a_filter_joint(b3::WorldId world, b3::BodyId a, b3::Bod
     b3::FilterJointDef joint_def = b3::default_filter_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_filter_joint(&joint_def)!!;
+    return b3::create_filter_joint(world, &joint_def)!!;
 }
 
 enum SphereLinkage {
@@ -99,7 +99,7 @@ fn float[2] two_overlapping_spheres_after_sixty_steps(SphereLinkage linkage) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -0.4);
     b3::BodyId b = a_dynamic_sphere_at(world, 0.4);
@@ -109,7 +109,7 @@ fn float[2] two_overlapping_spheres_after_sixty_steps(SphereLinkage linkage) {
     }
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {a.position().x, b.position().x};
@@ -119,18 +119,18 @@ fn bool[2] awake_after_nudging_one_of_two_distant_spheres(bool with_joint) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
     if (with_joint) link_with_a_filter_joint(world, a, b);
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     a.set_linear_velocity((b3::Vec3){ 1.0, 0.0, 0.0 });
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     return {a.is_awake(), b.is_awake()};
 }
@@ -147,19 +147,19 @@ fn DestroyedJointOutcome two_sleeping_jointed_spheres_after_destroy(bool wake_at
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
     b3::JointId joint = link_with_a_filter_joint(world, a, b);
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     bool asleep_before = !a.is_awake() && !b.is_awake();
     bool valid_before = joint.is_valid();
-    joint.destroy(wake_attached);
+    b3::destroy_joint(joint, wake_attached);
 
     return {
         .asleep_before = asleep_before,
@@ -175,9 +175,9 @@ fn DestroyedJointOutcome two_sleeping_jointed_spheres_after_destroy(bool wake_at
 fn fault refusal_of_a_filter_joint_definition(b3::FilterJointDef* def) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
-    if (catch err = world.create_filter_joint(def)) return err;
+    if (catch err = b3::create_filter_joint(world, def)) return err;
     return {};
 }
 
@@ -261,13 +261,13 @@ fn RecycledWorldOutcome the_refusal_of_a_definition_naming_a_recycled_world() {
     b3::BodyId stale;
     {
         b3::WorldId gone = b3::create_world(&world_def)!!;
-        defer gone.destroy();
+        defer b3::destroy_world(gone);
         a_dynamic_sphere_at(gone, -1.0);
         stale = a_dynamic_sphere_at(gone, 1.0);
     }
 
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
     b3::BodyId live = a_dynamic_sphere_at(world, 0.0);
 
     b3::FilterJointDef joint_def = b3::default_filter_joint_def();
@@ -278,7 +278,7 @@ fn RecycledWorldOutcome the_refusal_of_a_definition_naming_a_recycled_world() {
         .same_slot = stale.world0 == world.index1 - 1,
         .not_null = !stale.is_null(),
     };
-    if (catch err = world.create_filter_joint(&joint_def)) outcome.refusal = err;
+    if (catch err = b3::create_filter_joint(world, &joint_def)) outcome.refusal = err;
     return outcome;
 }
 
@@ -308,11 +308,11 @@ fn RecycledWorldHandleOutcome the_refusal_of_a_joint_built_through_a_recycled_wo
     b3::WorldId gone;
     {
         gone = b3::create_world(&world_def)!!;
-        defer gone.destroy();
+        defer b3::destroy_world(gone);
     }
 
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
 
@@ -324,7 +324,7 @@ fn RecycledWorldHandleOutcome the_refusal_of_a_joint_built_through_a_recycled_wo
         .same_slot = gone.index1 == world.index1,
         .bodies_valid = a.is_valid() && b.is_valid(),
     };
-    if (catch err = gone.create_filter_joint(&joint_def)) outcome.refusal = err;
+    if (catch err = b3::create_filter_joint(gone, &joint_def)) outcome.refusal = err;
     return outcome;
 }
 
@@ -350,7 +350,7 @@ struct JointIdentity {
 fn JointIdentity the_identity_of_a_filter_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -412,7 +412,7 @@ struct JointFrames {
 fn JointFrames the_local_frames_of_a_filter_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -422,7 +422,7 @@ fn JointFrames the_local_frames_of_a_filter_joint() {
     joint_def.body_id_b = b;
     joint_def.local_frame_a = ANCHOR_A;
     joint_def.local_frame_b = ANCHOR_B;
-    b3::JointId joint = world.create_filter_joint(&joint_def)!!;
+    b3::JointId joint = b3::create_filter_joint(world, &joint_def)!!;
 
     b3::Transform from_definition_a = joint.local_frame_a();
     b3::Transform from_definition_b = joint.local_frame_b();
@@ -460,7 +460,7 @@ fn void a_joint_local_frame_survives_a_setter_round_trip() @test {
 fn bool[2] collision_between_two_jointed_bodies_before_and_after_putting_it_back() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -496,7 +496,7 @@ struct JointUserData {
 fn JointUserData the_user_data_of_a_filter_joint(void* sentinel) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -528,19 +528,19 @@ fn JointWakeOutcome two_sleeping_jointed_spheres_after_waking_through_the_joint(
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
     b3::JointId joint = link_with_a_filter_joint(world, a, b);
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     bool asleep_a = !a.is_awake();
     bool asleep_b = !b.is_awake();
-    joint.wake_bodies();
+    b3::joint_wake_bodies(joint);
 
     return {
         .asleep_a = asleep_a,
@@ -574,7 +574,7 @@ struct JointReaction {
 fn JointReaction the_reaction_of_a_filter_joint_anchored_off_centre() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -585,10 +585,10 @@ fn JointReaction the_reaction_of_a_filter_joint_anchored_off_centre() {
     joint_def.body_id_b = b;
     joint_def.local_frame_a = ANCHOR_A;
     joint_def.local_frame_b = ANCHOR_B;
-    b3::JointId joint = world.create_filter_joint(&joint_def)!!;
+    b3::JointId joint = b3::create_filter_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 8; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -625,7 +625,7 @@ struct JointTuning {
 fn JointTuning the_constraint_tuning_of_a_filter_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -658,7 +658,7 @@ struct JointThresholds {
 fn JointThresholds the_event_thresholds_of_a_filter_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -710,7 +710,7 @@ struct BodyJoints {
 fn BodyJoints the_joints_of_a_body_linked_to_two_others() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId shared = a_dynamic_sphere_at(world, 0.0);
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
@@ -729,8 +729,8 @@ fn BodyJoints the_joints_of_a_body_linked_to_two_others() {
     int filled_cramped = shared.joints(cramped[..]).len;
     int filled_empty = shared.joints(untouched[:0]).len;
 
-    first.destroy(false);
-    second.destroy(false);
+    b3::destroy_joint(first, false);
+    b3::destroy_joint(second, false);
 
     return {
         .count_fresh = count_fresh,
@@ -795,7 +795,7 @@ fn JointEventReport the_joint_events_of_a_filter_joint(bool arm_the_threshold, v
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -3.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 3.0);
@@ -803,7 +803,7 @@ fn JointEventReport the_joint_events_of_a_filter_joint(bool arm_the_threshold, v
     joint.set_user_data(sentinel);
     if (arm_the_threshold) joint.set_force_threshold(0.0f);
 
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     b3::JointEvent[] events = world.joint_events();
     if (events.len == 0) return {.count = 0, .joint = joint};
@@ -874,7 +874,7 @@ fn b3::RevoluteJointId link_with_a_revolute_joint(b3::WorldId world, b3::BodyId 
     b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_revolute_joint(&joint_def)!!;
+    return b3::create_revolute_joint(world, &joint_def)!!;
 }
 
 struct RevoluteHandleReport {
@@ -889,7 +889,7 @@ struct RevoluteHandleReport {
 fn RevoluteHandleReport the_shared_accessors_on_a_new_hinge() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -914,9 +914,9 @@ enum HingeBodies {
 fn fault refusal_of_a_revolute_joint_definition(b3::RevoluteJointDef* def, HingeBodies bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
     b3::WorldId elsewhere = b3::create_world(&world_def)!!;
-    defer elsewhere.destroy();
+    defer b3::destroy_world(elsewhere);
 
     if (bodies != HingeBodies.UNSET) {
         b3::WorldId home_of_b = bodies == HingeBodies.ANOTHER_WORLD ? elsewhere : world;
@@ -924,7 +924,7 @@ fn fault refusal_of_a_revolute_joint_definition(b3::RevoluteJointDef* def, Hinge
         def.body_id_b = a_dynamic_sphere_at(home_of_b, 1.0);
     }
 
-    if (catch err = world.create_revolute_joint(def)) return err;
+    if (catch err = b3::create_revolute_joint(world, def)) return err;
     return {};
 }
 
@@ -938,7 +938,7 @@ struct HingeConversion {
 fn HingeConversion the_conversions_of_a_hinge_and_a_filter_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -1025,14 +1025,14 @@ struct DestroyedHingeConversion {
 fn DestroyedHingeConversion the_conversion_of_a_destroyed_hinge() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
     b3::JointId hinge = link_with_a_revolute_joint(world, a, b);
 
     DestroyedHingeConversion conversion = {.valid_before = hinge.is_valid()};
-    hinge.destroy(false);
+    b3::destroy_joint(hinge, false);
     conversion.type_after = hinge.type();
     if (catch err = hinge.as_revolute()) conversion.refusal = err;
     return conversion;
@@ -1051,11 +1051,11 @@ fn void a_destroyed_joint_does_not_narrow_to_a_revolute_handle() @test {
 fn b3::BodyId a_static_sphere_at_the_origin(b3::WorldId world) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.STATIC;
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.5};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     return body;
 }
 
@@ -1070,7 +1070,7 @@ fn HingeDrive a_hinge_after_a_second(bool enable_motor) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1081,10 +1081,10 @@ fn HingeDrive a_hinge_after_a_second(bool enable_motor) {
     joint_def.enable_motor = enable_motor;
     joint_def.motor_speed = 2.0;
     joint_def.max_motor_torque = 1000.0;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.angle = hinge.angle(), .rotation = turning.rotation()};
@@ -1102,7 +1102,7 @@ struct MotorSettings {
 fn MotorSettings the_motor_settings_of_a_hinge_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1113,7 +1113,7 @@ fn MotorSettings the_motor_settings_of_a_hinge_before_and_after_the_setters() {
     joint_def.enable_motor = true;
     joint_def.motor_speed = 2.0;
     joint_def.max_motor_torque = 1000.0;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     MotorSettings settings = {
         .enabled = hinge.is_motor_enabled(),
@@ -1143,18 +1143,18 @@ fn HingeTorque the_torques_of_an_arm_heavier_than_its_motor() {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
-    b3::BodyId arm = world.create_body(&body_def)!!;
+    b3::BodyId arm = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     shape_def.density = 1000.0;
     b3::Capsule capsule = {.center1 = {0.0, 0.0, 0.0}, .center2 = {2.0, 0.0, 0.0}, .radius = 0.25};
-    arm.create_capsule_shape(&shape_def, &capsule)!!;
+    b3::create_capsule_shape(arm, &shape_def, &capsule)!!;
 
     b3::RevoluteJointDef joint_def = b3::default_revolute_joint_def();
     joint_def.body_id_a = anchor;
@@ -1162,10 +1162,10 @@ fn HingeTorque the_torques_of_an_arm_heavier_than_its_motor() {
     joint_def.enable_motor = true;
     joint_def.motor_speed = 0.0;
     joint_def.max_motor_torque = 500.0;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 180; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.motor_torque = hinge.motor_torque(), .constraint_torque_z = hinge.constraint_torque().z};
@@ -1229,7 +1229,7 @@ fn float the_angle_of_a_motor_driven_hinge_after_two_seconds(bool enable_limit) 
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1243,10 +1243,10 @@ fn float the_angle_of_a_motor_driven_hinge_after_two_seconds(bool enable_limit) 
     joint_def.enable_limit = enable_limit;
     joint_def.lower_angle = -0.5;
     joint_def.upper_angle = 0.5;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return hinge.angle();
@@ -1260,7 +1260,7 @@ struct HingeLimits {
 fn HingeLimits the_limits_of_a_hinge_set_to(float lower, float upper) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1273,7 +1273,7 @@ fn HingeLimits the_limits_of_a_hinge_set_to(float lower, float upper) {
 fn HingeLimits the_limits_of_a_hinge_whose_definition_reversed_them() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1284,7 +1284,7 @@ fn HingeLimits the_limits_of_a_hinge_whose_definition_reversed_them() {
     joint_def.enable_limit = true;
     joint_def.lower_angle = 1.0;
     joint_def.upper_angle = -1.0;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     return {.lower = hinge.lower_limit(), .upper = hinge.upper_limit()};
 }
@@ -1299,7 +1299,7 @@ struct HingeLimitFlags {
 fn HingeLimitFlags the_limit_flags_of_a_bare_hinge_and_a_limited_one() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1311,7 +1311,7 @@ fn HingeLimitFlags the_limit_flags_of_a_bare_hinge_and_a_limited_one() {
     joint_def.enable_limit = true;
     joint_def.lower_angle = -0.5;
     joint_def.upper_angle = 0.5;
-    b3::RevoluteJointId limited = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId limited = b3::create_revolute_joint(world, &joint_def)!!;
 
     HingeLimitFlags flags = {
         .on_a_default_hinge = bare.is_limit_enabled(),
@@ -1336,7 +1336,7 @@ fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1347,10 +1347,10 @@ fn HingeSeparations the_angular_separations_of_a_turned_hinge_around_arming_its_
     joint_def.enable_motor = true;
     joint_def.motor_speed = 2.0;
     joint_def.max_motor_torque = 1000.0;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     float off = hinge.angular_separation();
@@ -1429,7 +1429,7 @@ fn float the_angle_of_a_sprung_hinge_after_five_seconds(bool enable_spring, floa
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1441,10 +1441,10 @@ fn float the_angle_of_a_sprung_hinge_after_five_seconds(bool enable_spring, floa
     joint_def.hertz = 2.0;
     joint_def.damping_ratio = 1.0;
     joint_def.target_angle = target;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return hinge.angle();
@@ -1464,7 +1464,7 @@ struct SpringSettings {
 fn SpringSettings the_spring_settings_of_a_hinge_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId turning = a_dynamic_sphere_at(world, 1.0);
@@ -1476,7 +1476,7 @@ fn SpringSettings the_spring_settings_of_a_hinge_before_and_after_the_setters() 
     joint_def.hertz = 2.0;
     joint_def.damping_ratio = 1.0;
     joint_def.target_angle = 0.5;
-    b3::RevoluteJointId hinge = world.create_revolute_joint(&joint_def)!!;
+    b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &joint_def)!!;
 
     SpringSettings settings = {
         .enabled = hinge.is_spring_enabled(),
@@ -1577,7 +1577,7 @@ fn b3::DistanceJointId link_with_a_distance_joint(b3::WorldId world, b3::BodyId 
     b3::DistanceJointDef joint_def = b3::default_distance_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_distance_joint(&joint_def)!!;
+    return b3::create_distance_joint(world, &joint_def)!!;
 }
 
 struct DistanceHandleReport {
@@ -1592,7 +1592,7 @@ struct DistanceHandleReport {
 fn DistanceHandleReport the_shared_accessors_on_a_new_rope() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -1609,14 +1609,14 @@ fn DistanceHandleReport the_shared_accessors_on_a_new_rope() {
 fn fault refusal_of_a_distance_joint_definition(b3::DistanceJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_distance_joint(def)) return err;
+    if (catch err = b3::create_distance_joint(world, def)) return err;
     return {};
 }
 
@@ -1633,7 +1633,7 @@ struct RopeConversion {
 fn RopeConversion the_conversions_of_a_rope_and_a_hinge() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -1662,14 +1662,14 @@ struct DestroyedRopeConversion {
 fn DestroyedRopeConversion the_conversion_of_a_destroyed_rope() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
     b3::JointId rope = link_with_a_distance_joint(world, a, b);
 
     DestroyedRopeConversion conversion = {.valid_before = rope.is_valid()};
-    rope.destroy(false);
+    b3::destroy_joint(rope, false);
     conversion.type_after = rope.type();
     if (catch err = rope.as_distance()) conversion.refusal = err;
     return conversion;
@@ -1739,11 +1739,11 @@ fn b3::BodyId a_dynamic_sphere_below_the_origin(b3::WorldId world) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, -1.0, 0.0};
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     return body;
 }
 
@@ -1762,7 +1762,7 @@ struct RopeLengths {
 fn RopeLengths the_lengths_of_a_hanging_rope() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -1771,10 +1771,10 @@ fn RopeLengths the_lengths_of_a_hanging_rope() {
     joint_def.body_id_a = anchor;
     joint_def.body_id_b = hanging;
     joint_def.length = 2.0;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -1796,7 +1796,7 @@ struct RopeRestLengths {
 fn RopeRestLengths the_rest_lengths_a_rope_takes_from_its_setter() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -1823,7 +1823,7 @@ struct RopeConstructionLengths {
 fn RopeConstructionLengths the_rest_lengths_a_rope_takes_from_its_definition() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -1832,10 +1832,10 @@ fn RopeConstructionLengths the_rest_lengths_a_rope_takes_from_its_definition() {
     joint_def.body_id_a = anchor;
     joint_def.body_id_b = hanging;
     joint_def.length = 0.0;
-    b3::DistanceJointId slack = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId slack = b3::create_distance_joint(world, &joint_def)!!;
 
     joint_def.length = 1.0e7;
-    b3::DistanceJointId stretched = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId stretched = b3::create_distance_joint(world, &joint_def)!!;
 
     RopeConstructionLengths lengths = {
         .under_the_slop = slack.length(),
@@ -1923,7 +1923,7 @@ fn float the_measured_length_of_a_hanging_rope(
 ) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -1938,10 +1938,10 @@ fn float the_measured_length_of_a_hanging_rope(
     joint_def.enable_limit = enable_limit;
     joint_def.min_length = min_length;
     joint_def.max_length = max_length;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return rope.current_length();
@@ -1963,7 +1963,7 @@ struct RopeLengthRange {
 fn RopeLengthRange the_length_ranges_a_rope_takes_from_its_setter() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -1995,7 +1995,7 @@ struct RopeCrossedLengthRange {
 fn RopeCrossedLengthRange the_length_range_of_a_rope_capped_under_the_slop() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -2004,7 +2004,7 @@ fn RopeCrossedLengthRange the_length_range_of_a_rope_capped_under_the_slop() {
     joint_def.body_id_a = anchor;
     joint_def.body_id_b = hanging;
     joint_def.max_length = 0.001;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     return {.min = rope.min_length(), .max = rope.max_length()};
 }
@@ -2019,7 +2019,7 @@ struct RopeLimitFlags {
 fn RopeLimitFlags the_limit_flags_of_a_bare_rope_and_a_limited_one() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -2031,7 +2031,7 @@ fn RopeLimitFlags the_limit_flags_of_a_bare_rope_and_a_limited_one() {
     joint_def.enable_limit = true;
     joint_def.min_length = 1.0;
     joint_def.max_length = 3.0;
-    b3::DistanceJointId limited = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId limited = b3::create_distance_joint(world, &joint_def)!!;
 
     RopeLimitFlags flags = {
         .on_a_default_rope = bare.is_limit_enabled(),
@@ -2145,7 +2145,7 @@ fn void the_limit_flag_of_a_rope_starts_off_and_round_trips() @test {
 fn float the_measured_length_of_a_sprung_rope(float hertz) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -2157,11 +2157,11 @@ fn float the_measured_length_of_a_sprung_rope(float hertz) {
     joint_def.enable_spring = true;
     joint_def.hertz = 1.0;
     joint_def.damping_ratio = 0.5;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
     rope.set_spring_hertz(hertz);
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return rope.current_length();
@@ -2179,7 +2179,7 @@ struct RopeSpringSettings {
 fn RopeSpringSettings the_spring_settings_of_a_rope_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -2190,7 +2190,7 @@ fn RopeSpringSettings the_spring_settings_of_a_rope_before_and_after_the_setters
     joint_def.enable_spring = true;
     joint_def.hertz = 2.0;
     joint_def.damping_ratio = 1.0;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     RopeSpringSettings settings = {
         .enabled = rope.is_spring_enabled(),
@@ -2219,7 +2219,7 @@ struct RopeSpringForces {
 fn RopeSpringForces the_spring_force_ranges_a_rope_takes_from_its_setter() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -2279,11 +2279,11 @@ fn b3::BodyId a_dynamic_sphere_two_units_below_the_origin(b3::WorldId world) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, -2.0, 0.0};
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     return body;
 }
 
@@ -2305,7 +2305,7 @@ fn RopeDrive a_driven_rope(
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_two_units_below_the_origin(world);
@@ -2320,10 +2320,10 @@ fn RopeDrive a_driven_rope(
     joint_def.enable_motor = enable_motor;
     joint_def.motor_speed = 0.5;
     joint_def.max_motor_force = max_motor_force;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -2348,7 +2348,7 @@ fn RopeMotorForces the_motor_force_of_a_driven_rope_around_toggling_its_flags() 
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_two_units_below_the_origin(world);
@@ -2363,10 +2363,10 @@ fn RopeMotorForces the_motor_force_of_a_driven_rope_around_toggling_its_flags() 
     joint_def.enable_motor = true;
     joint_def.motor_speed = 0.5;
     joint_def.max_motor_force = 100.0;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     RopeMotorForces forces = {.driven = rope.motor_force()};
@@ -2397,7 +2397,7 @@ struct RopeMotorSettings {
 fn RopeMotorSettings the_motor_settings_of_a_rope_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_below_the_origin(world);
@@ -2408,7 +2408,7 @@ fn RopeMotorSettings the_motor_settings_of_a_rope_before_and_after_the_setters()
     joint_def.enable_motor = true;
     joint_def.motor_speed = 0.5;
     joint_def.max_motor_force = 100.0;
-    b3::DistanceJointId rope = world.create_distance_joint(&joint_def)!!;
+    b3::DistanceJointId rope = b3::create_distance_joint(world, &joint_def)!!;
 
     RopeMotorSettings settings = {
         .enabled = rope.is_motor_enabled(),
@@ -2620,21 +2620,21 @@ fn b3::PrismaticJointId link_with_a_prismatic_joint(b3::WorldId world, b3::BodyI
     b3::PrismaticJointDef joint_def = b3::default_prismatic_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_prismatic_joint(&joint_def)!!;
+    return b3::create_prismatic_joint(world, &joint_def)!!;
 }
 
 fn b3::WeldJointId link_with_a_weld_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
     b3::WeldJointDef joint_def = b3::default_weld_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_weld_joint(&joint_def)!!;
+    return b3::create_weld_joint(world, &joint_def)!!;
 }
 
 fn b3::ParallelJointId link_with_a_parallel_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
     b3::ParallelJointDef joint_def = b3::default_parallel_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_parallel_joint(&joint_def)!!;
+    return b3::create_parallel_joint(world, &joint_def)!!;
 }
 
 struct TypedHandleReport {
@@ -2649,7 +2649,7 @@ struct TypedHandleReport {
 fn TypedHandleReport the_shared_accessors_on_a_new_slider() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -2666,7 +2666,7 @@ fn TypedHandleReport the_shared_accessors_on_a_new_slider() {
 fn TypedHandleReport the_shared_accessors_on_a_new_weld_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -2683,7 +2683,7 @@ fn TypedHandleReport the_shared_accessors_on_a_new_weld_joint() {
 fn TypedHandleReport the_shared_accessors_on_a_new_parallel_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -2750,7 +2750,7 @@ struct TypedJointConversions {
 fn TypedJointConversions the_conversions_of_a_slider_a_weld_joint_and_a_parallel_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -2794,7 +2794,7 @@ struct DestroyedTypedConversions {
 fn DestroyedTypedConversions the_conversions_of_three_destroyed_joints() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -2805,9 +2805,9 @@ fn DestroyedTypedConversions the_conversions_of_three_destroyed_joints() {
     DestroyedTypedConversions conversions = {
         .valid_before = slider.is_valid() && weld.is_valid() && parallel.is_valid(),
     };
-    slider.destroy(false);
-    weld.destroy(false);
-    parallel.destroy(false);
+    b3::destroy_joint(slider, false);
+    b3::destroy_joint(weld, false);
+    b3::destroy_joint(parallel, false);
 
     conversions.slider_type_after = slider.type();
     if (catch err = slider.as_prismatic()) conversions.slider_refusal = err;
@@ -2819,42 +2819,42 @@ fn DestroyedTypedConversions the_conversions_of_three_destroyed_joints() {
 fn fault refusal_of_a_prismatic_joint_definition(b3::PrismaticJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_prismatic_joint(def)) return err;
+    if (catch err = b3::create_prismatic_joint(world, def)) return err;
     return {};
 }
 
 fn fault refusal_of_a_weld_joint_definition(b3::WeldJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_weld_joint(def)) return err;
+    if (catch err = b3::create_weld_joint(world, def)) return err;
     return {};
 }
 
 fn fault refusal_of_a_parallel_joint_definition(b3::ParallelJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_parallel_joint(def)) return err;
+    if (catch err = b3::create_parallel_joint(world, def)) return err;
     return {};
 }
 
@@ -2941,11 +2941,11 @@ fn void a_definition_of_each_new_joint_type_naming_no_bodies_is_refused() @test 
 fn b3::BodyId a_small_dynamic_sphere_at_the_origin(b3::WorldId world) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
-    b3::BodyId body = world.create_body(&body_def)!!;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
-    body.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(body, &shape_def, &sphere)!!;
     return body;
 }
 
@@ -2963,7 +2963,7 @@ fn SliderDrive a_motor_driven_slider_after_a_second(bool enable_limit) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -2977,10 +2977,10 @@ fn SliderDrive a_motor_driven_slider_after_a_second(bool enable_limit) {
     joint_def.enable_limit = enable_limit;
     joint_def.lower_translation = -0.5;
     joint_def.upper_translation = 0.5;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.translation = slider.translation(), .speed = slider.speed()};
@@ -2994,7 +2994,7 @@ struct SliderLimits {
 fn SliderLimits the_limits_of_a_slider_set_to(float lower, float upper) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3007,7 +3007,7 @@ fn SliderLimits the_limits_of_a_slider_set_to(float lower, float upper) {
 fn SliderLimits the_limits_of_a_slider_whose_definition_reversed_them() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3018,7 +3018,7 @@ fn SliderLimits the_limits_of_a_slider_whose_definition_reversed_them() {
     joint_def.enable_limit = true;
     joint_def.lower_translation = 1.0;
     joint_def.upper_translation = -1.0;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     return {.lower = slider.lower_limit(), .upper = slider.upper_limit()};
 }
@@ -3033,7 +3033,7 @@ struct SliderLimitFlags {
 fn SliderLimitFlags the_limit_flags_of_a_bare_slider_and_a_limited_one() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3045,7 +3045,7 @@ fn SliderLimitFlags the_limit_flags_of_a_bare_slider_and_a_limited_one() {
     joint_def.enable_limit = true;
     joint_def.lower_translation = -0.5;
     joint_def.upper_translation = 0.5;
-    b3::PrismaticJointId limited = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId limited = b3::create_prismatic_joint(world, &joint_def)!!;
 
     SliderLimitFlags flags = {
         .on_a_default_slider = bare.is_limit_enabled(),
@@ -3130,7 +3130,7 @@ fn float the_translation_a_sprung_slider_settles_at(bool enable_spring, float ta
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3142,10 +3142,10 @@ fn float the_translation_a_sprung_slider_settles_at(bool enable_spring, float ta
     joint_def.hertz = 2.0;
     joint_def.damping_ratio = 1.0;
     joint_def.target_translation = target;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return slider.translation();
@@ -3165,7 +3165,7 @@ struct SliderSpringSettings {
 fn SliderSpringSettings the_spring_settings_of_a_slider_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3177,7 +3177,7 @@ fn SliderSpringSettings the_spring_settings_of_a_slider_before_and_after_the_set
     joint_def.hertz = 4.0;
     joint_def.damping_ratio = 0.5;
     joint_def.target_translation = 4.5;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     SliderSpringSettings settings = {
         .enabled = slider.is_spring_enabled(),
@@ -3214,7 +3214,7 @@ fn SliderMotorDrive a_slider_motor_driven_to(bool enable_motor, float max_motor_
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, gravity_y, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3225,10 +3225,10 @@ fn SliderMotorDrive a_slider_motor_driven_to(bool enable_motor, float max_motor_
     joint_def.enable_motor = enable_motor;
     joint_def.motor_speed = 5.0;
     joint_def.max_motor_force = max_motor_force;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -3251,7 +3251,7 @@ struct SliderMotorSettings {
 fn SliderMotorSettings the_motor_settings_of_a_slider_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3262,7 +3262,7 @@ fn SliderMotorSettings the_motor_settings_of_a_slider_before_and_after_the_sette
     joint_def.enable_motor = true;
     joint_def.motor_speed = 0.5;
     joint_def.max_motor_force = 100.0;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     SliderMotorSettings settings = {
         .enabled = slider.is_motor_enabled(),
@@ -3296,7 +3296,7 @@ fn SliderAxialForces the_axial_force_of_a_sprung_slider_around_toggling_its_flag
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sliding = a_small_dynamic_sphere_at_the_origin(world);
@@ -3308,10 +3308,10 @@ fn SliderAxialForces the_axial_force_of_a_sprung_slider_around_toggling_its_flag
     joint_def.hertz = 2.0;
     joint_def.damping_ratio = 1.0;
     joint_def.target_translation = 0.7;
-    b3::PrismaticJointId slider = world.create_prismatic_joint(&joint_def)!!;
+    b3::PrismaticJointId slider = b3::create_prismatic_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     SliderAxialForces forces = {.settled = slider.constraint_force().z};
@@ -3471,7 +3471,7 @@ fn b3::Pos the_position_a_welded_sphere_hangs_at(bool soften_the_translation) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_at(world, 1.0);
@@ -3480,7 +3480,7 @@ fn b3::Pos the_position_a_welded_sphere_hangs_at(bool soften_the_translation) {
     joint_def.body_id_a = anchor;
     joint_def.body_id_b = hanging;
     joint_def.local_frame_a.p = {1.0, 0.0, 0.0};
-    b3::WeldJointId weld = world.create_weld_joint(&joint_def)!!;
+    b3::WeldJointId weld = b3::create_weld_joint(world, &joint_def)!!;
 
     if (soften_the_translation) {
         weld.set_linear_hertz(1.0);
@@ -3488,7 +3488,7 @@ fn b3::Pos the_position_a_welded_sphere_hangs_at(bool soften_the_translation) {
     }
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return hanging.position();
@@ -3503,7 +3503,7 @@ fn b3::Quat the_rotation_a_welded_sphere_holds_under_a_steady_torque(bool soften
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, -10.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_at(world, 1.0);
@@ -3512,7 +3512,7 @@ fn b3::Quat the_rotation_a_welded_sphere_holds_under_a_steady_torque(bool soften
     joint_def.body_id_a = anchor;
     joint_def.body_id_b = hanging;
     joint_def.local_frame_a.p = {1.0, 0.0, 0.0};
-    b3::WeldJointId weld = world.create_weld_joint(&joint_def)!!;
+    b3::WeldJointId weld = b3::create_weld_joint(world, &joint_def)!!;
 
     if (soften_the_rotation) {
         weld.set_angular_hertz(1.0);
@@ -3520,8 +3520,8 @@ fn b3::Quat the_rotation_a_welded_sphere_holds_under_a_steady_torque(bool soften
     }
 
     for (int i = 0; i < 300; i++) {
-        hanging.apply_torque({0.0, 0.0, 200.0}, true);
-        world.step(1.0f / 60.0f, 4);
+        b3::body_apply_torque(hanging, {0.0, 0.0, 200.0}, true);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return hanging.rotation();
@@ -3541,7 +3541,7 @@ struct WeldSpringSettings {
 fn WeldSpringSettings the_spring_settings_of_a_weld_joint_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId held = a_dynamic_sphere_at(world, 1.0);
@@ -3553,7 +3553,7 @@ fn WeldSpringSettings the_spring_settings_of_a_weld_joint_before_and_after_the_s
     joint_def.angular_hertz = 5.0;
     joint_def.linear_damping_ratio = 0.25;
     joint_def.angular_damping_ratio = 0.75;
-    b3::WeldJointId weld = world.create_weld_joint(&joint_def)!!;
+    b3::WeldJointId weld = b3::create_weld_joint(world, &joint_def)!!;
 
     WeldSpringSettings settings = {
         .linear_hertz = weld.linear_hertz(),
@@ -3587,7 +3587,7 @@ fn SpunBody a_sphere_spun_about_x_under_a_parallel_joint(float max_torque) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
@@ -3595,13 +3595,13 @@ fn SpunBody a_sphere_spun_about_x_under_a_parallel_joint(float max_torque) {
     b3::ParallelJointDef joint_def = b3::default_parallel_joint_def();
     joint_def.body_id_a = anchor;
     joint_def.body_id_b = spinning;
-    b3::ParallelJointId joint = world.create_parallel_joint(&joint_def)!!;
+    b3::ParallelJointId joint = b3::create_parallel_joint(world, &joint_def)!!;
     joint.set_max_torque(max_torque);
 
     spinning.set_angular_velocity((b3::Vec3){ 3.0, 0.0, 0.0 });
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     b3::Vec3 rate = spinning.angular_velocity();
@@ -3620,7 +3620,7 @@ struct ParallelSpringSettings {
 fn ParallelSpringSettings the_spring_settings_of_a_parallel_joint_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId held = a_dynamic_sphere_at(world, 1.0);
@@ -3631,7 +3631,7 @@ fn ParallelSpringSettings the_spring_settings_of_a_parallel_joint_before_and_aft
     joint_def.hertz = 4.0;
     joint_def.damping_ratio = 0.5;
     joint_def.max_torque = 25.0;
-    b3::ParallelJointId joint = world.create_parallel_joint(&joint_def)!!;
+    b3::ParallelJointId joint = b3::create_parallel_joint(world, &joint_def)!!;
 
     ParallelSpringSettings settings = {
         .hertz = joint.spring_hertz(),
@@ -3820,20 +3820,20 @@ fn b3::MotorJointId link_with_a_motor_joint(b3::WorldId world, b3::BodyId a, b3:
     b3::MotorJointDef joint_def = b3::default_motor_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_motor_joint(&joint_def)!!;
+    return b3::create_motor_joint(world, &joint_def)!!;
 }
 
 fn b3::SphericalJointId link_with_a_spherical_joint(b3::WorldId world, b3::BodyId a, b3::BodyId b) {
     b3::SphericalJointDef joint_def = b3::default_spherical_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_spherical_joint(&joint_def)!!;
+    return b3::create_spherical_joint(world, &joint_def)!!;
 }
 
 fn TypedHandleReport the_shared_accessors_on_a_new_motor_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -3850,7 +3850,7 @@ fn TypedHandleReport the_shared_accessors_on_a_new_motor_joint() {
 fn TypedHandleReport the_shared_accessors_on_a_new_spherical_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -3902,7 +3902,7 @@ struct DrivenJointConversions {
 fn DrivenJointConversions the_conversions_of_a_motor_joint_and_a_ball_and_socket() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -3939,7 +3939,7 @@ struct DestroyedDrivenConversions {
 fn DestroyedDrivenConversions the_conversions_of_a_destroyed_motor_joint_and_ball_and_socket() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -3947,8 +3947,8 @@ fn DestroyedDrivenConversions the_conversions_of_a_destroyed_motor_joint_and_bal
     b3::JointId ball = link_with_a_spherical_joint(world, a, b);
 
     DestroyedDrivenConversions conversions = {.valid_before = motor.is_valid() && ball.is_valid()};
-    motor.destroy(false);
-    ball.destroy(false);
+    b3::destroy_joint(motor, false);
+    b3::destroy_joint(ball, false);
 
     conversions.motor_type_after = motor.type();
     if (catch err = motor.as_motor()) conversions.motor_refusal = err;
@@ -3959,28 +3959,28 @@ fn DestroyedDrivenConversions the_conversions_of_a_destroyed_motor_joint_and_bal
 fn fault refusal_of_a_motor_joint_definition(b3::MotorJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_motor_joint(def)) return err;
+    if (catch err = b3::create_motor_joint(world, def)) return err;
     return {};
 }
 
 fn fault refusal_of_a_spherical_joint_definition(b3::SphericalJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_spherical_joint(def)) return err;
+    if (catch err = b3::create_spherical_joint(world, def)) return err;
     return {};
 }
 
@@ -4057,7 +4057,7 @@ fn MotorDrive a_motor_driven_body_after_a_second(float velocity_x, float ceiling
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4067,10 +4067,10 @@ fn MotorDrive a_motor_driven_body_after_a_second(float velocity_x, float ceiling
     joint_def.body_id_b = driven;
     joint_def.linear_velocity = (b3::Vec3){ velocity_x, 0.0, 0.0 };
     joint_def.max_velocity_force = ceiling;
-    world.create_motor_joint(&joint_def)!!;
+    b3::create_motor_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.position = driven.position(), .awake = driven.is_awake()};
@@ -4088,7 +4088,7 @@ fn MotorSpin a_motor_turned_body_after_a_second(float velocity_x, float ceiling)
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4098,10 +4098,10 @@ fn MotorSpin a_motor_turned_body_after_a_second(float velocity_x, float ceiling)
     joint_def.body_id_b = driven;
     joint_def.angular_velocity = (b3::Vec3){ velocity_x, 0.0, 0.0 };
     joint_def.max_velocity_torque = ceiling;
-    world.create_motor_joint(&joint_def)!!;
+    b3::create_motor_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -4124,7 +4124,7 @@ struct MotorVelocities {
 fn MotorVelocities the_velocities_of_a_motor_joint_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4134,7 +4134,7 @@ fn MotorVelocities the_velocities_of_a_motor_joint_before_and_after_the_setters(
     joint_def.body_id_b = driven;
     joint_def.linear_velocity = (b3::Vec3){ 0.5, -1.5, 2.25 };
     joint_def.angular_velocity = (b3::Vec3){ -0.25, 3.5, 0.75 };
-    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+    b3::MotorJointId motor = b3::create_motor_joint(world, &joint_def)!!;
 
     MotorVelocities velocities = {
         .linear = motor.linear_velocity(),
@@ -4168,7 +4168,7 @@ struct MotorSpringSettings {
 fn MotorSpringSettings the_spring_settings_of_a_motor_joint_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4182,7 +4182,7 @@ fn MotorSpringSettings the_spring_settings_of_a_motor_joint_before_and_after_the
     joint_def.angular_hertz = 8.0;
     joint_def.angular_damping_ratio = 0.25;
     joint_def.max_spring_torque = 6.25;
-    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+    b3::MotorJointId motor = b3::create_motor_joint(world, &joint_def)!!;
 
     MotorSpringSettings settings = {
         .linear_hertz = motor.linear_hertz(),
@@ -4227,7 +4227,7 @@ struct MotorCeilings {
 fn MotorCeilings the_negative_ceilings_of_a_motor_joint_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4239,7 +4239,7 @@ fn MotorCeilings the_negative_ceilings_of_a_motor_joint_before_and_after_the_set
     joint_def.max_spring_torque = -3.25;
     joint_def.max_velocity_force = -2.5;
     joint_def.max_velocity_torque = -1.25;
-    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+    b3::MotorJointId motor = b3::create_motor_joint(world, &joint_def)!!;
 
     MotorCeilings ceilings = {
         .spring_force = motor.max_spring_force(),
@@ -4275,7 +4275,7 @@ fn float[3] a_sprung_motor_joint_over_four_seconds(SpringCeiling ceiling) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_small_dynamic_sphere_at_the_origin(world);
@@ -4286,10 +4286,10 @@ fn float[3] a_sprung_motor_joint_over_four_seconds(SpringCeiling ceiling) {
     joint_def.linear_hertz = 5.0;
     joint_def.linear_damping_ratio = 1.0;
     joint_def.max_spring_force = ceiling == SpringCeiling.NEVER_RAISED ? 0.0 : 1000.0;
-    b3::MotorJointId motor = world.create_motor_joint(&joint_def)!!;
+    b3::MotorJointId motor = b3::create_motor_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
     float halfway = hanging.position()[1];
     float lifting = motor.constraint_force()[1];
@@ -4297,7 +4297,7 @@ fn float[3] a_sprung_motor_joint_over_four_seconds(SpringCeiling ceiling) {
     if (ceiling == SpringCeiling.SILENCED_HALFWAY) motor.set_max_spring_force(0.0);
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
     return { halfway, lifting, hanging.position()[1] };
 }
@@ -4507,7 +4507,7 @@ fn SwungBall a_ball_swung_off_its_axis_for_a_second(bool enable_cone_limit) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
@@ -4517,11 +4517,11 @@ fn SwungBall a_ball_swung_off_its_axis_for_a_second(bool enable_cone_limit) {
     joint_def.body_id_b = swinging;
     joint_def.enable_cone_limit = enable_cone_limit;
     joint_def.cone_angle = 0.3;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     swinging.set_angular_velocity((b3::Vec3){ 2.0, 0.0, 0.0 });
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.cone = ball.cone_angle(), .twist = ball.twist_angle(), .awake = swinging.is_awake()};
@@ -4533,7 +4533,7 @@ fn SwungBall a_ball_twisted_about_its_axis_for_a_second(bool enable_twist_limit)
     b3::WorldDef world_def = b3::default_world_def();
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId twisting = a_small_dynamic_sphere_at_the_origin(world);
@@ -4544,11 +4544,11 @@ fn SwungBall a_ball_twisted_about_its_axis_for_a_second(bool enable_twist_limit)
     joint_def.enable_twist_limit = enable_twist_limit;
     joint_def.lower_twist_angle = -0.4;
     joint_def.upper_twist_angle = 0.4;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     twisting.set_angular_velocity((b3::Vec3){ 0.0, 0.0, 2.0 });
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.cone = ball.cone_angle(), .twist = ball.twist_angle(), .awake = twisting.is_awake()};
@@ -4564,7 +4564,7 @@ struct BallConeLimits {
 fn BallConeLimits the_cone_limits_a_ball_keeps() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
@@ -4582,7 +4582,7 @@ fn BallConeLimits the_cone_limits_a_ball_keeps() {
     joint_def.body_id_b = swinging;
     joint_def.enable_cone_limit = true;
     joint_def.cone_angle = 2.0;
-    b3::SphericalJointId built = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId built = b3::create_spherical_joint(world, &joint_def)!!;
     limits.from_a_definition_far_out = built.cone_limit();
     return limits;
 }
@@ -4599,7 +4599,7 @@ struct BallTwistLimits {
 fn BallTwistLimits the_twist_limits_a_ball_keeps() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId twisting = a_small_dynamic_sphere_at_the_origin(world);
@@ -4634,7 +4634,7 @@ struct BallLimitFlags {
 fn BallLimitFlags the_limit_flags_of_a_bare_ball_and_a_bounded_one() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId swinging = a_small_dynamic_sphere_at_the_origin(world);
@@ -4648,7 +4648,7 @@ fn BallLimitFlags the_limit_flags_of_a_bare_ball_and_a_bounded_one() {
     joint_def.enable_twist_limit = true;
     joint_def.lower_twist_angle = -0.4;
     joint_def.upper_twist_angle = 0.4;
-    b3::SphericalJointId bounded = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId bounded = b3::create_spherical_joint(world, &joint_def)!!;
 
     BallLimitFlags flags = {
         .cone_on_a_default_ball = bare.is_cone_limit_enabled(),
@@ -4795,7 +4795,7 @@ struct BallSpring {
 fn BallSpring the_spring_settings_of_a_ball_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sprung = a_small_dynamic_sphere_at_the_origin(world);
@@ -4808,7 +4808,7 @@ fn BallSpring the_spring_settings_of_a_ball_before_and_after_the_setters() {
     joint_def.hertz = 4.0;
     joint_def.damping_ratio = 0.5;
     joint_def.target_rotation = A_TARGET_A_DEFINITION_CARRIES;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     BallSpring spring = {
         .target = ball.target_rotation(),
@@ -4851,7 +4851,7 @@ struct BallMotor {
 fn BallMotor the_motor_settings_of_a_ball_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4863,7 +4863,7 @@ fn BallMotor the_motor_settings_of_a_ball_before_and_after_the_setters() {
     joint_def.enable_motor = true;
     joint_def.motor_velocity = (b3::Vec3){ 0.5, -1.5, 2.25 };
     joint_def.max_motor_torque = 12.5;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     BallMotor motor = {
         .velocity = ball.motor_velocity(),
@@ -4912,7 +4912,7 @@ fn DrivenBall a_ball_driven_by_its_motor_for_half_a_second(BallDrive row) {
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -4932,10 +4932,10 @@ fn DrivenBall a_ball_driven_by_its_motor_for_half_a_second(BallDrive row) {
     joint_def.max_motor_torque = ceiling;
     joint_def.enable_cone_limit = row == BallDrive.HELD_BY_ITS_CONE;
     joint_def.cone_angle = 0.3;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 30; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -4962,7 +4962,7 @@ fn SprungBall a_ball_a_spring_turns_towards_its_target(bool enable_spring) {
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId sprung = a_small_dynamic_sphere_at_the_origin(world);
@@ -4974,10 +4974,10 @@ fn SprungBall a_ball_a_spring_turns_towards_its_target(bool enable_spring) {
     joint_def.hertz = 2.0;
     joint_def.damping_ratio = 1.0;
     joint_def.target_rotation = A_TURN_OF_SEVEN_TENTHS_ABOUT_Z;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.rotation = sprung.rotation(), .twist = ball.twist_angle(), .awake = sprung.is_awake()};
@@ -5166,7 +5166,7 @@ fn ReleasedBall a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease ro
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
     b3::BodyId driven = a_small_dynamic_sphere_at_the_origin(world);
@@ -5177,10 +5177,10 @@ fn ReleasedBall a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease ro
     joint_def.enable_motor = true;
     joint_def.motor_velocity = (b3::Vec3){ 2.0, 0.0, 0.0 };
     joint_def.max_motor_torque = 5.0;
-    b3::SphericalJointId ball = world.create_spherical_joint(&joint_def)!!;
+    b3::SphericalJointId ball = b3::create_spherical_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 20; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
     b3::Quat rotation_at_the_drop = driven.rotation();
     float speed_at_the_drop = driven.angular_velocity()[0];
@@ -5189,7 +5189,7 @@ fn ReleasedBall a_ball_whose_motor_is_taken_away_at_twenty_steps(MotorRelease ro
     if (row == MotorRelease.RELEASED_BY_ITS_CEILING) ball.set_max_motor_torque(0.0);
 
     for (int i = 20; i < 30; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -5290,18 +5290,18 @@ fn HangingBall a_ball_hung_from_an_offset_anchor(bool pin_it) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId anchor = a_static_sphere_at_the_origin(world);
 
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = {0.0, -1.5, 0.0};
-    b3::BodyId hanging = world.create_body(&body_def)!!;
+    b3::BodyId hanging = b3::create_body(world, &body_def)!!;
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::Sphere sphere = {.center = {0.0, 0.0, 0.0}, .radius = 0.25};
-    hanging.create_sphere_shape(&shape_def, &sphere)!!;
+    b3::create_sphere_shape(hanging, &shape_def, &sphere)!!;
 
     b3::SphericalJointId ball;
     if (pin_it) {
@@ -5309,11 +5309,11 @@ fn HangingBall a_ball_hung_from_an_offset_anchor(bool pin_it) {
         joint_def.body_id_a = anchor;
         joint_def.body_id_b = hanging;
         joint_def.local_frame_b.p = {0.0, 1.5, 0.0};
-        ball = world.create_spherical_joint(&joint_def)!!;
+        ball = b3::create_spherical_joint(world, &joint_def)!!;
     }
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -5390,13 +5390,13 @@ fn b3::WheelJointId link_with_a_wheel_joint(b3::WorldId world, b3::BodyId a, b3:
     b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
     joint_def.body_id_a = a;
     joint_def.body_id_b = b;
-    return world.create_wheel_joint(&joint_def)!!;
+    return b3::create_wheel_joint(world, &joint_def)!!;
 }
 
 fn TypedHandleReport the_shared_accessors_on_a_new_wheel_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -5440,7 +5440,7 @@ struct WheelJointConversions {
 fn WheelJointConversions the_conversions_of_a_wheel_joint_and_the_eight_other_types() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
@@ -5481,14 +5481,14 @@ struct DestroyedWheelConversion {
 fn DestroyedWheelConversion the_conversion_of_a_destroyed_wheel_joint() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId a = a_dynamic_sphere_at(world, -1.0);
     b3::BodyId b = a_dynamic_sphere_at(world, 1.0);
     b3::JointId wheel = link_with_a_wheel_joint(world, a, b);
 
     DestroyedWheelConversion conversion = {.valid_before = wheel.is_valid()};
-    wheel.destroy(false);
+    b3::destroy_joint(wheel, false);
 
     conversion.type_after = wheel.type();
     if (catch err = wheel.as_wheel()) conversion.refusal = err;
@@ -5498,14 +5498,14 @@ fn DestroyedWheelConversion the_conversion_of_a_destroyed_wheel_joint() {
 fn fault refusal_of_a_wheel_joint_definition(b3::WheelJointDef* def, bool name_bodies) {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     if (name_bodies) {
         def.body_id_a = a_dynamic_sphere_at(world, -1.0);
         def.body_id_b = a_dynamic_sphere_at(world, 1.0);
     }
 
-    if (catch err = world.create_wheel_joint(def)) return err;
+    if (catch err = b3::create_wheel_joint(world, def)) return err;
     return {};
 }
 
@@ -5586,7 +5586,7 @@ fn SpunWheel a_wheel_spun_by_its_motor_for_a_second(WheelSpin row) {
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
@@ -5604,10 +5604,10 @@ fn SpunWheel a_wheel_spun_by_its_motor_for_a_second(WheelSpin row) {
     joint_def.enable_steering = row == WheelSpin.DRIVEN_WITH_STEERING_ON;
     joint_def.spin_speed = 2.0;
     joint_def.max_spin_torque = ceiling;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 60; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -5701,7 +5701,7 @@ fn LoadedWheel a_wheel_held_against_gravity_for_five_seconds(WheelLoad row) {
         : (b3::Vec3){ -10.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_small_dynamic_sphere_at_the_origin(world);
@@ -5709,11 +5709,11 @@ fn LoadedWheel a_wheel_held_against_gravity_for_five_seconds(WheelLoad row) {
     b3::WheelJointDef joint_def = b3::default_wheel_joint_def();
     joint_def.body_id_a = chassis;
     joint_def.body_id_b = hanging;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
     if (row == WheelLoad.ALONG_IT_WITH_A_LOWER_TRAVEL_SET) wheel.set_suspension_limits(5.0, 99.0);
 
     for (int i = 0; i < 300; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.force = wheel.constraint_force(), .weight = 10.0f * hanging.mass(), .awake = hanging.is_awake()};
@@ -5763,7 +5763,7 @@ fn SuspendedWheel a_wheel_left_out_along_its_suspension_axis(bool enable_spring)
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId displaced = a_dynamic_sphere_at(world, 0.5);
@@ -5772,10 +5772,10 @@ fn SuspendedWheel a_wheel_left_out_along_its_suspension_axis(bool enable_spring)
     joint_def.body_id_a = chassis;
     joint_def.body_id_b = displaced;
     joint_def.enable_suspension_spring = enable_spring;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 180; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {.x = displaced.position().x, .awake = displaced.is_awake(), .sprung = wheel.is_suspension_enabled()};
@@ -5805,7 +5805,7 @@ struct WheelSuspensionLimits {
 fn WheelSuspensionLimits the_suspension_limits_a_wheel_keeps() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
@@ -5860,7 +5860,7 @@ fn HeldWheel a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch touch)
     world_def.gravity = (b3::Vec3){ -10.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId hanging = a_dynamic_sphere_at(world, 0.5);
@@ -5872,10 +5872,10 @@ fn HeldWheel a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch touch)
     joint_def.enable_suspension_limit = true;
     joint_def.lower_suspension_limit = 0.2;
     joint_def.upper_suspension_limit = 0.9;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
     float settled = hanging.position().x;
 
@@ -5884,7 +5884,7 @@ fn HeldWheel a_wheel_hanging_on_its_suspension_limit(WheelSuspensionTouch touch)
         case THE_FAR_END_MOVED: wheel.set_suspension_limits(0.2, 1.5);
         default: break;
     }
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     return {.settled = settled, .after_one_more_step = hanging.position().x};
 }
@@ -5936,7 +5936,7 @@ struct WheelSettingsPair {
 fn WheelSettingsPair the_suspension_and_spin_settings_of_a_wheel_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId spinning = a_small_dynamic_sphere_at_the_origin(world);
@@ -5953,7 +5953,7 @@ fn WheelSettingsPair the_suspension_and_spin_settings_of_a_wheel_before_and_afte
     joint_def.enable_spin_motor = true;
     joint_def.spin_speed = 1.5;
     joint_def.max_spin_torque = 12.0;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     WheelSettingsPair pair;
     pair.from_the_definition = {
@@ -6044,7 +6044,7 @@ fn SteeredWheel a_wheel_steered_towards_half_a_radian(WheelSteer row) {
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = row == WheelSteer.SPRUNG || row == WheelSteer.STEERING_OFF;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
@@ -6057,10 +6057,10 @@ fn SteeredWheel a_wheel_steered_towards_half_a_radian(WheelSteer row) {
     joint_def.steering_damping_ratio = 1.0;
     joint_def.target_steering_angle = 0.5;
     joint_def.max_steering_torque = row == WheelSteer.STARVED_OF_TORQUE ? 0.05 : 1000.0;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 180; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
 
     return {
@@ -6138,7 +6138,7 @@ struct WheelSteeringLimits {
 fn WheelSteeringLimits the_steering_limits_and_target_a_wheel_keeps() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
@@ -6196,7 +6196,7 @@ fn PinnedWheel a_wheel_pinned_on_its_steering_limit(WheelLimitTouch touch) {
     world_def.gravity = (b3::Vec3){ 0.0, 0.0, 0.0 };
     world_def.enable_sleep = false;
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
@@ -6212,10 +6212,10 @@ fn PinnedWheel a_wheel_pinned_on_its_steering_limit(WheelLimitTouch touch) {
     joint_def.enable_steering_limit = true;
     joint_def.lower_steering_limit = -0.2;
     joint_def.upper_steering_limit = 0.2;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     for (int i = 0; i < 120; i++) {
-        world.step(1.0f / 60.0f, 4);
+        b3::world_step(world, 1.0f / 60.0f, 4);
     }
     float settled = wheel.steering_angle();
 
@@ -6227,7 +6227,7 @@ fn PinnedWheel a_wheel_pinned_on_its_steering_limit(WheelLimitTouch touch) {
             wheel.enable_steering_limit(true);
         default: break;
     }
-    world.step(1.0f / 60.0f, 4);
+    b3::world_step(world, 1.0f / 60.0f, 4);
 
     return {.settled = settled, .after_one_more_step = wheel.steering_angle()};
 }
@@ -6279,7 +6279,7 @@ struct WheelSteeringPair {
 fn WheelSteeringPair the_steering_settings_of_a_wheel_before_and_after_the_setters() {
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
-    defer world.destroy();
+    defer b3::destroy_world(world);
 
     b3::BodyId chassis = a_static_sphere_at_the_origin(world);
     b3::BodyId steered = a_small_dynamic_sphere_at_the_origin(world);
@@ -6295,7 +6295,7 @@ fn WheelSteeringPair the_steering_settings_of_a_wheel_before_and_after_the_sette
     joint_def.lower_steering_limit = -0.25;
     joint_def.upper_steering_limit = 0.75;
     joint_def.target_steering_angle = 1.25;
-    b3::WheelJointId wheel = world.create_wheel_joint(&joint_def)!!;
+    b3::WheelJointId wheel = b3::create_wheel_joint(world, &joint_def)!!;
 
     WheelSteeringPair pair;
     pair.from_the_definition = {

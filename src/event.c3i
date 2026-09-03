@@ -103,7 +103,7 @@ struct JointEvents @private {
 }
 
 <*
- Raw contact-event accessor. The three slice wrappers in box3d_event.c3 are the public way to
+ Raw contact-event accessor. The three slice wrappers in src/event.c3 are the public way to
  these arrays, so this stays private: it hands back three pointer-and-count pairs a caller would
  otherwise have to pair up correctly by hand.
 *>
@@ -113,7 +113,7 @@ extern fn bool ContactId.is_valid(self) @cname("b3Contact_IsValid");
 
 <*
  Raw sensor-event accessor. Private for the same reason as contact_events_raw: the two slice
- wrappers in box3d_event.c3 are the public way to these arrays.
+ wrappers in src/event.c3 are the public way to these arrays.
 *>
 extern fn SensorEvents sensor_events_raw(WorldId world_id) @cname("b3World_GetSensorEvents") @private;
 

@@ -263,11 +263,11 @@ fn HeightFieldData*? load_height_field(ZString path) {
  @return? INVALID_DEFINITION : `mesh is null`
  @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
-fn ShapeId? BodyId.create_mesh_shape(self, ShapeDef* def, MeshData* mesh, Vec3 scale) {
+fn ShapeId? create_mesh_shape(BodyId body, ShapeDef* def, MeshData* mesh, Vec3 scale) {
     check_shape_def(def)!;
     if (mesh == null) return INVALID_DEFINITION~;
     return create_mesh_shape_raw(
-      body_id: self,
+      body_id: body,
       def: def,
       mesh: mesh,
       scale: scale,
@@ -291,8 +291,8 @@ fn ShapeId? BodyId.create_mesh_shape(self, ShapeDef* def, MeshData* mesh, Vec3 s
  @return? INVALID_HANDLE : `box3d returned a null identifier, which a body that is not static
    always does`
 *>
-fn ShapeId? BodyId.create_height_field_shape(self, ShapeDef* def, HeightFieldData* height_field) {
+fn ShapeId? create_height_field_shape(BodyId body, ShapeDef* def, HeightFieldData* height_field) {
     check_shape_def(def)!;
     if (height_field == null) return INVALID_DEFINITION~;
-    return create_height_field_shape_raw(self, def, height_field).checked();
+    return create_height_field_shape_raw(body, def, height_field).checked();
 }

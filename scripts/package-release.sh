@@ -18,8 +18,13 @@ ARCHIVE="$DIST/b3.c3l"
 
 [ -n "$VERSION" ] || { echo "usage: scripts/package-release.sh <version>" >&2; exit 1; }
 
-if [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
-    echo "ERROR: the working tree is dirty. A release is cut from a committed state." >&2
+# An untracked file counts: src/ is copied from the working tree, so a source never committed
+# would ship. A dirty submodule working tree does not -- vendor/ is not in the artifact -- but a
+# submodule at a commit other than the recorded one is, since it is what libbox3d.a was built from.
+dirty="$(git -C "$ROOT" status --porcelain --ignore-submodules=dirty)"
+if [ -n "$dirty" ]; then
+    echo "ERROR: the working tree is dirty. A release is cut from a committed state:" >&2
+    printf '%s\n' "$dirty" >&2
     exit 1
 fi
 

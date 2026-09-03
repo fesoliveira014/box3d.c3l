@@ -1712,6 +1712,7 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
     if (catch err = b3::load_tree("box3d_no_such_directory/tree.bin", 1.0)) trip.a_path_that_holds_nothing = err;
 
     char[8] too_short;
+    too_short[..] = 0x5A;
     if (catch file::save(stub, too_short[..])) return trip;
     if (catch err = b3::load_tree(stub.zstr_tcopy(), 1.0)) trip.a_file_shorter_than_a_tree = err;
 

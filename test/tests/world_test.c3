@@ -273,6 +273,8 @@ int memory_stat_lines_from_inside_a_step;
 int pre_solves_that_asked_for_the_breakdown;
 char[64] the_last_memory_stat_line;
 b3::WorldId the_world_dumping_its_memory;
+b3::WorldId an_unlocked_world_asked_from_inside_the_step;
+int memory_stat_lines_from_an_unlocked_world;
 
 // Counts silently where base_hooks_test.c3's handler prints, the breakdown running to dozens of
 // lines per call.
@@ -294,9 +296,17 @@ fn bool ask_for_the_breakdown_mid_step(
   void* context,
 ) {
     pre_solves_that_asked_for_the_breakdown++;
-    int before = memory_stat_lines;
+
+    // The locked ask cannot be pinned on its own: a call that writes nothing and no call at all are
+    // the same reading. The unlocked ask beside it is the control -- it proves this callback can
+    // dump, so the zero the locked one leaves is the lock's doing and not the callback's absence.
+    int before_locked = memory_stat_lines;
     the_world_dumping_its_memory.dump_memory_stats();
-    memory_stat_lines_from_inside_a_step += memory_stat_lines - before;
+    memory_stat_lines_from_inside_a_step += memory_stat_lines - before_locked;
+
+    int before_unlocked = memory_stat_lines;
+    an_unlocked_world_asked_from_inside_the_step.dump_memory_stats();
+    memory_stat_lines_from_an_unlocked_world += memory_stat_lines - before_unlocked;
     return true;
 }
 
@@ -304,6 +314,7 @@ struct MemoryBreakdown {
     int lines_for_an_empty_world;
     int lines_for_a_world_holding_bodies;
     bool the_last_line_was_the_total;
+    int lines_from_an_unlocked_world;
     int pre_solves;
     int lines_from_inside_a_step;
 }
@@ -334,14 +345,18 @@ fn MemoryBreakdown the_readings_from_dumping_a_worlds_memory() {
     foreach (shape : ball.shapes(storage[..])) {
         shape.enable_pre_solve_events(true);
     }
+    an_unlocked_world_asked_from_inside_the_step = b3::create_world(&world_def)!!;
     memory_stat_lines_from_inside_a_step = 0;
+    memory_stat_lines_from_an_unlocked_world = 0;
     pre_solves_that_asked_for_the_breakdown = 0;
     for (int i = 0; i < 120; i++) {
         the_world_dumping_its_memory.step(1.0f / 60.0f, 4);
     }
     breakdown.pre_solves = pre_solves_that_asked_for_the_breakdown;
     breakdown.lines_from_inside_a_step = memory_stat_lines_from_inside_a_step;
+    breakdown.lines_from_an_unlocked_world = memory_stat_lines_from_an_unlocked_world;
 
+    an_unlocked_world_asked_from_inside_the_step.destroy();
     the_world_dumping_its_memory.destroy();
     b3::set_log_fn(&capturing_log);
     return breakdown;
@@ -357,5 +372,7 @@ fn void a_worlds_memory_breakdown_goes_to_the_log_handler_and_never_from_inside_
     assert(breakdown.the_last_line_was_the_total, "the last of them carrying the total");
     assert(breakdown.pre_solves > 0,
         "the world was stepped with a callback that asks for the breakdown from inside the step");
-    assert(breakdown.lines_from_inside_a_step == 0, "and a world locked in its own step writes nothing");
+    assert(breakdown.lines_from_an_unlocked_world > 0,
+        "an unlocked world asked from inside that same callback answers, so the ask is really made");
+    assert(breakdown.lines_from_inside_a_step == 0, "where the world locked in its own step writes nothing");
 }

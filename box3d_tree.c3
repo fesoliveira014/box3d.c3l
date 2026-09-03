@@ -131,9 +131,10 @@ fn ClosestSearch DynamicTree.query_closest(
 
 <*
  Reads back a tree save() wrote, multiplying every node box by scale as it goes. The caller owns
- it and must destroy() it exactly once, and byte_count() carries the node pool until then. box3d
- answers a path it cannot open, a file too short and a tree of another version with the same
- zeroed struct and gives back anything it had taken, which is what the fault reads.
+ it and must destroy() it exactly once. A path box3d cannot open, a version it does not know and a
+ node array that falls short all answer the same zeroed struct; a file cut inside the *header* is
+ not zeroed, box3d handing back whatever bytes it read over an uninitialised struct, so the fault
+ also reads a node count no tree could hold — the only signal that case leaves.
 
  @param scale : "what each node box's bounds are multiplied by, 1 reproducing the saved tree"
  @return "the tree, or FILE_UNAVAILABLE when the path could not be read or holds no tree this build knows"
@@ -141,5 +142,8 @@ fn ClosestSearch DynamicTree.query_closest(
 fn DynamicTree? load_tree(ZString path, float scale) {
     DynamicTree tree = load_tree_raw(path, scale);
     if (tree.version == 0) return FILE_UNAVAILABLE~;
+    if (tree.node_capacity < 1 || tree.node_count < 0 || tree.node_count > tree.node_capacity) {
+        return FILE_UNAVAILABLE~;
+    }
     return tree;
 }

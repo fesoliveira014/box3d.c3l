@@ -141,9 +141,9 @@ fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
 <*
  The compound's own bytes, ready to be written out, with the one address it holds nulled so they
  carry none. They are neither a copy nor a second allocation — destroy() is what frees them — and
- the nulling is not cosmetic: every query, cast and overlap against this compound reads that
- pointer, so it answers none of them until compound_from_bytes() points it back, over these bytes
- or over a copy of them.
+ the nulling is not cosmetic: every query, cast and overlap against this compound walks that
+ pointer without testing it, so each one crashes until compound_from_bytes() is called over these
+ very bytes. Called over a copy it repairs the copy and leaves this compound broken.
 *>
 fn char[] CompoundData.to_bytes(&self) {
     return compound_to_bytes_raw(self)[:self.byte_count];

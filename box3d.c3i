@@ -196,6 +196,11 @@ alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, fl
 alias TaskFn = fn void(void* task_context);
 alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, ZString task_name);
 alias FinishTaskFn = fn void(void* user_task, void* user_context);
+<*
+ Answers a shape's renderer-side handle, which box3d holds and hands to DrawShapeFcn. A world
+ answering this must set destroy_debug_shape too — see DestroyDebugShapeFn for what happens when
+ it does not.
+*>
 alias CreateDebugShapeFn = fn void*(DebugShape* debug_shape, void* user_context);
 <*
  Releases whatever create_debug_shape answered for a shape, when that shape or its world is
@@ -4708,8 +4713,10 @@ extern fn HexColor graph_color_raw(int index) @cname("b3GetGraphColor") @private
 
 <*
  One shape offered to a renderer so it can build whatever it draws that shape with. The arm the
- type names points into box3d's own storage and lives as long as the shape does; the other five
- are the same address read as geometry it is not.
+ type names points into box3d's own storage and is good for the call and no longer: the sphere,
+ capsule and mesh arms point into the world's shape array, which moves when it grows, so a pointer
+ kept past the callback is stale from the next shape created. Read the geometry inside the call.
+ The other five arms are the same address read as geometry it is not.
 *>
 struct DebugShape {
     ShapeId shape_id;

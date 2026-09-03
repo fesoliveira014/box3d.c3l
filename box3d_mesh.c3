@@ -126,7 +126,7 @@ fn MeshData*? create_mesh(MeshDef* def) {
  corner and running along positive x and z.
 
  The caller owns the field and must destroy() it; byte_count() carries the allocation until then,
- and none of the three height field constructors touches a world. box3d itself never refuses: its
+ and no height field constructor touches a world. box3d itself never refuses: its
  check that a grid holds at least four points is an assertion this release build compiles out, and
  the count guard below restores it, negative counts that multiply to a positive product included.
 

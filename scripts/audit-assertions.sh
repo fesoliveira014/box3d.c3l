@@ -17,6 +17,7 @@ set -eu
 cd "$(dirname "$0")/.."
 
 awk '
+    FNR == 1 { doc = ""; inside = 0 }
     /^[[:space:]]*<\*/ { doc = ""; inside = 1; next }
     inside && /\*>/ { inside = 0; next }
     inside { doc = doc " " tolower($0); next }
@@ -29,7 +30,7 @@ awk '
         print sym "\t" (index(doc, "assert") || index(doc, "compiled out") ? "documented" : "silent")
         doc = ""
     }
-' box3d.c3i | while IFS="$(printf '\t')" read -r sym state; do
+' src/*.c3i | while IFS="$(printf '\t')" read -r sym state; do
     [ "$state" = "silent" ] || continue
     # The C body: from the definition line to the closing brace at column 0.
     body=$(awk -v s="$sym" '

@@ -52,7 +52,7 @@ struct DrawTally {
     DrawnShape[A_DEBUG_SHAPE_CAP] shapes;
 }
 
-fn void* offer_a_drawable_shape(b3::DebugShape* debug_shape, void* context) {
+fn void* offer_a_drawable_shape(draw::DebugShape* debug_shape, void* context) {
     DrawTally* tally = (DrawTally*)context;
     if (tally.offered >= A_DEBUG_SHAPE_CAP) return null;
 
@@ -68,7 +68,7 @@ fn void withdraw_a_drawable_shape(void* user_shape, void* context) {
     tally.withdrawn++;
 }
 
-fn void draw_a_shape(void* user_shape, b3::WorldTransform transform, b3::HexColor color, void* context) {
+fn void draw_a_shape(void* user_shape, b3::WorldTransform transform, draw::HexColor color, void* context) {
     DrawTally* tally = (DrawTally*)context;
     DrawnShape* drawn = (DrawnShape*)user_shape;
     drawn.transform = transform;
@@ -76,7 +76,7 @@ fn void draw_a_shape(void* user_shape, b3::WorldTransform transform, b3::HexColo
     tally.shapes_drawn++;
 }
 
-fn void draw_shape_bounds(b3::Aabb aabb, b3::HexColor color, void* context) {
+fn void draw_shape_bounds(b3::Aabb aabb, draw::HexColor color, void* context) {
     DrawTally* tally = (DrawTally*)context;
     if (tally.bounds_drawn == 0) {
         tally.bounds_union = aabb;
@@ -93,25 +93,25 @@ fn void draw_shape_bounds(b3::Aabb aabb, b3::HexColor color, void* context) {
     tally.bounds_drawn++;
 }
 
-fn void draw_a_segment(b3::Pos p1, b3::Pos p2, b3::HexColor color, void* context) {
+fn void draw_a_segment(b3::Pos p1, b3::Pos p2, draw::HexColor color, void* context) {
     DrawTally* tally = (DrawTally*)context;
     tally.segments_drawn++;
 }
 
-fn void draw_a_point(b3::Pos p, float size, b3::HexColor color, void* context) {
+fn void draw_a_point(b3::Pos p, float size, draw::HexColor color, void* context) {
     DrawTally* tally = (DrawTally*)context;
     tally.points_drawn++;
 }
 
-fn void draw_a_string(b3::Pos p, ZString text, b3::HexColor color, void* context) {
+fn void draw_a_string(b3::Pos p, ZString text, draw::HexColor color, void* context) {
     DrawTally* tally = (DrawTally*)context;
     tally.strings_drawn++;
 }
 
 // The five callbacks these tests count through. The other four stay box3d's own empty bodies,
 // which is what lets a flag be raised over them without a crash.
-fn b3::DebugDraw a_renderer_wired_to(DrawTally* tally) {
-    b3::DebugDraw draw = b3::default_debug_draw();
+fn draw::DebugDraw a_renderer_wired_to(DrawTally* tally) {
+    draw::DebugDraw draw = draw::default_debug_draw();
     draw.draw_shape_fcn = &draw_a_shape;
     draw.draw_bounds_fcn = &draw_shape_bounds;
     draw.draw_segment_fcn = &draw_a_segment;
@@ -173,20 +173,20 @@ fn DrawPasses the_readings_from_five_draw_passes_over_three_spheres() {
 
     DrawPasses passes;
 
-    b3::DebugDraw nothing_raised = a_renderer_wired_to(&tally);
+    draw::DebugDraw nothing_raised = a_renderer_wired_to(&tally);
     world.draw(&nothing_raised, ulong::max);
     passes.offered_under_the_default_flags = tally.offered;
     passes.drawn_under_the_default_flags = tally.shapes_drawn;
     passes.bounds_under_the_default_flags = tally.bounds_drawn;
 
-    b3::DebugDraw bounds_raised = a_renderer_wired_to(&tally);
+    draw::DebugDraw bounds_raised = a_renderer_wired_to(&tally);
     bounds_raised.draw_bounds = true;
     world.draw(&bounds_raised, ulong::max);
     passes.bounds_with_bounds_raised = tally.bounds_drawn;
     passes.shapes_with_bounds_raised = tally.shapes_drawn;
     passes.bounds_union = tally.bounds_union;
 
-    b3::DebugDraw shapes_raised = a_renderer_wired_to(&tally);
+    draw::DebugDraw shapes_raised = a_renderer_wired_to(&tally);
     shapes_raised.draw_shapes = true;
     world.draw(&shapes_raised, ulong::max);
     passes.offered_with_shapes_raised = tally.offered;
@@ -290,7 +290,7 @@ fn TwoSwitches the_readings_from_a_world_that_answers_for_its_shapes_and_one_tha
 
     DrawTally answering;
     b3::WorldId answers = a_world_of_three_spheres(&answering, true);
-    b3::DebugDraw over_the_answering = a_renderer_wired_to(&answering);
+    draw::DebugDraw over_the_answering = a_renderer_wired_to(&answering);
     over_the_answering.draw_shapes = true;
     over_the_answering.draw_bounds = true;
     answers.draw(&over_the_answering, ulong::max);
@@ -300,7 +300,7 @@ fn TwoSwitches the_readings_from_a_world_that_answers_for_its_shapes_and_one_tha
 
     DrawTally silent;
     b3::WorldId does_not = a_world_of_three_spheres(&silent, false);
-    b3::DebugDraw over_the_silent = a_renderer_wired_to(&silent);
+    draw::DebugDraw over_the_silent = a_renderer_wired_to(&silent);
     over_the_silent.draw_shapes = true;
     over_the_silent.draw_bounds = true;
     does_not.draw(&over_the_silent, ulong::max);
@@ -324,8 +324,8 @@ fn void drawing_shapes_takes_the_world_definition_switch_as_well_as_the_flag() @
 }
 
 fn void the_default_draw_definition_carries_every_callback_and_no_flag() @test {
-    b3::DebugDraw taken = b3::default_debug_draw();
-    b3::DebugDraw zeroed;
+    draw::DebugDraw taken = draw::default_debug_draw();
+    draw::DebugDraw zeroed;
     float unit = b3::length_units_per_meter();
 
     assert(taken.draw_shape_fcn != null && taken.draw_segment_fcn != null && taken.draw_transform_fcn != null
@@ -369,7 +369,7 @@ struct DrawnQueries {
 fn DrawnQueries the_readings_from_drawing_a_replayed_frames_queries() {
     DrawnQueries drawn;
 
-    b3::Recording* recording = b3::create_recording(0);
+    record::Recording* recording = record::create_recording(0);
     defer recording.destroy();
 
     DroppedPair pair = a_pair_dropped_on_a_slab();
@@ -377,11 +377,11 @@ fn DrawnQueries the_readings_from_drawing_a_replayed_frames_queries() {
 
     if (!a_busy_session_recorded_into(pair, recording)) return drawn;
 
-    b3::RecPlayer*? player = b3::create_player(recording.data(), 1);
+    record::Player*? player = record::create_player(recording.data(), 1);
     if (catch player) return drawn;
 
     DrawTally tally;
-    b3::DebugDraw draw = a_renderer_wired_to(&tally);
+    draw::DebugDraw draw = a_renderer_wired_to(&tally);
 
     player.seek_frame(A_QUERY_FRAME);
     drawn.queries_at_the_frame = player.frame_query_count();

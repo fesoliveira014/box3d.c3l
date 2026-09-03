@@ -35,10 +35,10 @@ fn void a_hull_reports_the_mass_and_inertia_its_own_volume_implies() @test {
     assert(math::abs(box.mass - volume) < 0.001, "a hull weighs its own volume at a density of one");
     assert(math::abs(box.center.x) < 0.001 && math::abs(box.center.y) < 0.001 && math::abs(box.center.z) < 0.001,
         "and a box built about the origin has its centre of mass there");
-    assert(math::abs(box.inertia.cx.x - inertia) < 0.01, "the inertia of a box is m times h squared plus d squared over twelve");
-    assert(math::abs(box.inertia.cy.y - inertia) < 0.01);
-    assert(math::abs(box.inertia.cz.z - inertia) < 0.01);
-    assert(math::abs(box.inertia.cx.y) < 0.001 && math::abs(box.inertia.cx.z) < 0.001,
+    assert(math::abs(box.inertia.m00 - inertia) < 0.01, "the inertia of a box is m times h squared plus d squared over twelve");
+    assert(math::abs(box.inertia.m11 - inertia) < 0.01);
+    assert(math::abs(box.inertia.m22 - inertia) < 0.01);
+    assert(math::abs(box.inertia.m10) < 0.001 && math::abs(box.inertia.m20) < 0.001,
         "and a box square to the axes carries no products of inertia");
 }
 
@@ -70,14 +70,14 @@ fn void a_hull_measures_a_different_inertia_about_each_of_its_three_axes() @test
     float about_z = (float)(mass * (width * width + height * height) / 12.0);
 
     assert(math::abs(brick.at_density_one.mass - (float)mass) < 0.01, "a two by four by six brick weighs forty-eight");
-    assert(math::abs(brick.at_density_one.inertia.cx.x - about_x) < 0.05, "and is hardest to turn about its shortest axis");
-    assert(math::abs(brick.at_density_one.inertia.cy.y - about_y) < 0.05);
-    assert(math::abs(brick.at_density_one.inertia.cz.z - about_z) < 0.05);
+    assert(math::abs(brick.at_density_one.inertia.m00 - about_x) < 0.05, "and is hardest to turn about its shortest axis");
+    assert(math::abs(brick.at_density_one.inertia.m11 - about_y) < 0.05);
+    assert(math::abs(brick.at_density_one.inertia.m22 - about_z) < 0.05);
 
     assert(math::abs(brick.at_density_three.mass - (float)(3.0 * mass)) < 0.05,
         "mass is linear in density, because box3d scales the volume it baked");
-    assert(math::abs(brick.at_density_three.inertia.cx.x - 3.0f * about_x) < 0.2, "and so is every entry of the tensor");
-    assert(math::abs(brick.at_density_three.inertia.cz.z - 3.0f * about_z) < 0.2);
+    assert(math::abs(brick.at_density_three.inertia.m00 - 3.0f * about_x) < 0.2, "and so is every entry of the tensor");
+    assert(math::abs(brick.at_density_three.inertia.m22 - 3.0f * about_z) < 0.2);
 }
 
 fn b3::MassData the_mass_of_a_box_hull_five_metres_along_x() {
@@ -96,9 +96,9 @@ fn void a_hull_measures_its_inertia_about_its_own_centre_of_mass() @test {
 
     assert(math::abs(placed.center.x - 5.0) < 0.001, "a box built five metres along x has its centre of mass there");
     assert(math::abs(placed.center.y) < 0.001 && math::abs(placed.center.z) < 0.001);
-    assert(math::abs(placed.inertia.cx.x - at_the_origin.inertia.cx.x) < 0.01,
+    assert(math::abs(placed.inertia.m00 - at_the_origin.inertia.m00) < 0.01,
         "and carries the tensor of the same box at the origin, not the one a parallel axis shift would give");
-    assert(math::abs(placed.inertia.cz.z - at_the_origin.inertia.cz.z) < 0.01);
+    assert(math::abs(placed.inertia.m22 - at_the_origin.inertia.m22) < 0.01);
 
     // The centroid is the one term density does not touch, and only an off-origin hull can show
     // it: at the origin a scaled centroid and an unscaled one are the same zero.
@@ -129,14 +129,14 @@ fn void a_sphere_weighs_its_volume_and_measures_its_inertia_about_its_own_centre
     float inertia = (float)(0.4 * mass * radius * radius);
 
     assert(math::abs(ball.at_the_origin.mass - mass) < 0.0001, "four thirds pi r cubed at a density of one");
-    assert(math::abs(ball.at_the_origin.inertia.cx.x - inertia) < 0.0001, "and two fifths m r squared about every axis alike");
-    assert(math::abs(ball.at_the_origin.inertia.cy.y - inertia) < 0.0001);
-    assert(math::abs(ball.at_the_origin.inertia.cz.z - inertia) < 0.0001);
+    assert(math::abs(ball.at_the_origin.inertia.m00 - inertia) < 0.0001, "and two fifths m r squared about every axis alike");
+    assert(math::abs(ball.at_the_origin.inertia.m11 - inertia) < 0.0001);
+    assert(math::abs(ball.at_the_origin.inertia.m22 - inertia) < 0.0001);
 
     assert(math::abs(ball.placed.center.x - 1.0) < 0.001, "a sphere away from the origin reports its own centre");
     assert(math::abs(ball.placed.center.y - 2.0) < 0.001);
     assert(math::abs(ball.placed.center.z - 3.0) < 0.001);
-    assert(math::abs(ball.placed.inertia.cx.x - inertia) < 0.0001,
+    assert(math::abs(ball.placed.inertia.m00 - inertia) < 0.0001,
         "and the same tensor, because it is measured about that centre and not the shape frame's origin");
 }
 
@@ -171,13 +171,13 @@ fn void a_capsule_weighs_a_cylinder_and_two_end_caps_about_the_axis_it_lies_on()
     assert(math::abs(rod.along_y.center.x - 3.0) < 0.001, "with the centre of mass midway between the two centres");
     assert(math::abs(rod.along_y.center.y - 2.0) < 0.001);
     assert(math::abs(rod.along_y.center.z + 2.0) < 0.001);
-    assert(math::abs(rod.along_y.inertia.cy.y - axial) < 0.0001, "about its own axis a capsule is a cylinder and a ball");
-    assert(math::abs(rod.along_y.inertia.cx.x - across) < 0.0001, "and end over end it carries its caps out along the segment");
+    assert(math::abs(rod.along_y.inertia.m11 - axial) < 0.0001, "about its own axis a capsule is a cylinder and a ball");
+    assert(math::abs(rod.along_y.inertia.m00 - across) < 0.0001, "and end over end it carries its caps out along the segment");
 
-    assert(math::abs(rod.along_x.inertia.cx.x - axial) < 0.0001,
+    assert(math::abs(rod.along_x.inertia.m00 - axial) < 0.0001,
         "a capsule laid along x reports the axial entry on x, so the tensor follows the segment");
-    assert(math::abs(rod.along_x.inertia.cy.y - across) < 0.0001);
-    assert(math::abs(rod.along_x.inertia.cz.z - across) < 0.0001);
+    assert(math::abs(rod.along_x.inertia.m11 - across) < 0.0001);
+    assert(math::abs(rod.along_x.inertia.m22 - across) < 0.0001);
 }
 
 fn b3::MassData the_mass_of_a_capsule_whose_two_centres_meet() {
@@ -195,9 +195,9 @@ fn void a_capsule_of_no_length_weighs_the_ball_its_two_caps_make() @test {
     float inertia = (float)(0.4 * mass * radius * radius);
 
     assert(math::abs(pinched.mass - mass) < 0.0001, "two hemispherical caps and no cylinder between them");
-    assert(math::abs(pinched.inertia.cx.x - inertia) < 0.0001, "and the tensor of a solid ball, equal about all three axes");
-    assert(math::abs(pinched.inertia.cy.y - inertia) < 0.0001);
-    assert(math::abs(pinched.inertia.cz.z - inertia) < 0.0001);
+    assert(math::abs(pinched.inertia.m00 - inertia) < 0.0001, "and the tensor of a solid ball, equal about all three axes");
+    assert(math::abs(pinched.inertia.m11 - inertia) < 0.0001);
+    assert(math::abs(pinched.inertia.m22 - inertia) < 0.0001);
 }
 
 struct HullBounds {

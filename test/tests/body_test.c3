@@ -107,7 +107,7 @@ fn void a_body_with_mass_falls_under_gravity() @test {
     b3::MassData md = {
         .mass = 1.0,
         .center = { 0.0, 0.0, 0.0 },
-        .inertia = { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+        .inertia = { .m = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 } },
     };
     body.set_mass_data(md);
 
@@ -136,7 +136,7 @@ fn void gravity_scale_changes_the_fall() @test {
     b3::MassData md = {
         .mass = 1.0,
         .center = { 0.0, 0.0, 0.0 },
-        .inertia = { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+        .inertia = { .m = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 } },
     };
     body.set_mass_data(md);
 
@@ -161,7 +161,7 @@ fn void an_impulse_moves_a_body_the_way_the_arithmetic_says() @test {
     b3::MassData md = {
         .mass = 2.0,
         .center = { 0.0, 0.0, 0.0 },
-        .inertia = { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+        .inertia = { .m = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 } },
     };
     body.set_mass_data(md);
 
@@ -339,7 +339,7 @@ fn void a_spinning_body_reports_the_velocity_at_every_point_it_carries() @test {
     b3::MassData md = {
         .mass = 1.0,
         .center = { 0.0, 0.0, 0.0 },
-        .inertia = { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+        .inertia = { .m = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 } },
     };
     body.set_mass_data(md);
 
@@ -389,7 +389,7 @@ fn void force_and_torque_accumulate_over_a_step_the_way_the_arithmetic_says() @t
     b3::MassData md = {
         .mass = 2.0,
         .center = { 0.0, 0.0, 0.0 },
-        .inertia = { { 1.0, 0.0, 0.0 }, { 0.0, 1.0, 0.0 }, { 0.0, 0.0, 1.0 } },
+        .inertia = { .m = { 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0 } },
     };
     body.set_mass_data(md);
 
@@ -441,7 +441,7 @@ fn void mass_data_reads_back_through_every_mass_accessor() @test {
     b3::MassData md = {
         .mass = 4.0,
         .center = { 0.5, 0.0, 0.0 },
-        .inertia = { { 2.0, 0.0, 0.0 }, { 0.0, 4.0, 0.0 }, { 0.0, 0.0, 8.0 } },
+        .inertia = { .m = { 2.0, 0.0, 0.0, 0.0, 4.0, 0.0, 0.0, 0.0, 8.0 } },
     };
     body.set_mass_data(md);
 
@@ -451,18 +451,18 @@ fn void mass_data_reads_back_through_every_mass_accessor() @test {
     b3::MassData got = body.mass_data();
     assert(got.mass == 4.0);
     assert(got.center.x == 0.5 && got.center.y == 0.0 && got.center.z == 0.0);
-    assert(got.inertia.cx.x == 2.0 && got.inertia.cx.y == 0.0 && got.inertia.cx.z == 0.0);
-    assert(got.inertia.cy.x == 0.0 && got.inertia.cy.y == 4.0 && got.inertia.cy.z == 0.0);
-    assert(got.inertia.cz.x == 0.0 && got.inertia.cz.y == 0.0 && got.inertia.cz.z == 8.0);
+    assert(got.inertia.m00 == 2.0 && got.inertia.m10 == 0.0 && got.inertia.m20 == 0.0);
+    assert(got.inertia.m01 == 0.0 && got.inertia.m11 == 4.0 && got.inertia.m21 == 0.0);
+    assert(got.inertia.m02 == 0.0 && got.inertia.m12 == 0.0 && got.inertia.m22 == 8.0);
 
     b3::Matrix3 local_inertia = body.local_rotational_inertia();
-    assert(local_inertia.cx.x == 2.0 && local_inertia.cy.y == 4.0 && local_inertia.cz.z == 8.0);
+    assert(local_inertia.m00 == 2.0 && local_inertia.m11 == 4.0 && local_inertia.m22 == 8.0);
 
     // The inertia diagonal is chosen as powers of two so its reciprocal is exact.
     b3::Matrix3 world_inv_inertia = body.world_inverse_rotational_inertia();
-    assert(world_inv_inertia.cx.x == 0.5);
-    assert(world_inv_inertia.cy.y == 0.25);
-    assert(world_inv_inertia.cz.z == 0.125);
+    assert(world_inv_inertia.m00 == 0.5);
+    assert(world_inv_inertia.m11 == 0.25);
+    assert(world_inv_inertia.m22 == 0.125);
 
     b3::Vec3 local_c = body.local_center();
     assert(local_c.x == 0.5 && local_c.y == 0.0 && local_c.z == 0.0);

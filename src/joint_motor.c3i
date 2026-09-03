@@ -1,0 +1,213 @@
+module b3;
+
+<*
+ A joint known to be a motor joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_motor(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef MotorJointId = inline JointId;
+
+<*
+ A motor joint definition: body B driven towards a relative linear and angular velocity, and
+ pulled towards the transform the two local frames describe by a linear and an angular spring. The
+ type has no enable flags — each of the four channels is switched by its own ceiling, so a ceiling
+ of 0 is the channel turned off, and default_motor_joint_def(), which it must come from, zeroes
+ all of them. The constructor copies all ten fields verbatim: nothing is validated, clamped or
+ reordered.
+*>
+struct MotorJointDef {
+    inline JointDef base;
+    Vec3 linear_velocity;
+    float max_velocity_force;
+    Vec3 angular_velocity;
+    float max_velocity_torque;
+    float linear_hertz;
+    float linear_damping_ratio;
+    float max_spring_force;
+    float angular_hertz;
+    float angular_damping_ratio;
+    float max_spring_torque;
+}
+
+extern fn MotorJointDef default_motor_joint_def() @cname("b3DefaultMotorJointDef");
+
+<*
+ Raw motor joint constructor. Bypasses WorldId.create_motor_joint's definition guard and hands
+ back a joint of no particular type, so it is private to the module — box3d_joint_motor.c3's
+ WorldId.create_motor_joint is the only caller and is the only public way to a live motor joint.
+*>
+extern fn JointId create_motor_joint_raw(
+  WorldId world_id,
+  MotorJointDef* def,
+) @cname("b3CreateMotorJoint") @private;
+
+<*
+ Sets the velocity the joint drives body B towards relative to body A, in metres per second along
+ the world axes: box3d subtracts it from the bodies' relative velocity, rotating it into no frame
+ and projecting it onto no axis, so (1, 0, 0) drives along world x however the local frames are
+ turned. The drive acts only while max_velocity_force() is above 0, the whole switch on a type
+ with no enable flags. Nothing is asserted or clamped, and the drive's accumulated impulse stands,
+ so a joint retargeted mid-run works from the force it was already applying.
+*>
+extern fn void MotorJointId.set_linear_velocity(self, Vec3 velocity) @cname("b3MotorJoint_SetLinearVelocity");
+
+<*
+ The velocity the joint drives body B towards relative to body A, in metres per second along the
+ world axes. What was set, not what the two bodies are doing. Zero on a joint built from a default
+ definition.
+*>
+extern fn Vec3 MotorJointId.linear_velocity(self) @cname("b3MotorJoint_GetLinearVelocity");
+
+<*
+ Sets the ceiling in newtons on the force the linear drive may apply — the drive's switch as well
+ as its bound, since box3d solves it only while this is above 0. So a ceiling of 0, which is a
+ default definition's, drives nothing at all rather than driving weakly, and a negative silences
+ it the same way. Dropping a ceiling on a channel that has already worked does not undo the
+ impulse it holds: the warm start re-applies it every substep, gated on nothing. Nothing is
+ asserted or clamped here, where this joint's two spring ceilings do floor at 0.
+*>
+extern fn void MotorJointId.set_max_velocity_force(self, float force) @cname("b3MotorJoint_SetMaxVelocityForce");
+
+<*
+ The ceiling in newtons on the force the linear drive may apply, and the switch deciding whether
+ the drive is solved at all — see set_max_velocity_force. 0 on a default definition, and otherwise
+ whatever was stored, negatives included.
+
+ The shared JointId.constraint_force() is sound here, this type having no force getter of its own:
+ box3d divides the summed drive and spring impulses by the sub-step, each counted once, with
+ neither a double count nor a permutation. With one channel silent it is the other's alone.
+*>
+extern fn float MotorJointId.max_velocity_force(self) @cname("b3MotorJoint_GetMaxVelocityForce");
+
+<*
+ Sets the angular velocity the joint drives body B towards relative to body A, in radians per
+ second about the world axes. box3d subtracts this vector from the difference of the two bodies'
+ angular velocities and rotates it into no frame, so a velocity of (1, 0, 0) turns the body about
+ world x however the two local frames are turned.
+
+ The drive acts only while max_velocity_torque() is above 0. box3d asserts nothing here and clamps
+ nothing; the value is stored as handed and the drive's accumulated impulse stands.
+*>
+extern fn void MotorJointId.set_angular_velocity(self, Vec3 velocity) @cname("b3MotorJoint_SetAngularVelocity");
+
+<*
+ The angular velocity the joint drives body B towards relative to body A, in radians per second
+ about the world axes. What was set, not what the two bodies are doing. Zero on a joint built from
+ a default definition.
+*>
+extern fn Vec3 MotorJointId.angular_velocity(self) @cname("b3MotorJoint_GetAngularVelocity");
+
+<*
+ Sets the ceiling in newton-metres on the torque the angular drive may apply. It is that drive's
+ switch as well as its bound, for the reason and with the warm-start consequence
+ set_max_velocity_force describes: 0 — what a default definition gives it — turns the angular
+ drive off rather than weakening it, and a negative does the same.
+
+ box3d asserts nothing here and clamps nothing, so a negative ceiling reads back negative.
+*>
+extern fn void MotorJointId.set_max_velocity_torque(self, float torque) @cname("b3MotorJoint_SetMaxVelocityTorque");
+
+<*
+ The ceiling in newton-metres on the torque the angular drive may apply, and the switch deciding
+ whether that drive is solved at all — see set_max_velocity_torque. 0 on a joint built from a
+ default definition, and otherwise whatever was stored, negatives included.
+
+ This type has no torque getter of its own, and the shared JointId.constraint_torque() is sound
+ here: box3d divides the summed angular drive and spring impulses by the sub-step, each counted
+ once. With one channel silent it is the other's alone.
+*>
+extern fn float MotorJointId.max_velocity_torque(self) @cname("b3MotorJoint_GetMaxVelocityTorque");
+
+<*
+ Sets the linear spring's stiffness in hertz. The spring pulls local frame B's origin onto local
+ frame A's, and box3d solves it only while this and max_spring_force() are both above 0 — either
+ at 0 silences it, both are 0 on a default definition, and a negative silences it as 0 does — so
+ this is half a switch and not only a stiffness. Stiffness and damping become solver coefficients
+ at the top of each step, so a change lands on the next step, not the one in progress. Nothing is
+ asserted or clamped.
+*>
+extern fn void MotorJointId.set_linear_hertz(self, float hertz) @cname("b3MotorJoint_SetLinearHertz");
+
+<*
+ The linear spring's stiffness in hertz, and half the switch deciding whether that spring is solved
+ at all — see set_linear_hertz. 0 on a joint built from a default definition.
+*>
+extern fn float MotorJointId.linear_hertz(self) @cname("b3MotorJoint_GetLinearHertz");
+
+<*
+ Sets the linear spring's damping ratio, non-dimensional: 1 settles body B on local frame A's
+ origin without overshooting it. Unlike the stiffness beside it this decides nothing about whether
+ the spring is solved, which follows linear_hertz() and max_spring_force() alone. box3d asserts
+ nothing here and clamps nothing.
+*>
+extern fn void MotorJointId.set_linear_damping_ratio(self, float damping_ratio) @cname("b3MotorJoint_SetLinearDampingRatio");
+
+<*
+ The linear spring's damping ratio, non-dimensional. 0 on a joint built from a default definition.
+*>
+extern fn float MotorJointId.linear_damping_ratio(self) @cname("b3MotorJoint_GetLinearDampingRatio");
+
+<*
+ Sets the ceiling in newtons on the force the linear spring may apply, and the other half of that
+ spring's switch: box3d solves it only while this and linear_hertz() are both above 0, so a
+ ceiling of 0 — a default definition's — leaves the spring holding nothing. This one floors at 0
+ where the joint's two velocity ceilings store a negative as handed, so only construction can
+ leave this joint reporting a negative. Silencing a working spring by dropping the ceiling leaves
+ the impulse it holds standing — see set_max_velocity_force.
+*>
+extern fn void MotorJointId.set_max_spring_force(self, float force) @cname("b3MotorJoint_SetMaxSpringForce");
+
+<*
+ The ceiling in newtons on the force the linear spring may apply, and the other half of the switch
+ deciding whether that spring is solved at all — see set_max_spring_force. 0 on a joint built from
+ a default definition. Negative only on a joint whose definition carried one, never through the
+ setter. The force the spring actually applied is read through the shared
+ JointId.constraint_force(), which max_velocity_force describes.
+*>
+extern fn float MotorJointId.max_spring_force(self) @cname("b3MotorJoint_GetMaxSpringForce");
+
+<*
+ Sets the angular spring's stiffness in hertz. The spring turns local frame B onto local frame A's
+ orientation, and box3d solves it only while this and max_spring_torque() are both above 0 — either
+ one at 0 silences it, and both are 0 on a joint built from a default definition. A negative
+ stiffness silences it the same way 0 does. box3d asserts nothing here and clamps nothing, and a
+ change lands on the next step for the reason set_linear_hertz gives.
+*>
+extern fn void MotorJointId.set_angular_hertz(self, float hertz) @cname("b3MotorJoint_SetAngularHertz");
+
+<*
+ The angular spring's stiffness in hertz, and half the switch deciding whether that spring is
+ solved at all — see set_angular_hertz. 0 on a joint built from a default definition.
+*>
+extern fn float MotorJointId.angular_hertz(self) @cname("b3MotorJoint_GetAngularHertz");
+
+<*
+ Sets the angular spring's damping ratio, non-dimensional: 1 settles local frame B on local frame
+ A's orientation without overshooting it. It decides nothing about whether the spring is solved,
+ which follows angular_hertz() and max_spring_torque() alone. box3d asserts nothing here and clamps
+ nothing.
+*>
+extern fn void MotorJointId.set_angular_damping_ratio(self, float damping_ratio) @cname("b3MotorJoint_SetAngularDampingRatio");
+
+<*
+ The angular spring's damping ratio, non-dimensional. 0 on a joint built from a default definition.
+*>
+extern fn float MotorJointId.angular_damping_ratio(self) @cname("b3MotorJoint_GetAngularDampingRatio");
+
+<*
+ Sets the ceiling in newton-metres on the torque the angular spring may apply, and the other half
+ of that spring's switch: box3d solves it only while this and angular_hertz() are both above 0, so
+ a ceiling of 0 — a default definition's — leaves the spring turning nothing. Like
+ max_spring_force it floors at 0, so only construction can leave this joint reporting a negative
+ one, and silencing a working spring by dropping the ceiling leaves the impulse it holds standing.
+*>
+extern fn void MotorJointId.set_max_spring_torque(self, float torque) @cname("b3MotorJoint_SetMaxSpringTorque");
+
+<*
+ The ceiling in newton-metres on the torque the angular spring may apply, and the other half of the
+ switch deciding whether that spring is solved at all — see set_max_spring_torque. 0 on a joint
+ built from a default definition. Negative only on a joint whose definition carried one, never
+ through the setter. The torque the spring actually applied is read through the shared
+ JointId.constraint_torque(), which max_velocity_torque describes.
+*>
+extern fn float MotorJointId.max_spring_torque(self) @cname("b3MotorJoint_GetMaxSpringTorque");

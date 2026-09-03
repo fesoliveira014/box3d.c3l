@@ -1,0 +1,36 @@
+module b3;
+
+alias AllocFn = fn void*(int size, int alignment);
+alias FreeFn = fn void(void* mem);
+alias AssertFn = fn int(ZString condition, ZString file_name, int line_number);
+alias LogFn = fn void(ZString message);
+
+struct Version {
+    int major;
+    int minor;
+    int revision;
+}
+
+extern fn Version version() @cname("b3GetVersion");
+extern fn bool is_double_precision() @cname("b3IsDoublePrecision");
+extern fn int byte_count() @cname("b3GetByteCount");
+extern fn void set_allocator(AllocFn alloc_fn, FreeFn free_fn) @cname("b3SetAllocator");
+extern fn void set_assert_fn(AssertFn assert_fn) @cname("b3SetAssertFcn");
+extern fn void set_log_fn(LogFn log_fn) @cname("b3SetLogFcn");
+extern fn ulong ticks() @cname("b3GetTicks");
+extern fn float milliseconds(ulong ticks) @cname("b3GetMilliseconds");
+<*
+ The milliseconds elapsed since the tick stamp, which it then advances to now. Consecutive calls
+ measure the gap between calls, where milliseconds() reads from a stamp it leaves where it is.
+*>
+extern fn float milliseconds_and_reset(ulong* ticks) @cname("b3GetMillisecondsAndReset");
+extern fn void yield() @cname("b3Yield");
+extern fn void sleep(int milliseconds) @cname("b3Sleep");
+extern fn float length_units_per_meter() @cname("b3GetLengthUnitsPerMeter");
+extern fn void set_length_units_per_meter(float length_units) @cname("b3SetLengthUnitsPerMeter");
+extern fn float stall_threshold() @cname("b3GetStallThreshold");
+extern fn void set_stall_threshold(float seconds) @cname("b3SetStallThreshold");
+<*
+ Raw hash. Takes a pointer and a count where hash() takes a slice, so it is private to the module.
+*>
+extern fn uint hash_raw(uint seed, char* data, int count) @cname("b3Hash") @private;

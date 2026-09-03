@@ -25,12 +25,13 @@ The other five are left out on purpose, and the reason is not the same one twice
 
 Rather than trust the paragraph above, derive it — and intersect three sets, not two, because a
 header declaration is not evidence the symbol was built. Every bound symbol is a `@cname` in
-`box3d.c3i`, every declared one a `B3_API` in `vendor/box3d/include/box3d/*.h`, and every one that
+`src/*.c3i`, every declared one a `B3_API` in `vendor/box3d/include/box3d/*.h`, and every one that
 exists a `T` in `nm -g --defined-only linked-libs/linux-x64/libbox3d.a`.
 
 ## Using it
 
-Add the package to a C3 project's dependency search path and list `b3` as a dependency:
+Download `b3.c3l` from a release, drop it into the directory your project searches for libraries,
+and name `b3` as a dependency:
 
 ```json
 {
@@ -39,9 +40,19 @@ Add the package to a C3 project's dependency search path and list `b3` as a depe
 }
 ```
 
+That file is a packed `.c3l` — a zip c3c reads as it stands — and it carries the sources and a
+prebuilt `libbox3d.a`, so a consumer needs neither this repository nor CMake. Do not unzip or
+rename it. Building from a clone works too; see "Building the native library" below.
+
 The module is `b3`, after the manifest's `provides` name — not the directory name `box3d.c3l`. The
 module takes the C library's own symbol prefix, so `b3CreateWorld` in C reads as `b3::create_world`
 in C3.
+
+Two optional subsystems carry a namespace of their own, and `import b3;` reaches both because it
+imports submodules recursively: debug draw is `b3::draw` (`draw::DebugDraw`,
+`draw::default_debug_draw()`, `world.draw()`) and recording and replay is `b3::record`
+(`record::Recording`, `record::Player`, `world.start_recording()`). The faults stay in `b3`
+whichever module returns them — a `b3::record` call refuses with `b3::NOT_A_RECORDING`.
 
 The per-type `.checked()` macros (`WorldId.checked()`, `BodyId.checked()`, …) turn a null
 identifier into a named fault instead of undefined behavior; a caller opts in by routing an
@@ -67,6 +78,17 @@ drifted from `scripts/abi-sizes.txt`; `--update` re-records them.
 
 Only `linux-x64` is built today.
 
+## Cutting a release
+
+```sh
+./scripts/package-release.sh 0.1.0
+```
+
+writes `dist/b3.c3l` and its `.sha256`. Pushing a `v*` tag runs the same thing under
+`.github/workflows/release.yml`, which builds box3d, checks the layout pins, compiles the package,
+runs both test targets and the comment audit, builds a consumer against the artifact it just made,
+and uploads it.
+
 ## Conventions
 
 The `b3` prefix is the module name and never appears inside an identifier — `b3::create_world`, not
@@ -83,11 +105,12 @@ matching `default_*_def()` before calling into box3d — a behaviour they have t
 does not, since a release build of box3d compiles out its own check for this and would otherwise
 construct silently with a garbage definition.
 
-box3d's vectors and quaternions map onto the C3 standard library's own types, so the usual
-operators and vector methods work directly on values that cross the ABI. Matrices are not a
-standard-library matrix type: `Matrix3` is a struct of the three `Vec3` **columns** box3d
-multiplies it as, named `cx`, `cy` and `cz`, so a caller filling it from rows cannot do so by
-accident.
+box3d's vectors, quaternions and matrices all map onto the C3 standard library's own types, so the
+usual operators and methods work directly on values that cross the ABI: `Matrix3` is `Matrix3f`,
+which matches `b3Matrix3` byte for byte and shares its convention — column-major storage, `m * v`
+reading the columns `b3MulMV` reads. `m01` is row 0 of column 1, the transpose of the order the C
+field names `cx`, `cy`, `cz` read in, so a caller filling a matrix from rows still transposes it
+silently; `a_quaternion_from_a_matrix_reads_columns_and_not_rows` is the test that says so.
 
 ## License
 

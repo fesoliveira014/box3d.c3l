@@ -1,7 +1,13 @@
 {
   "provides": "b3",
+  "sources": [ "src/**" ],
   "linklib-dir": "linked-libs",
   "targets": {
     "linux-x64": { "linked-libraries": ["box3d", "m", "pthread"] }
+  },
+  "vendor": {
+    "version": "0.0.0",
+    "box3d-commit": "30c67b5",
+    "box3d-describe": "v0.1.0-20-g30c67b5"
   }
 }

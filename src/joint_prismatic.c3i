@@ -1,0 +1,198 @@
+module b3;
+
+<*
+ A joint known to be prismatic, so its per-type accessors need no check at each call. It converts
+ to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_prismatic(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef PrismaticJointId = inline JointId;
+
+<*
+ A prismatic joint definition: a slider letting body B move along local frame A's x axis alone,
+ with an optional spring, limit and motor. The translation it measures is zero where the two local
+ frame origins coincide in world space. Must come from default_prismatic_joint_def(), which zeroes
+ what it adds to the base — hertz, damping_ratio and max_motor_force included, not the base's
+ float::max — so a default prismatic joint is a bare slider. The two translations are stored as
+ written: box3d asserts the pair is ordered, and that assertion is compiled out.
+*>
+struct PrismaticJointDef {
+    inline JointDef base;
+    bool enable_spring;
+    float hertz;
+    float damping_ratio;
+    float target_translation;
+    bool enable_limit;
+    float lower_translation;
+    float upper_translation;
+    bool enable_motor;
+    float max_motor_force;
+    float motor_speed;
+}
+
+extern fn PrismaticJointDef default_prismatic_joint_def() @cname("b3DefaultPrismaticJointDef");
+
+<*
+ Raw prismatic joint constructor. Bypasses WorldId.create_prismatic_joint's definition guard and
+ hands back a joint of no particular type, so it is private to the module —
+ box3d_joint_prismatic.c3's WorldId.create_prismatic_joint is the only caller and is the only
+ public way to a live prismatic joint.
+*>
+extern fn JointId create_prismatic_joint_raw(
+  WorldId world_id,
+  PrismaticJointDef* def,
+) @cname("b3CreatePrismaticJoint") @private;
+
+<*
+ The slider's translation in metres: the offset between the two local frame origins in world
+ space, resolved onto local frame A's x axis. Zero where those two origins coincide, whatever
+ the bodies' own positions are. box3d's comment on this joint's constraint derivation names the
+ z axis instead; the code rotates the x axis, and the joint follows the code.
+*>
+extern fn float PrismaticJointId.translation(self) @cname("b3PrismaticJoint_GetTranslation");
+
+<*
+ The rate of change of translation(), in metres per second: the two bodies' relative velocity at
+ the joint anchors resolved onto the same axis, plus the term for that axis turning with body A.
+ A body with no solver state — a static one, or a sleeping one — contributes zero velocity
+ rather than being left out, so against a static anchor this is body B's own speed along the axis.
+*>
+extern fn float PrismaticJointId.speed(self) @cname("b3PrismaticJoint_GetSpeed");
+
+<*
+ Enables or disables this joint's limit. A change to the flag discards the limit's accumulated
+ impulses, so a limit switched back on rebuilds its hold over the following steps rather than
+ resuming the one it had. set_limits discards nothing.
+*>
+extern fn void PrismaticJointId.enable_limit(self, bool enable_limit) @cname("b3PrismaticJoint_EnableLimit");
+
+<*
+ Whether this joint's limit is enabled. False on a joint built from a default definition. The two
+ translations are stored either way; they hold the slider only while this is on.
+*>
+extern fn bool PrismaticJointId.is_limit_enabled(self) @cname("b3PrismaticJoint_IsLimitEnabled");
+
+<*
+ The low end of the translation the limit holds the slider above, in metres along local frame A's
+ x axis. It is what box3d stored, and which of the two paths stored it matters: see set_limits.
+ 0 on a joint built from a default definition.
+*>
+extern fn float PrismaticJointId.lower_limit(self) @cname("b3PrismaticJoint_GetLowerLimit");
+
+<*
+ The high end of the translation the limit holds the slider below, in metres along local frame A's
+ x axis. It is what box3d stored, and which of the two paths stored it matters: see set_limits.
+ 0 on a joint built from a default definition.
+*>
+extern fn float PrismaticJointId.upper_limit(self) @cname("b3PrismaticJoint_GetUpperLimit");
+
+<*
+ Sets the two translations in metres the limit holds the slider between, both asserted finite
+ under an assertion this build compiles out. box3d takes the smaller as the lower, so a reversed
+ pair is quietly corrected rather than refused, and it stops there — neither end is bounded, where
+ the revolute set_limits also clamps. This is where the setter and the constructor part company:
+ PrismaticJointDef stores its pair as written. The limit acts only while enable_limit() is on.
+*>
+extern fn void PrismaticJointId.set_limits(self, float lower, float upper) @cname("b3PrismaticJoint_SetLimits");
+
+<*
+ Enables or disables this joint's spring. A change to the flag discards the spring's accumulated
+ impulse, so a spring switched back on rebuilds its pull over the following steps rather than
+ resuming the one it had. This joint's enable_limit does the same to its own two impulses, where
+ the distance joint's two identically named flags discard nothing.
+*>
+extern fn void PrismaticJointId.enable_spring(self, bool enable_spring) @cname("b3PrismaticJoint_EnableSpring");
+
+<*
+ Whether this joint's spring is enabled. False on a joint built from a default definition.
+*>
+extern fn bool PrismaticJointId.is_spring_enabled(self) @cname("b3PrismaticJoint_IsSpringEnabled");
+
+<*
+ Sets the spring's stiffness in hertz. 0 on a joint built from a default definition, which leaves
+ an enabled spring pulling on nothing. box3d asserts the value is finite and non-negative; this
+ package links a release build where that assertion is compiled out, and the wrappers do not
+ restore it.
+*>
+extern fn void PrismaticJointId.set_spring_hertz(self, float hertz) @cname("b3PrismaticJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz.
+*>
+extern fn float PrismaticJointId.spring_hertz(self) @cname("b3PrismaticJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional: 1 settles the slider on its target without
+ overshooting it. box3d asserts the value is finite and non-negative under the same compiled-out
+ assertion set_spring_hertz describes.
+*>
+extern fn void PrismaticJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3PrismaticJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional.
+*>
+extern fn float PrismaticJointId.spring_damping_ratio(self) @cname("b3PrismaticJoint_GetSpringDampingRatio");
+
+<*
+ Sets the spring's rest translation in metres along local frame A's x axis, the translation the
+ spring pulls the slider toward while enable_spring() is on. translation() is not measured against
+ it — that is the offset between the two local frame origins and carries no target term, so a
+ slider settled on a target of 0.7 reads 0.7. The value is stored as handed, and the limit if it
+ is on still holds the slider inside its own pair, so a target outside that pair is pulled toward
+ rather than reached. box3d's finiteness assertion is compiled out here.
+*>
+extern fn void PrismaticJointId.set_target_translation(self, float target_translation) @cname("b3PrismaticJoint_SetTargetTranslation");
+
+<*
+ The spring's rest translation in metres. 0 on a joint built from a default definition. What the
+ definition or the setter handed box3d, neither path having bounded it.
+*>
+extern fn float PrismaticJointId.target_translation(self) @cname("b3PrismaticJoint_GetTargetTranslation");
+
+<*
+ Enables or disables this joint's motor. A change to the flag discards the motor's accumulated
+ impulse, so motor_force() reads zero until the next step rather than the force the motor was
+ applying before.
+*>
+extern fn void PrismaticJointId.enable_motor(self, bool enable_motor) @cname("b3PrismaticJoint_EnableMotor");
+
+<*
+ Whether this joint's motor is enabled. False on a joint built from a default definition.
+*>
+extern fn bool PrismaticJointId.is_motor_enabled(self) @cname("b3PrismaticJoint_IsMotorEnabled");
+
+<*
+ Sets the speed the motor drives the slider at, in metres per second along local frame A's x
+ axis. It is a target the motor pursues only as far as max_motor_force() lets it, not a speed the
+ slider is made to hold. box3d asserts the value is finite and nothing further — a negative speed
+ drives the slider the other way; this package links a release build where that assertion is
+ compiled out, and the wrappers do not restore it.
+*>
+extern fn void PrismaticJointId.set_motor_speed(self, float motor_speed) @cname("b3PrismaticJoint_SetMotorSpeed");
+
+<*
+ The speed the motor drives the slider at, in metres per second. What was set, not what the
+ slider is moving at: speed() is that.
+*>
+extern fn float PrismaticJointId.motor_speed(self) @cname("b3PrismaticJoint_GetMotorSpeed");
+
+<*
+ Sets the largest force the motor may apply, in newtons. 0 on a joint built from a default
+ definition, which leaves an enabled motor unable to move anything. box3d asserts the value is
+ finite and non-negative; this package links a release build where that assertion is compiled
+ out, and the wrappers do not restore it.
+*>
+extern fn void PrismaticJointId.set_max_motor_force(self, float force) @cname("b3PrismaticJoint_SetMaxMotorForce");
+
+<*
+ The largest force the motor may apply, in newtons.
+*>
+extern fn float PrismaticJointId.max_motor_force(self) @cname("b3PrismaticJoint_GetMaxMotorForce");
+
+<*
+ The force the motor applied over the last step, in newtons, bounded by max_motor_force(), and the
+ only sound reading on this type. The shared constraint_force() permutes its components
+ cyclically, so the transverse reaction comes back along the frame's free x axis, and it adds an
+ opposed limit and motor where the solver subtracts them; the shared constraint_torque() is
+ rotated twice, so only its magnitude survives.
+*>
+extern fn float PrismaticJointId.motor_force(self) @cname("b3PrismaticJoint_GetMotorForce");

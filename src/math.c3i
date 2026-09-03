@@ -1,0 +1,143 @@
+module b3;
+
+import std::math::quaternion;
+import std::math;
+
+alias Vec3 = float[<3>];
+alias Quat = Quaternionf;
+<*
+ The standard library's float 3x3, which box3d's b3Matrix3 matches byte for byte: both store
+ three columns and multiply as column times vector, so `m * v` and `m.transpose()` mean here what
+ b3MulMV and b3Transpose3 mean in C. `m01` is row 0 of column 1 — the index order is the
+ transpose of the column-then-row order the C field names read in.
+*>
+alias Matrix3 = Matrix3f;
+
+<*
+ A world position. Distinct from Vec3 so a position is never silently used as a direction.
+ box3d widens this to double in large-world mode, which this package does not build.
+*>
+typedef Pos = inline Vec3;
+
+struct WorldId {
+    ushort index1;
+    ushort generation;
+}
+
+struct BodyId {
+    int index1;
+    ushort world0;
+    ushort generation;
+}
+
+struct ShapeId {
+    int index1;
+    ushort world0;
+    ushort generation;
+}
+
+struct JointId {
+    int index1;
+    ushort world0;
+    ushort generation;
+}
+
+struct ContactId {
+    int index1;
+    ushort world0;
+    short padding;
+    uint generation;
+}
+
+struct Transform {
+    Vec3 p;
+    Quat q;
+}
+
+struct WorldTransform {
+    Pos p;
+    Quat q;
+}
+
+struct Aabb {
+    Vec3 lower_bound;
+    Vec3 upper_bound;
+}
+
+struct Plane {
+    Vec3 normal;
+    float offset;
+}
+
+struct CosSin {
+    float cosine;
+    float sine;
+}
+
+struct SegmentDistanceResult {
+    Vec3 point1;
+    float fraction1;
+    Vec3 point2;
+    float fraction2;
+}
+
+extern fn Vec3 point_to_segment_distance(Vec3 a, Vec3 b, Vec3 q) @cname("b3PointToSegmentDistance");
+extern fn CosSin compute_cos_sin(float radians) @cname("b3ComputeCosSin");
+<*
+ An approximate arc tangent of y over x, in radians over [-pi, pi]. box3d's own, because the
+ standard library's is not deterministic across platforms: sampled against it every tenth of a
+ degree over a full turn the worst error is 0.0000277 radians, 0.00158 degrees. Both zero gives 0.
+*>
+extern fn float atan2(float y, float x) @cname("b3Atan2");
+extern fn SegmentDistanceResult segment_distance(Vec3 p1, Vec3 q1, Vec3 p2, Vec3 q2) @cname("b3SegmentDistance");
+<*
+ Raw line distance. Private because line_distance() refuses the zero first direction box3d divides
+ by wherever the lines are parallel, which a zero direction always is.
+*>
+extern fn SegmentDistanceResult line_distance_raw(Vec3 p1, Vec3 d1, Vec3 p2, Vec3 d2) @cname("b3LineDistance") @private;
+<*
+ The inertia tensor of a point mass held at an offset from the origin, the parallel axis theorem's
+ term: mass times the squared distance across each axis down the diagonal, the negated
+ mass-weighted products off it. Add it to a tensor about the centre of mass to move that tensor.
+*>
+extern fn Matrix3 steiner(float mass, Vec3 origin) @cname("b3Steiner");
+<*
+ Raw rotation from a matrix. Private because make_quat_from_matrix() takes the matrix by value
+ where box3d takes a pointer to it.
+*>
+extern fn Quat make_quat_from_matrix_raw(Matrix3* m) @cname("b3MakeQuatFromMatrix") @private;
+<*
+ Raw rotation between two vectors. Private because compute_quat_between_unit_vectors() refuses the
+ vectors box3d does no more than assert are unit.
+*>
+extern fn Quat compute_quat_between_unit_vectors_raw(Vec3 v1, Vec3 v2) @cname("b3ComputeQuatBetweenUnitVectors") @private;
+extern fn bool is_valid_float(float a) @cname("b3IsValidFloat");
+extern fn bool is_valid_vec3(Vec3 a) @cname("b3IsValidVec3");
+extern fn bool is_valid_position(Pos p) @cname("b3IsValidPosition");
+extern fn bool is_valid_quat(Quat q) @cname("b3IsValidQuat");
+extern fn bool is_valid_transform(Transform a) @cname("b3IsValidTransform");
+<*
+ Whether the position is finite and the rotation is a unit quaternion. Nothing bounds how far out
+ the position is: one 1e30 length units from the origin passes.
+*>
+extern fn bool is_valid_world_transform(WorldTransform t) @cname("b3IsValidWorldTransform");
+<*
+ Whether all nine entries are finite. Not a test for a rotation: the zero matrix passes, and so
+ does one whose entries are 1e30.
+*>
+extern fn bool is_valid_matrix3(Matrix3 a) @cname("b3IsValidMatrix3");
+extern fn bool is_valid_aabb(Aabb a) @cname("b3IsValidAABB");
+<*
+ Two one-sided comparisons and nothing else: false when a lower bound falls under minus B3_HUGE or
+ an upper bound rises over it, 1e5 length units so the reach moves with set_length_units_per_meter.
+ It reads the two named fields and not where the box lies, so an inverted box is judged the same
+ way — one whose lower is far positive and upper far negative passes, one whose lower is far
+ negative does not — and a NaN passes because every comparison against one is false.
+*>
+extern fn bool is_bounded_aabb(Aabb a) @cname("b3IsBoundedAABB");
+<*
+ Whether the box is both valid and bounded, which is the whole of the test, so it carries nothing
+ the two do not: an inverted box near the origin is bounded and not valid, a wide one the reverse.
+*>
+extern fn bool is_sane_aabb(Aabb a) @cname("b3IsSaneAABB");
+extern fn bool is_valid_plane(Plane a) @cname("b3IsValidPlane");

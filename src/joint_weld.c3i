@@ -1,0 +1,95 @@
+module b3;
+
+<*
+ A joint known to be a weld joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_weld(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef WeldJointId = inline JointId;
+
+<*
+ A weld joint definition: the two bodies held at the relative transform their local frames
+ describe, with one spring over the translation and another over the rotation. Must come from
+ default_weld_joint_def(), which zeroes all four fields it adds to the base.
+
+ Zero hertz means rigid here rather than "no spring", inverting the reading every other sprung
+ type invites — raising linear_hertz off 0 makes the weld sag — and the two channels are tested
+ separately. box3d's assertion that all four fields are at or above 0 is compiled out here.
+*>
+struct WeldJointDef {
+    inline JointDef base;
+    float linear_hertz;
+    float angular_hertz;
+    float linear_damping_ratio;
+    float angular_damping_ratio;
+}
+
+extern fn WeldJointDef default_weld_joint_def() @cname("b3DefaultWeldJointDef");
+
+<*
+ Raw weld joint constructor. Bypasses WorldId.create_weld_joint's definition guard and hands back
+ a joint of no particular type, so it is private to the module — box3d_joint_weld.c3's
+ WorldId.create_weld_joint is the only caller and is the only public way to a live weld joint.
+*>
+extern fn JointId create_weld_joint_raw(
+  WorldId world_id,
+  WeldJointDef* def,
+) @cname("b3CreateWeldJoint") @private;
+
+<*
+ Sets the stiffness in hertz of the spring over the two bodies' relative translation. 0 on a joint
+ built from a default definition, where it asks for a rigid channel rather than an absent spring,
+ as WeldJointDef describes. Nothing is clamped and the accumulated impulses stand.
+
+ box3d's assertion that the value is finite and non-negative is compiled out, and a negative
+ splits the solver: prepare tests for exactly 0 and builds a spring from it, while the solve
+ engages it only above 0.
+*>
+extern fn void WeldJointId.set_linear_hertz(self, float hertz) @cname("b3WeldJoint_SetLinearHertz");
+
+<*
+ The stiffness in hertz of the spring over the two bodies' relative translation. 0 on a joint built
+ from a default definition, and 0 is this joint's rigid setting rather than its softest.
+*>
+extern fn float WeldJointId.linear_hertz(self) @cname("b3WeldJoint_GetLinearHertz");
+
+<*
+ Sets the damping ratio of the spring over the two bodies' relative translation, non-dimensional.
+ box3d reads it only while linear_hertz() is away from 0, the channel otherwise being solved with
+ the joint's own constraint tuning, which carries a damping ratio of its own. Asserted finite and
+ at or above 0 under the same compiled-out assertion set_linear_hertz describes, and stored as
+ handed.
+*>
+extern fn void WeldJointId.set_linear_damping_ratio(self, float damping_ratio) @cname("b3WeldJoint_SetLinearDampingRatio");
+
+<*
+ The damping ratio of the spring over the two bodies' relative translation, non-dimensional. 0 on
+ a joint built from a default definition.
+*>
+extern fn float WeldJointId.linear_damping_ratio(self) @cname("b3WeldJoint_GetLinearDampingRatio");
+
+<*
+ Sets the stiffness in hertz of the spring over the two bodies' relative rotation. This is the
+ joint's other channel and box3d tests the two separately, so the rotation may be rigid at 0 while
+ the translation is soft, or the other way about. Everything set_linear_hertz describes holds here
+ too, the disagreement over a negative value included.
+*>
+extern fn void WeldJointId.set_angular_hertz(self, float hertz) @cname("b3WeldJoint_SetAngularHertz");
+
+<*
+ The stiffness in hertz of the spring over the two bodies' relative rotation. 0 on a joint built
+ from a default definition, and 0 is this joint's rigid setting rather than its softest.
+*>
+extern fn float WeldJointId.angular_hertz(self) @cname("b3WeldJoint_GetAngularHertz");
+
+<*
+ Sets the damping ratio of the spring over the two bodies' relative rotation, non-dimensional.
+ Read only while angular_hertz() is away from 0, on the terms set_linear_damping_ratio describes.
+*>
+extern fn void WeldJointId.set_angular_damping_ratio(self, float damping_ratio) @cname("b3WeldJoint_SetAngularDampingRatio");
+
+<*
+ The damping ratio of the spring over the two bodies' relative rotation, non-dimensional. 0 on a
+ joint built from a default definition.
+*>
+extern fn float WeldJointId.angular_damping_ratio(self) @cname("b3WeldJoint_GetAngularDampingRatio");

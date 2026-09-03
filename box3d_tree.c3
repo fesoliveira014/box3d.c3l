@@ -128,3 +128,19 @@ fn ClosestSearch DynamicTree.query_closest(
     );
     return { .stats = stats, .search_bound = search_bound };
 }
+
+<*
+ Reads back a tree save() wrote, multiplying every node box by scale as it goes. The caller owns
+ it and must destroy() it exactly once. box3d zeroes the struct for a path it cannot open, an
+ unknown version and a node array that falls short, but not for a file cut inside the header, where
+ the bytes that arrived stand over zeroes. It allocates the nodes only after reading that header
+ whole and save() writes a null in their place, so every refusal arrives with none.
+
+ @param scale : "what each node box's bounds are multiplied by, 1 reproducing the saved tree"
+ @return "the tree, or FILE_UNAVAILABLE when the path could not be read or holds no tree this build knows"
+*>
+fn DynamicTree? load_tree(ZString path, float scale) {
+    DynamicTree tree = load_tree_raw(path, scale);
+    if (tree.nodes == null) return FILE_UNAVAILABLE~;
+    return tree;
+}

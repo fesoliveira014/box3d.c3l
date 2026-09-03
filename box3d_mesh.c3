@@ -126,7 +126,7 @@ fn MeshData*? create_mesh(MeshDef* def) {
  corner and running along positive x and z.
 
  The caller owns the field and must destroy() it; byte_count() carries the allocation until then,
- and none of the three height field constructors touches a world. box3d itself never refuses: its
+ and no height field constructor touches a world. box3d itself never refuses: its
  check that a grid holds at least four points is an assertion this release build compiles out, and
  the count guard below restores it, negative counts that multiply to a positive product included.
 
@@ -186,6 +186,32 @@ fn HeightFieldData*? create_height_field(HeightFieldDef* def) {
     if (def.heights == null) return INVALID_DEFINITION~;
     if (def.global_minimum_height > def.global_maximum_height) return INVALID_DEFINITION~;
     return create_height_field_raw(def);
+}
+
+<*
+ Writes the grid to the path as text: the two counts, the scale, the global range and the
+ winding, then every height and every material index. A path box3d cannot open is a silent no-op,
+ so a caller who needs to know reads the file back. The material indices are read here where
+ create_height_field() leaves them optional, which is why they are guarded here and not there.
+
+ @param [&in] def : "the grid to write"
+ @return "void, DEGENERATE_GEOMETRY when either count is below 2, or INVALID_DEFINITION when either array is missing"
+*>
+fn void? dump_height_data(HeightFieldDef* def, ZString path) {
+    if (def.count_x < 2 || def.count_z < 2) return DEGENERATE_GEOMETRY~;
+    if (def.heights == null || def.material_indices == null) return INVALID_DEFINITION~;
+    dump_height_data_raw(def, path);
+}
+
+<*
+ Builds a height field from a file dump_height_data() wrote. Ownership works as it does for
+ create_height_field_grid, and box3d answers a path it cannot open, a file that ends early and a
+ number it cannot parse with the same null pointer, giving back everything it had taken first.
+
+ @return "the height field, or FILE_UNAVAILABLE when the path could not be read or holds no grid"
+*>
+fn HeightFieldData*? load_height_field(ZString path) {
+    return checked_geometry(load_height_field_raw(path), FILE_UNAVAILABLE);
 }
 
 <*

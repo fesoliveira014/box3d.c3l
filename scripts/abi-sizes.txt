@@ -103,3 +103,9 @@ b3PlaneSolverResult 16 4 delta=0 iterationCount=12
 b3PlaneResult 28 4 plane=0 point=16
 b3BodyPlaneResult 36 4 shapeId=0 result=8
 b3ExplosionDef 32 8 maskBits=0 position=8 radius=20 falloff=24 impulsePerArea=28
+b3RecPlayerInfo 44 4 frameCount=0 workerCount=4 timeStep=8 subStepCount=12 lengthScale=16 bounds=20
+b3RecQueryType 4 4
+b3RecQueryInfo 120 8 type=0 filter=8 aabb=40 origin=64 translation=76 hitCount=88 key=96 id=104 name=112
+b3RecQueryHit 36 4 shape=0 point=8 normal=20 fraction=32
+b3DebugShape 24 8 shapeId=0 type=8 @capsule=16
+b3DebugDraw 128 8 DrawShapeFcn=0 DrawSegmentFcn=8 DrawTransformFcn=16 DrawPointFcn=24 DrawSphereFcn=32 DrawCapsuleFcn=40 DrawBoundsFcn=48 DrawBoxFcn=56 DrawStringFcn=64 drawingBounds=72 forceScale=96 jointScale=100 drawShapes=104 drawJoints=105 drawJointExtras=106 drawBounds=107 drawMass=108 drawSleep=109 drawBodyNames=110 drawContacts=111 drawAnchorA=112 drawGraphColors=113 drawContactFeatures=114 drawContactNormals=115 drawContactForces=116 drawIslands=117 context=120

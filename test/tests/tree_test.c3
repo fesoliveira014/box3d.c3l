@@ -1,6 +1,8 @@
 module b3_test;
 
 import b3;
+import std::io;
+import std::io::path;
 
 fn void the_tree_types_match_the_c_layout() @test {
     assert(b3::TreeNodeChildren::size == 8);
@@ -1616,4 +1618,181 @@ fn void a_swept_box_travels_on_its_centre() @test {
     assert(read.lowered_along_x.count == 1, "and the lowered one reaches a single proxy");
     assert(casts_carry_exactly(read.lowered_along_x, (ulong[]){ 0x11 }),
         "which is the same proxy, reached from below by the same half-extent");
+}
+
+const int A_SAVED_PROXY_COUNT = 3;
+
+// Past the version, the root and both node counts, and short of the node array box3d reads next.
+const usz A_TRUNCATION_INSIDE_THE_HEADER = 40;
+
+// box3d takes a path rather than a handle, so a saved tree needs somewhere on disk that is not
+// the repository. Every test that writes one deletes it before returning.
+fn String a_temporary_tree_path(String name) {
+    Path directory = path::temp_directory(tmem) ?? (Path)"/tmp";
+    return string::tformat("%s/%s", (String)directory, name);
+}
+
+struct TreeThroughAFile {
+    int baseline;
+    int proxies_written;
+    int proxies_read;
+    int height_written;
+    int height_read;
+    b3::Aabb root_written;
+    b3::Aabb root_read;
+    b3::Aabb root_at_double_scale;
+    b3::Aabb[A_SAVED_PROXY_COUNT] boxes_written;
+    b3::Aabb[A_SAVED_PROXY_COUNT] boxes_read;
+    ulong[A_SAVED_PROXY_COUNT] payloads_read;
+    int bytes_with_the_saved_tree;
+    int bytes_while_both_were_live;
+    int bytes_after;
+    fault a_path_that_holds_nothing;
+    fault a_file_shorter_than_a_tree;
+    fault a_file_of_the_wrong_kind;
+    fault a_file_cut_inside_its_header;
+    bool the_cut_file_was_long_enough;
+}
+
+// Three proxies whose boxes and payloads all differ, so a load that mixed two nodes up, or that
+// answered from a freshly built tree, could not pass.
+fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
+    String file = a_temporary_tree_path("box3d_tree.bin");
+    defer (void)path::delete((PathCommon)file);
+    String stub = a_temporary_tree_path("box3d_tree_stub.bin");
+    defer (void)path::delete((PathCommon)stub);
+    String junk = a_temporary_tree_path("box3d_tree_junk.bin");
+    defer (void)path::delete((PathCommon)junk);
+    String cut = a_temporary_tree_path("box3d_tree_cut.bin");
+    defer (void)path::delete((PathCommon)cut);
+
+    TreeThroughAFile trip;
+    trip.baseline = b3::byte_count();
+
+    b3::DynamicTree written = b3::create_tree(16);
+    defer written.destroy();
+
+    b3::Aabb[A_SAVED_PROXY_COUNT] boxes = {
+        { .lower_bound = { -1.5, -2.25, -3.75 }, .upper_bound = { 4.5, 5.25, 6.75 } },
+        { .lower_bound = { 10.5, 11.25, 12.75 }, .upper_bound = { 20.5, 21.25, 22.75 } },
+        { .lower_bound = { -30.5, 7.5, -0.25 }, .upper_bound = { -25.5, 9.5, 1.75 } },
+    };
+    ulong[A_SAVED_PROXY_COUNT] payloads = { 0x0123456789ABCDEF, ulong::max, 0x00FF00FF00FF00FF };
+
+    int[A_SAVED_PROXY_COUNT] proxies;
+    for (int i = 0; i < A_SAVED_PROXY_COUNT; i++) {
+        int? proxy = written.create_proxy(
+          aabb: boxes[i],
+          category_bits: ulong::max,
+          user_data: payloads[i],
+        );
+        if (catch proxy) return trip;
+        proxies[i] = proxy;
+        trip.boxes_written[i] = boxes[i];
+    }
+    trip.bytes_with_the_saved_tree = b3::byte_count();
+    trip.proxies_written = written.proxy_count;
+    trip.height_written = written.height();
+    trip.root_written = written.root_bounds();
+
+    written.save(file.zstr_tcopy());
+
+    b3::DynamicTree? reread = b3::load_tree(file.zstr_tcopy(), 1.0);
+    if (catch reread) return trip;
+    b3::DynamicTree read = reread;
+    trip.bytes_while_both_were_live = b3::byte_count();
+    trip.proxies_read = read.proxy_count;
+    trip.height_read = read.height();
+    trip.root_read = read.root_bounds();
+    for (int i = 0; i < A_SAVED_PROXY_COUNT; i++) {
+        if (try box = read.aabb(proxies[i])) trip.boxes_read[i] = box;
+        if (try payload = read.user_data(proxies[i])) trip.payloads_read[i] = payload;
+    }
+    read.destroy();
+
+    b3::DynamicTree? rescaled = b3::load_tree(file.zstr_tcopy(), 2.0);
+    if (catch rescaled) return trip;
+    b3::DynamicTree doubled = rescaled;
+    trip.root_at_double_scale = doubled.root_bounds();
+    doubled.destroy();
+
+    if (catch err = b3::load_tree("box3d_no_such_directory/tree.bin", 1.0)) trip.a_path_that_holds_nothing = err;
+
+    char[8] too_short;
+    too_short[..] = 0x5A;
+    if (catch file::save(stub, too_short[..])) return trip;
+    if (catch err = b3::load_tree(stub.zstr_tcopy(), 1.0)) trip.a_file_shorter_than_a_tree = err;
+
+    char[256] wrong_kind;
+    wrong_kind[..] = 0xAB;
+    if (catch file::save(junk, wrong_kind[..])) return trip;
+    if (catch err = b3::load_tree(junk.zstr_tcopy(), 1.0)) trip.a_file_of_the_wrong_kind = err;
+
+    // A real saved tree cut inside its own header keeps its version, its node count and its node
+    // capacity, and box3d allocates the node array only after reading that header whole -- so the
+    // bytes say a tree of many slots and the pointer to them is null.
+    if (try whole = file::load_temp(file)) {
+        if (whole.len > A_TRUNCATION_INSIDE_THE_HEADER) {
+            if (catch file::save(cut, whole[:A_TRUNCATION_INSIDE_THE_HEADER])) return trip;
+            trip.the_cut_file_was_long_enough = true;
+            if (catch err = b3::load_tree(cut.zstr_tcopy(), 1.0)) trip.a_file_cut_inside_its_header = err;
+        }
+    }
+
+    trip.bytes_after = b3::byte_count();
+    return trip;
+}
+
+fn void a_saved_tree_loads_back_with_every_proxy_where_it_was() @test {
+    TreeThroughAFile trip = the_readings_from_a_tree_through_a_file();
+
+    assert(trip.proxies_written == A_SAVED_PROXY_COUNT && trip.proxies_read == trip.proxies_written,
+        "the load carries the proxy count over, not a count of what it managed to read");
+    assert(trip.height_read == trip.height_written && trip.height_written > 0,
+        "and the shape of the tree with it, which a rebuilt tree would not have to match");
+
+    for (int i = 0; i < A_SAVED_PROXY_COUNT; i++) {
+        for (int axis = 0; axis < 3; axis++) {
+            float lower_slip = trip.boxes_read[i].lower_bound[axis] - trip.boxes_written[i].lower_bound[axis];
+            float upper_slip = trip.boxes_read[i].upper_bound[axis] - trip.boxes_written[i].upper_bound[axis];
+            assert(lower_slip > -1.0e-4 && lower_slip < 1.0e-4, "every proxy box reads back where it was written");
+            assert(upper_slip > -1.0e-4 && upper_slip < 1.0e-4);
+        }
+    }
+    assert(trip.payloads_read[0] == 0x0123456789ABCDEF && trip.payloads_read[1] == ulong::max
+        && trip.payloads_read[2] == 0x00FF00FF00FF00FF,
+        "and all eight bytes of each payload, each still on its own proxy");
+}
+
+fn void a_load_scales_every_node_box_and_gives_its_pool_back() @test {
+    TreeThroughAFile trip = the_readings_from_a_tree_through_a_file();
+
+    for (int axis = 0; axis < 3; axis++) {
+        float once = trip.root_read.lower_bound[axis];
+        float twice = trip.root_at_double_scale.lower_bound[axis];
+        assert(once > trip.root_written.lower_bound[axis] - 1.0e-4
+            && once < trip.root_written.lower_bound[axis] + 1.0e-4,
+            "a scale of one reproduces the root box the save was taken from");
+        assert(twice > 2.0 * once - 1.0e-3 && twice < 2.0 * once + 1.0e-3,
+            "and a scale of two doubles every bound rather than the extents about a centre");
+    }
+    assert(trip.bytes_with_the_saved_tree > trip.baseline
+        && trip.bytes_while_both_were_live > trip.bytes_with_the_saved_tree,
+        "the loaded tree takes a node pool of its own, beside the one it was loaded from");
+    assert(trip.bytes_after == trip.bytes_with_the_saved_tree,
+        "and gives every byte of it back on destroy, leaving only the tree still held");
+}
+
+fn void a_file_that_is_no_tree_becomes_a_fault_rather_than_a_zeroed_tree() @test {
+    TreeThroughAFile trip = the_readings_from_a_tree_through_a_file();
+
+    assert(trip.proxies_read == A_SAVED_PROXY_COUNT,
+        "the same fixture read a real tree back, so the three refusals below are refusals");
+    assert(trip.a_path_that_holds_nothing == b3::FILE_UNAVAILABLE, "a path with no file behind it");
+    assert(trip.a_file_shorter_than_a_tree == b3::FILE_UNAVAILABLE, "a file too short to hold the struct");
+    assert(trip.a_file_of_the_wrong_kind == b3::FILE_UNAVAILABLE,
+        "and one long enough whose version box3d does not know, which it answers with the same zeroed tree");
+    assert(trip.the_cut_file_was_long_enough, "the saved tree was long enough to cut inside its header");
+    assert(trip.a_file_cut_inside_its_header == b3::FILE_UNAVAILABLE,
+        "a real tree cut inside that header keeps its counts and loses its nodes, and is refused on the pointer");
 }

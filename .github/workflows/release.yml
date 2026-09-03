@@ -23,11 +23,13 @@ jobs:
       # The static tarball, not the stock release build: the stock one needs a newer glibc than
       # this package's baseline, and a release must build on the oldest host it claims to support.
       - name: Install c3c ${{ env.C3C_VERSION }}
+        # Downloaded outside the checkout: an archive left in the repository root is an untracked
+        # file, and the packaging step refuses a working tree that carries one.
         run: |
-          curl -fsSL -o c3c.tar.gz \
+          curl -fsSL -o "$RUNNER_TEMP/c3c.tar.gz" \
             "https://github.com/c3lang/c3c/releases/download/${C3C_VERSION}/c3-linux-static.tar.gz"
-          mkdir -p "$HOME/opt" && tar -xzf c3c.tar.gz -C "$HOME/opt"
-          echo "$(dirname "$(find "$HOME/opt" -name c3c -type f -perm -u+x | head -1)")" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/c3" && tar -xzf "$RUNNER_TEMP/c3c.tar.gz" -C "$RUNNER_TEMP/c3"
+          echo "$(dirname "$(find "$RUNNER_TEMP/c3" -name c3c -type f -perm -u+x | head -1)")" >> "$GITHUB_PATH"
 
       - name: Report c3c version
         run: c3c --version

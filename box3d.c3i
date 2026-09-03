@@ -4667,9 +4667,9 @@ extern fn BodyId body_id_raw(RecPlayer* player, int index) @cname("b3RecPlayer_G
 <*
  Wires a renderer's per-shape callbacks into the replay world, which box3d reaches from a draw of
  that world and nowhere else, so replaying alone calls neither. It stands a new world up and
- rewinds to frame 0 — so it belongs immediately after create_player(), every id from the old world
- still reads valid, and the pre-step pause and the frame's recorded queries survive the rewind
- where the divergence latch and end flag do not.
+ rewinds to frame 0, so it belongs immediately after create_player(). A body or shape id from the
+ old world still reads valid where the world id does not, and the pre-step pause and the frame's
+ recorded queries survive the rewind where the divergence latch and end flag do not.
 *>
 extern fn void RecPlayer.set_debug_shape_callbacks(
   &self,
@@ -4712,11 +4712,11 @@ const int GRAPH_COLOR_COUNT = 24;
 extern fn HexColor graph_color_raw(int index) @cname("b3GetGraphColor") @private;
 
 <*
- One shape offered to a renderer so it can build whatever it draws that shape with. The arm the
- type names points into box3d's own storage and is good for the call and no longer: the sphere,
- capsule and mesh arms point into the world's shape array, which moves when it grows, so a pointer
- kept past the callback is stale from the next shape created. Read the geometry inside the call.
- The other five arms are the same address read as geometry it is not.
+ One shape offered to a renderer so it can build whatever it draws that shape with. Read the arm
+ the type names inside the call: the sphere, capsule and mesh arms point into the world's shape
+ array, which moves when it grows, so a pointer kept is stale from the next shape created. The
+ compound and height field arms are the caller's own geometry and outlive the call. The other five
+ arms of any one shape are its address read as geometry it is not.
 *>
 struct DebugShape {
     ShapeId shape_id;

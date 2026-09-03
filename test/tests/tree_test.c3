@@ -1622,6 +1622,9 @@ fn void a_swept_box_travels_on_its_centre() @test {
 
 const int A_SAVED_PROXY_COUNT = 3;
 
+// Past the version, the root and both node counts, and short of the node array box3d reads next.
+const usz A_TRUNCATION_INSIDE_THE_HEADER = 40;
+
 // box3d takes a path rather than a handle, so a saved tree needs somewhere on disk that is not
 // the repository. Every test that writes one deletes it before returning.
 fn String a_temporary_tree_path(String name) {
@@ -1647,6 +1650,8 @@ struct TreeThroughAFile {
     fault a_path_that_holds_nothing;
     fault a_file_shorter_than_a_tree;
     fault a_file_of_the_wrong_kind;
+    fault a_file_cut_inside_its_header;
+    bool the_cut_file_was_long_enough;
 }
 
 // Three proxies whose boxes and payloads all differ, so a load that mixed two nodes up, or that
@@ -1658,6 +1663,8 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
     defer (void)path::delete((PathCommon)stub);
     String junk = a_temporary_tree_path("box3d_tree_junk.bin");
     defer (void)path::delete((PathCommon)junk);
+    String cut = a_temporary_tree_path("box3d_tree_cut.bin");
+    defer (void)path::delete((PathCommon)cut);
 
     TreeThroughAFile trip;
     trip.baseline = b3::byte_count();
@@ -1721,6 +1728,17 @@ fn TreeThroughAFile the_readings_from_a_tree_through_a_file() {
     if (catch file::save(junk, wrong_kind[..])) return trip;
     if (catch err = b3::load_tree(junk.zstr_tcopy(), 1.0)) trip.a_file_of_the_wrong_kind = err;
 
+    // A real saved tree cut inside its own header keeps its version, its node count and its node
+    // capacity, and box3d allocates the node array only after reading that header whole -- so the
+    // bytes say a tree of many slots and the pointer to them is null.
+    if (try whole = file::load_temp(file)) {
+        if (whole.len > A_TRUNCATION_INSIDE_THE_HEADER) {
+            if (catch file::save(cut, whole[:A_TRUNCATION_INSIDE_THE_HEADER])) return trip;
+            trip.the_cut_file_was_long_enough = true;
+            if (catch err = b3::load_tree(cut.zstr_tcopy(), 1.0)) trip.a_file_cut_inside_its_header = err;
+        }
+    }
+
     trip.bytes_after = b3::byte_count();
     return trip;
 }
@@ -1774,4 +1792,7 @@ fn void a_file_that_is_no_tree_becomes_a_fault_rather_than_a_zeroed_tree() @test
     assert(trip.a_file_shorter_than_a_tree == b3::FILE_UNAVAILABLE, "a file too short to hold the struct");
     assert(trip.a_file_of_the_wrong_kind == b3::FILE_UNAVAILABLE,
         "and one long enough whose version box3d does not know, which it answers with the same zeroed tree");
+    assert(trip.the_cut_file_was_long_enough, "the saved tree was long enough to cut inside its header");
+    assert(trip.a_file_cut_inside_its_header == b3::FILE_UNAVAILABLE,
+        "a real tree cut inside that header keeps its counts and loses its nodes, and is refused on the pointer");
 }

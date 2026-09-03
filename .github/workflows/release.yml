@@ -60,37 +60,14 @@ jobs:
         run: ./scripts/package-release.sh "${GITHUB_REF_NAME#v}"
 
       # The artifact must build a consumer that has neither this repository nor CMake.
+      # The project is checked in at scripts/consumer-smoke so a sweep over the package sources
+      # reaches it; it lived in a heredoc here and went stale when the API changed.
       - name: Consumer smoke test
         run: |
-          mkdir -p /tmp/consumer/libs /tmp/consumer/src
-          cp dist/b3.c3l /tmp/consumer/libs/b3.c3l
-          cat > /tmp/consumer/project.json <<'JSON'
-          {
-            "langrev": "1",
-            "dependency-search-paths": [ "libs" ],
-            "dependencies": [ "b3" ],
-            "sources": [ "src/**" ],
-            "targets": { "consumer": { "type": "executable" } }
-          }
-          JSON
-          cat > /tmp/consumer/src/main.c3 <<'C3'
-          module consumer;
-          import b3;
-
-          fn int main() {
-              b3::require_float_abi()!!;
-              b3::WorldDef def = b3::default_world_def();
-              b3::WorldId world = b3::create_world(&def)!!;
-              defer world.destroy();
-              world.step(1.0f / 60.0f, 4);
-              draw::DebugDraw debug = draw::default_debug_draw();
-              world.draw(&debug, ulong::max);
-              record::Recording* recording = record::create_recording(4096);
-              defer recording.destroy();
-              return 0;
-          }
-          C3
-          cd /tmp/consumer && c3c build consumer && ./out/consumer
+          cp -r scripts/consumer-smoke "$RUNNER_TEMP/consumer"
+          mkdir -p "$RUNNER_TEMP/consumer/libs"
+          cp dist/b3.c3l "$RUNNER_TEMP/consumer/libs/b3.c3l"
+          cd "$RUNNER_TEMP/consumer" && c3c build consumer && ./out/consumer
 
       - name: Publish
         env:

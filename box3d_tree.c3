@@ -8,7 +8,8 @@ module b3;
  max return whichever operand is not the NaN, so an ancestor swallows a real bound and proxies
  fall out of a root box that still reads clean. A zero box is valid.
 
- @return "the id, or INVALID_DEFINITION when the box is inverted or not finite"
+ @return `the id`
+ @return? INVALID_DEFINITION : `the box is inverted or not finite`
 *>
 fn int? DynamicTree.create_proxy(&self, Aabb aabb, ulong category_bits, ulong user_data) {
     if (!is_valid_aabb(aabb)) return INVALID_DEFINITION~;
@@ -20,7 +21,7 @@ fn int? DynamicTree.create_proxy(&self, Aabb aabb, ulong category_bits, ulong us
  hand it straight back out. box3d asserts the id and this build compiles the assertion out, so a
  repeated destroy would take one slot twice and give one node to two proxies.
 
- @return "INDEX_OUT_OF_RANGE when the id names no node, or NOT_A_PROXY when no live proxy holds it"
+ @return? check_proxy!
 *>
 fn void? DynamicTree.destroy_proxy(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
@@ -31,7 +32,8 @@ fn void? DynamicTree.destroy_proxy(&self, int proxy_id) {
  Removes the proxy and reinserts it under a new box. box3d asserts both the id and the box here
  and this build compiles both out; create_proxy() names which boxes are refused and why.
 
- @return "INDEX_OUT_OF_RANGE when the id names no node, NOT_A_PROXY when no live proxy holds it, or INVALID_DEFINITION when the box is inverted or not finite"
+ @return? check_proxy!
+ @return? INVALID_DEFINITION : `the box is inverted or not finite`
 *>
 fn void? DynamicTree.move_proxy(&self, int proxy_id, Aabb aabb) {
     check_proxy(self, proxy_id)!;
@@ -46,7 +48,8 @@ fn void? DynamicTree.move_proxy(&self, int proxy_id, Aabb aabb) {
  though a later rebuild still spreads it. Any call marks every ancestor enlarged even when it
  moved no box, so the next partial rebuild() sorts them all.
 
- @return "INDEX_OUT_OF_RANGE when the id names no node, NOT_A_PROXY when no live proxy holds it, or INVALID_DEFINITION when the box is inverted or not finite"
+ @return? check_proxy!
+ @return? INVALID_DEFINITION : `the box is inverted or not finite`
 *>
 fn void? DynamicTree.enlarge_proxy(&self, int proxy_id, Aabb aabb) {
     check_proxy(self, proxy_id)!;
@@ -59,7 +62,7 @@ fn void? DynamicTree.enlarge_proxy(&self, int proxy_id, Aabb aabb) {
  checks this id at all and asserts only the leaf, compiled out here; an internal node's bits are
  the union of its children, so setting the root's to 0 takes every proxy out of every query.
 
- @return "INDEX_OUT_OF_RANGE when the id names no node, or NOT_A_PROXY when no live proxy holds it"
+ @return? check_proxy!
 *>
 fn void? DynamicTree.set_category_bits(&self, int proxy_id, ulong category_bits) {
     check_proxy(self, proxy_id)!;
@@ -71,7 +74,8 @@ fn void? DynamicTree.set_category_bits(&self, int proxy_id, ulong category_bits)
  reports the union of its children while a freed slot reports the bits of the proxy that left it,
  so this one is guarded as user_data() is.
 
- @return "the category bits, INDEX_OUT_OF_RANGE when the id names no node, or NOT_A_PROXY when no live proxy holds it"
+ @return `the category bits`
+ @return? check_proxy!
 *>
 fn ulong? DynamicTree.category_bits(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
@@ -82,7 +86,8 @@ fn ulong? DynamicTree.category_bits(&self, int proxy_id) {
  The eight bytes of user data the proxy was created with. box3d's reader is inline in the header
  rather than exported and bounds the id with nothing at all, so this one is the binding's own.
 
- @return "the user data, INDEX_OUT_OF_RANGE when the id names no node, or NOT_A_PROXY when no live proxy holds it"
+ @return `the user data`
+ @return? check_proxy!
 *>
 fn ulong? DynamicTree.user_data(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
@@ -93,7 +98,8 @@ fn ulong? DynamicTree.user_data(&self, int proxy_id) {
  The box the tree holds for the proxy. The binding's own reader, and guarded, for the reason
  user_data() gives.
 
- @return "the box, INDEX_OUT_OF_RANGE when the id names no node, or NOT_A_PROXY when no live proxy holds it"
+ @return `the box`
+ @return? check_proxy!
 *>
 fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
@@ -106,7 +112,8 @@ fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
  routinely offered after a farther one. See TreeClosestFn for what fcn's return does, and query()
  for the mask flags and for the traversal stack's limit, which applies here too.
 
- @param search_bound : "the squared distance to search within; a large one reaches every proxy, and 0 admits none of them and reports no error"
+ @param search_bound : `the squared distance to search within; a large one reaches every proxy,
+   and 0 admits none of them and reports no error`
 *>
 fn ClosestSearch DynamicTree.query_closest(
   &self,
@@ -132,12 +139,13 @@ fn ClosestSearch DynamicTree.query_closest(
 <*
  Reads back a tree save() wrote, multiplying every node box by scale as it goes. The caller owns
  it and must destroy() it exactly once. box3d zeroes the struct for a path it cannot open, an
- unknown version and a node array that falls short, but not for a file cut inside the header, where
- the bytes that arrived stand over zeroes. It allocates the nodes only after reading that header
- whole and save() writes a null in their place, so every refusal arrives with none.
+ unknown version and a node array that falls short, but not for a file cut inside the header,
+ where the bytes that arrived stand over zeroes. It allocates the nodes only after reading that
+ header whole and save() writes a null in their place, so every refusal arrives with none.
 
- @param scale : "what each node box's bounds are multiplied by, 1 reproducing the saved tree"
- @return "the tree, or FILE_UNAVAILABLE when the path could not be read or holds no tree this build knows"
+ @param scale : `what each node box's bounds are multiplied by, 1 reproducing the saved tree`
+ @return `the tree`
+ @return? FILE_UNAVAILABLE : `the path could not be read, or holds no tree this build knows`
 *>
 fn DynamicTree? load_tree(ZString path, float scale) {
     DynamicTree tree = load_tree_raw(path, scale);

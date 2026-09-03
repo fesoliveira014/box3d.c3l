@@ -8,10 +8,14 @@ module b3;
  The cookie is the only compiled-out assertion this guard restores — a zero quaternion, a bad
  position or negative damping still passes.
 
- @param [&in] def : "a definition obtained from default_body_def()"
- @return "the body, INVALID_DEFINITION if the definition did not come from default_body_def(), or INVALID_HANDLE if box3d returns a null identifier — which b3CreateBody does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
+ @param [&in] def : `a definition obtained from default_body_def()`
+ @return `the body`
+ @return? INVALID_DEFINITION : `def is null, or did not come from default_body_def()`
+ @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs
+   during one`
 *>
 fn BodyId? WorldId.create_body(self, BodyDef* def) {
+    if (def == null) return INVALID_DEFINITION~;
     if (def.internal_value != default_body_def().internal_value) return INVALID_DEFINITION~;
     return create_body_raw(self, def).checked();
 }

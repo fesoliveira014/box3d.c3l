@@ -15,9 +15,9 @@ fn PlaneSolverResult solve_planes(Vec3 target_delta, CollisionPlane[] planes) {
 <*
  Removes from vector the component running into each plane, leaving one running away whole.
 
- A plane is skipped where its clip_velocity is false or its push is zero, and a solve writes a push
- only for a plane it had to move the delta out of — so a wall a completed solve never leaned on
- clips nothing, as does a slice no solve has been run over at all.
+ A plane is skipped where its clip_velocity is false or its push is zero, and a solve writes a
+ push only for a plane it had to move the delta out of — so a wall a completed solve never leaned
+ on clips nothing, as does a slice no solve has been run over at all.
 *>
 fn Vec3 clip_vector(Vec3 vector, CollisionPlane[] planes) {
     return clip_vector_raw(vector, planes.ptr, (int)planes.len);
@@ -31,7 +31,7 @@ fn Vec3 clip_vector(Vec3 vector, CollisionPlane[] planes) {
  being skipped. A short buffer is filled and the rest dropped rather than refused, every prefix
  being a real answer, so one filled to its length may have had more. A locked world fills none.
 
- @return "the prefix of buffer that was filled"
+ @return `the prefix of buffer that was filled`
 *>
 fn BodyPlaneResult[] BodyId.collide_mover(
   self,
@@ -60,7 +60,9 @@ fn BodyPlaneResult[] BodyId.collide_mover(
  by distance, so one whose broad-phase box meets an axis-aligned box of radius plus falloff — wider
  than the impulse's reach — crashes unless mask_bits excludes it or its explosion_scale is zero.
 
- @return "INVALID_DEFINITION when the position is not finite, when radius or falloff is negative or not finite, or when impulse_per_area is not finite — box3d asserts all four and this release build compiles those assertions out"
+ @return? INVALID_DEFINITION : `the position is not finite, radius or falloff is negative or not
+   finite, or impulse_per_area is not finite — box3d asserts all four and this release build
+   compiles those assertions out`
 *>
 fn void? WorldId.explode(self, ExplosionDef def) {
     if (!is_valid_position(def.position)) return INVALID_DEFINITION~;

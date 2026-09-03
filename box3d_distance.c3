@@ -8,7 +8,8 @@ module b3;
  comes back zero, and iterations counts the support points added past the first only where the
  cores stay apart, reading zero on any overlap whatever work the search did.
 
- @return "the closest points, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS"
+ @return `the closest points`
+ @return? check_shape_proxy!
 *>
 fn DistanceOutput? shape_distance(DistanceInput input) {
     check_shape_proxy(input.proxy_a)!;
@@ -21,11 +22,14 @@ fn DistanceOutput? shape_distance(DistanceInput input) {
 <*
  Sweeps proxy B along the translation at a fixed proxy A, in A's frame. The cores close to one
  linear slop or the two radii less that slop, whichever is greater, so the stop is short of the
- geometric touch below a total radius of one slop, on it at one, past above, a full slop from
- two. A pair beginning overlapped answers fraction zero under a zero normal, a NaN once normalised,
- unless can_encroach is set. A max_fraction above 1 sweeps past the translation, so it is refused.
+ geometric touch below a total radius of one slop, on it at one, past above, a full slop from two.
+ A pair beginning overlapped answers fraction zero under a zero normal, a NaN once normalised,
+ unless can_encroach is set.
 
- @return "where the two first touch, NO_HIT when they never do or the touch lies past max_fraction, or INVALID_DEFINITION when either proxy names no array, holds no points, holds more than MAX_SHAPE_CAST_POINTS, or max_fraction is outside 0 to 1 or is not a number"
+ @return `where the two first touch`
+ @return? NO_HIT : `they never do, or the touch lies past max_fraction`
+ @return? check_shape_proxy!
+ @return? INVALID_DEFINITION : `max_fraction is outside 0 to 1, or is not a number`
 *>
 fn CastOutput? shape_cast(ShapeCastPairInput input) {
     check_shape_proxy(input.proxy_a)!;
@@ -40,11 +44,12 @@ fn CastOutput? shape_cast(ShapeCastPairInput input) {
 <*
  Where this sweep places the shape's own origin at the given fraction of its interval.
 
- The rotation is a normalised lerp, not a slerp: slowest at the two ends, and equal to a slerp only
- there and at the midpoint. A fraction outside the interval extrapolates the centre linearly and
- the rotation at a falling rate, past an assertion this build compiles out, so it is refused here.
+ The rotation is a normalised lerp, not a slerp: slowest at the two ends, and equal to a slerp
+ only there and at the midpoint. A fraction outside the interval extrapolates the centre linearly
+ and the rotation at a falling rate, past an assertion this build compiles out.
 
- @return "the transform at that fraction, or INVALID_DEFINITION when time is outside 0 to 1 or is not a number"
+ @return `the transform at that fraction`
+ @return? INVALID_DEFINITION : `time is outside 0 to 1, or is not a number`
 *>
 fn Transform? Sweep.transform_at(&self, float time) {
     if (!(time >= 0.0f && time <= 1.0f)) return INVALID_DEFINITION~;
@@ -57,9 +62,11 @@ fn Transform? Sweep.transform_at(&self, float time) {
  The cores close to the greater of one linear slop and the two radii less that slop, so the stop
  lands short of the geometric touch below a total radius of one slop, on it at one, and past above
  — a full slop past from two. A max_fraction outside the interval extrapolates both sweeps or a
- negative fraction, past an assertion this build compiles out, so it is refused here.
+ negative fraction, past an assertion this build compiles out.
 
- @return "what the sweep found, under one of the four ToiState outcomes, or INVALID_DEFINITION when either proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS, or max_fraction is outside 0 to 1 or is not a number"
+ @return `what the sweep found, under one of the four ToiState outcomes`
+ @return? check_shape_proxy!
+ @return? INVALID_DEFINITION : `max_fraction is outside 0 to 1, or is not a number`
 *>
 fn ToiOutput? time_of_impact(ToiInput input) {
     check_shape_proxy(input.proxy_a)!;

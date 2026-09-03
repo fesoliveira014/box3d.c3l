@@ -44,18 +44,20 @@ Do not assume `docs/style.md`'s `c3c build`/`c3c test` commands run in *this* re
 - **Never bind from memory.** Read the actual declaration in the submodule's `include/box3d/*.h` before writing C3. A wrong parameter or return type is a silent cross-ABI memory bug.
 - **Bind incrementally** — only the surface actually needed. The binding grows over time.
 
-Four deliberate, recorded carve-outs from `docs/style.md`, so they are not re-flagged as drift:
+Five deliberate, recorded carve-outs from `docs/style.md`, so they are not re-flagged as drift:
 
 - **§6 (`create_x`/`destroy_x` free functions) does not apply to world destruction.** `create_world` stays a free function — it has no receiver yet — but destruction is `world.destroy()`, a method, not `destroy_world()`. The C API is handle-oriented: `b3DestroyWorld` takes the same `b3WorldId` every other world method does, and a method reads the same way every other world operation does.
 - **§6 also does not apply once a creation function has a natural receiver at call time.** `world.create_body(def)` is a method, not `create_body(world, def)`, because the world it belongs to already exists when it is called — `create_world` stays free only because that carve-out does not apply to it: there is no world yet to receive the call. The same test governs the shape and joint constructors that follow: `body.create_shape(...)`, `world.create_joint(...)` become methods on whatever object already exists at the call site, and only a constructor with no existing receiver stays a free function.
-- **§3's file-order rule (typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions) does not apply within `box3d.c3i`.** Declarations there are grouped by area (math, base hooks, world, …) instead, so a reader looking for one area finds every kind of declaration for it together rather than scattered by declaration kind.
-- **§7's lean-docstring rule is relaxed to a hard cap of six body lines, not waived.** Three is still the target and most declarations hit it. A declaration earns up to six only when it carries a contract box3d states and the signature cannot: an assertion the release build compiles out, an argument silently corrected instead of refused, a zero that is the state's rather than the type's, or an ownership rule a caller could get wrong in a way that aborts. Six is the ceiling, `@param`/`@return` tags excluded.
+- **§3's file-order rule (typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions) does not apply within `box3d.c3i`, nor within the per-area wrapper files.** Declarations are grouped by area instead, so a reader looking for one area finds every kind of declaration for it together rather than scattered by declaration kind. In a wrapper file that means a constructor sits next to the geometry it builds: `box3d_hull.c3` reads `create_hull`, `create_cylinder`, `create_cone`, `create_rock`, `HullData.clone`, `HullData.clone_and_transform`, `scale_box` — a hull story, not four free functions then two methods then one more. Shared private guards (`check_shape_def`, `check_joint_def`, `check_joint_type`) go last in their file, where a reader looking for the area's API does not trip over them.
+- **§7's lean-docstring rule is relaxed to a hard cap of six body lines, not waived.** Three is still the target and most declarations hit it. A declaration earns up to six only when it carries a contract box3d states and the signature cannot: an assertion the release build compiles out, an argument silently corrected instead of refused, a zero that is the state's rather than the type's, or an ownership rule a caller could get wrong in a way that aborts. Six is the ceiling, and it counts prose alone — prose ends at the first `@`-directive, which is where C3's own doc parser stops reading free text.
 
   Everything §7 forbids stays forbidden at any length: narration of the body, prose restating the signature, a rediscovery of the design, a second declaration's contract restated instead of cross-referenced. When a contract genuinely needs more than six lines it belongs in `.dev/notes.md`, with one line here pointing at it.
 
+  **Directives are not a way round the cap.** Excluding `@param`/`@return` from the count once made them free, and the contract simply moved there: eleven descriptions ran past 200 characters on one physical line, the longest 393, while every prose line in the package was wrapped at 100. Two readings price them now — no docstring line may exceed **100 characters**, and prose and directives together carry a **10-line budget**. Wrap a long description in backticks, which span lines where `"…"` does not.
+
   **Six is a ceiling, not a target.** A cap becomes a budget if nobody watches the aggregate: measured once already, the length distribution declined from 103 docstrings at three lines through 69 at four and 48 at five, then jumped back to **83 at exactly six** — a pile-up that only shows in the aggregate, and that means length was chosen by the limit rather than by the contract.
 
-  **`./scripts/audit-comments.sh` is a required review step, not a background check.** It prints three readings, and a reviewer reports all three: docstrings over the cap (**must be empty**), inline `//` runs over three lines (a backlog, **must never grow**), and docstrings sitting exactly at the cap (a backlog, **must never grow**). Treat a violation as an Important defect, which is what the `c3-style` skill calls comment bloat, not a nit. The script cannot judge whether a comment that fits is *earning* its lines — that stays the reviewer's, and it is the half that matters.
+  **`./scripts/audit-comments.sh` is a required review step, not a background check.** It prints five readings, and a reviewer reports all five. Two are gates and **must be empty**: prose over the cap, and docstring lines over 100 characters. Three are standing backlogs that **must never grow**: inline `//` runs over three lines, prose sitting exactly at the cap, and docstrings over the 10-line budget. Treat a violation as an Important defect, which is what the `c3-style` skill calls comment bloat, not a nit. The script cannot judge whether a comment that fits is *earning* its lines — that stays the reviewer's, and it is the half that matters.
 
   **A compiled-out assertion is never the line a trim cuts.** The cap has a priority order and that is the top of it; the first pass at the cap cut four of these because it fit the line count mechanically instead. `./scripts/audit-assertions.sh` surveys declarations whose C body asserts an argument's validity while the docstring says nothing — a standing backlog rather than a gate, which must never grow.
 
@@ -70,6 +72,21 @@ The `extern fn` layer stays faithful to C: raw return types, raw out-parameters,
 - Out-parameters become return values; `_count`/pointer pairs become slices.
 - `defer` and `defer catch destroy` own cleanup.
 - Consumers opt into validity checking with `"features": [ "BOX3D_CHECKED" ]` in their `project.json`; wrappers test it with `$feat(BOX3D_CHECKED)`. Off by default, because a step touches thousands of bodies and the check is a call each. `$feature` is the deprecated spelling and warns on 0.8.3.
+
+**Every fault a wrapper returns is declared with `@return?`, one directive per fault.** The success value keeps a plain `@return`, so the two are not run together in a sentence the reader has to parse. `@return? check_shape_proxy!` inherits a shared guard's faults rather than restating them — the form that made 146 hand-written English fault lists diverge, one of which listed a shared check's three refusals while six siblings listed one of them.
+
+```c3
+<*
+ @param [&in] def : `a definition obtained from default_world_def()`
+ @return `the world`
+ @return? INVALID_DEFINITION : `def is null, or did not come from default_world_def()`
+ @return? WORLD_LIMIT_REACHED : `MAX_WORLDS worlds already exist`
+*>
+```
+
+Know what the compiler actually checks, verified on 0.8.3: a literal `return SOME_FAULT~;` in the body **is** checked against the list, and an inherited name that does not resolve (`frame_query!` where the method is `RecPlayer.frame_query`) is a hard error. A fault arriving by `callee(...)!`, by `return callee(...)`, or out of a macro body is **not** checked, and neither is a fault declared but never returned. So `@return?` is a real gate on the guards a wrapper writes itself, and documentation everywhere else — do not read a clean build as proof the list is complete.
+
+**A caller-supplied pointer gets both `@param [&in]` and an explicit null guard.** `[&in]` alone is not a guard: it traps in a safe build, but a consumer's release build drops the check and the optimizer is then entitled to fold on the contract — measured, a null pointer read through and printed a value rather than crashing. The annotation stays because it gives a safe build a precise message at the call site; the `if (p == null) return INVALID_DEFINITION~;` is what a release build actually has. The spec permits a future c3c to fold that guard too, so if `[&in]` ever starts eliding it, the annotation is what goes, not the guard.
 
 ## Repo conventions
 

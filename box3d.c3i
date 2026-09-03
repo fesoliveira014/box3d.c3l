@@ -2539,10 +2539,10 @@ struct BodyPlaneResult {
 }
 
 <*
- Called once per shape a mover touches, handed that shape's planes up to box3d's own 64. The
- array points at box3d's stack and dies with the call, so a plane kept is copied out. Returning false ends
- the traversal of the tree that shape sits in and leaves the other two reporting. The query runs
- synchronously on the calling thread, and the world must not be modified from inside it.
+ Called once per shape a mover touches, handed that shape's planes up to box3d's own 64. The array
+ points at box3d's stack and dies with the call, so a plane kept is copied out. Returning false
+ ends the traversal of the tree that shape sits in and leaves the other two reporting. The query
+ runs synchronously on the calling thread, and the world must not be modified from inside it.
 *>
 alias PlaneResultFn = fn bool(ShapeId shape_id, PlaneResult* planes, int plane_count, void* context);
 
@@ -2576,8 +2576,10 @@ extern fn void WorldId.collide_mover(
  radius of one slop, on it at one, and past above — a full slop past from two. A locked world
  answers 1, as does an origin or translation past the assertion this build compiles out.
 
- @param fcn : "an optional per-shape filter; null accepts every shape the query filter passed"
- @return "the fraction of translation the mover may take, above zero because a shape whose surface the mover's core starts within one slop or the two radii less a slop of is dropped from the sweep — which for a mover thinner than about a slop reaches past its own surface — and at most 1"
+ @param fcn : `an optional per-shape filter; null accepts every shape the query filter passed`
+ @return `the fraction of translation the mover may take, from above zero to 1. A shape whose
+   surface the mover's core starts within the closing band of is dropped from the sweep, which
+   for a mover thinner than about a slop reaches past its own surface`
 *>
 extern fn float WorldId.cast_mover(
   self,
@@ -2673,7 +2675,7 @@ extern fn JointId create_filter_joint_raw(
  one: nothing re-offers the pair to the broad phase, so two settled bodies regain no contact until
  one of them moves.
 
- @param wake_attached : "false leaves two sleeping attached bodies asleep; true wakes both"
+ @param wake_attached : `false leaves two sleeping attached bodies asleep; true wakes both`
 *>
 extern fn void JointId.destroy(self, bool wake_attached) @cname("b3DestroyJoint");
 
@@ -2788,8 +2790,8 @@ extern fn float JointId.angular_separation(self) @cname("b3Joint_GetAngularSepar
  both values are finite and non-negative; this package links a release build where that assertion
  is compiled out, and the wrappers do not restore it.
 
- @param hertz : "the stiffness in cycles per second"
- @param damping_ratio : "the non-dimensional damping ratio, one for critical damping"
+ @param hertz : `the stiffness in cycles per second`
+ @param damping_ratio : `the non-dimensional damping ratio, one for critical damping`
 *>
 extern fn void JointId.set_constraint_tuning(self, float hertz, float damping_ratio) @cname("b3Joint_SetConstraintTuning");
 
@@ -3633,7 +3635,7 @@ extern fn JointId create_parallel_joint_raw(
 <*
  Sets the spring's stiffness in hertz, asserted finite and at or above 0 under an assertion this
  build compiles out. 1 by default, and 0 means the opposite of the weld joint's: box3d's softness
- for a zero hertz carries a zero mass scale, so a parallel spring at 0 stops solving, not goes rigid.
+ for a zero hertz carries a zero mass scale, so a parallel spring at 0 stops solving, not rigid.
 
  That frees the frames only on a joint silenced before it accumulated an impulse — the warm start
  re-applies the impulse the spring holds every substep, gated on neither hertz nor ceiling, so one
@@ -4792,9 +4794,10 @@ extern fn DebugDraw default_debug_draw() @cname("b3DefaultDebugDraw");
  mask_bits, which gates everything: a mask of zero draws nothing at all. Shapes take a second
  switch as well, WorldDef.create_debug_shape, which only world creation can set. box3d tests no
  callback for null before calling it, so a raised flag over a null one is a crash rather than a
- skip, and its check that the drawing bounds are a valid box is an assertion this build compiles out.
+ skip, and its check that the drawing bounds are a valid box is an assertion this build
+ compiles out.
 
- @param mask_bits : "the bits a shape's own filter categories must overlap for it to be considered"
+ @param mask_bits : `the bits a shape's own filter categories must overlap for it to be considered`
 *>
 extern fn void WorldId.draw(self, DebugDraw* draw, ulong mask_bits) @cname("b3World_Draw");
 
@@ -4805,8 +4808,9 @@ extern fn void WorldId.draw(self, DebugDraw* draw, ulong mask_bits) @cname("b3Wo
  definition's flags, and a null callback or a null definition draws nothing here where
  WorldId.draw() would call or dereference it.
 
- @param query_index : "which of the frame's queries to draw, or any negative value for all of them"
- @param selected_index : "which to draw in the reserved colour and label, or any index no query holds for none"
+ @param query_index : `which of the frame's queries to draw, or any negative value for all`
+ @param selected_index : `which to draw in the reserved colour and label; an index no query
+   holds draws none`
 *>
 extern fn void RecPlayer.draw_frame_queries(
   &self,

@@ -38,7 +38,8 @@ macro bool checked_access() {
 }
 
 <*
- @return "the world, or INVALID_HANDLE when box3d returned a null identifier"
+ @return `the world`
+ @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
 macro WorldId? WorldId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
@@ -46,7 +47,8 @@ macro WorldId? WorldId.checked(self) {
 }
 
 <*
- @return "the body, or INVALID_HANDLE when box3d returned a null identifier"
+ @return `the body`
+ @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
 macro BodyId? BodyId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
@@ -54,7 +56,8 @@ macro BodyId? BodyId.checked(self) {
 }
 
 <*
- @return "the shape, or INVALID_HANDLE when box3d returned a null identifier"
+ @return `the shape`
+ @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
 macro ShapeId? ShapeId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
@@ -62,7 +65,8 @@ macro ShapeId? ShapeId.checked(self) {
 }
 
 <*
- @return "the joint, or INVALID_HANDLE when box3d returned a null identifier"
+ @return `the joint`
+ @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
 macro JointId? JointId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
@@ -70,7 +74,8 @@ macro JointId? JointId.checked(self) {
 }
 
 <*
- @return "the contact, or INVALID_HANDLE when box3d returned a null identifier"
+ @return `the contact`
+ @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
 macro ContactId? ContactId.checked(self) {
     if (self.is_null()) return INVALID_HANDLE~;
@@ -82,8 +87,8 @@ macro ContactId? ContactId.checked(self) {
  and each builder refuses for its own reason, so the caller names the fault. A macro rather than a
  method because C3 traps a method call on a null receiver before the body can test it.
 
- @param $fault : "what a null pointer from this builder means"
- @return "the geometry, or $fault when box3d returned a null pointer"
+ @param $fault : `what a null pointer from this builder means`
+ @return `the geometry`
 *>
 macro checked_geometry(geometry, $fault) {
     if (geometry == null) return $fault~;
@@ -95,7 +100,8 @@ macro checked_geometry(geometry, $fault) {
  is read as one point rather than refused, a count past the ceiling is truncated in silence by the
  compound's sweep and by the mesh and height field overlaps, and a null array is dereferenced.
 
- @return "INVALID_DEFINITION when the proxy names no array, holds no points, or holds more than MAX_SHAPE_CAST_POINTS"
+ @return? INVALID_DEFINITION : `the proxy names no array, holds no points, or holds more than
+   MAX_SHAPE_CAST_POINTS`
 *>
 fn void? check_shape_proxy(ShapeProxy proxy) @private {
     if (proxy.points == null) return INVALID_DEFINITION~;
@@ -107,7 +113,8 @@ fn void? check_shape_proxy(ShapeProxy proxy) @private {
  the caller supplies. The leaf bit is exact for a live proxy but says nothing about which one: an
  id whose slot has since been handed to a new proxy passes.
 
- @return "INDEX_OUT_OF_RANGE when the id is outside 0 to node_capacity - 1, or NOT_A_PROXY when no live proxy holds that node"
+ @return? INDEX_OUT_OF_RANGE : `the id is outside 0 to node_capacity - 1`
+ @return? NOT_A_PROXY : `no live proxy holds that node`
 *>
 fn void? check_proxy(DynamicTree* tree, int proxy_id) @private {
     if (proxy_id < 0 || proxy_id >= tree.node_capacity) return INDEX_OUT_OF_RANGE~;

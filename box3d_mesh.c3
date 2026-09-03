@@ -5,16 +5,23 @@ module b3;
 
  The caller owns the mesh and must destroy() it; byte_count() carries it until then, as for every
  mesh constructor below. A refusal leaks — box3d frees back only part of what it cloned — so a
- test must not reach one.
+ test must not reach one. The count guard covers something worse: box3d turns a large negative
+ count into a large positive vertex count and charges the allocation without giving it back,
+ measured 36 MB at -1000.
 
- The count guard covers something worse: box3d turns a large negative count into a large positive
- vertex count and charges the allocation without giving it back, measured 36 MB at -1000.
-
- @param material_count : "how many distinct material indices to spread over the triangles"
- @param identify_edges : "compute the shared-edge adjacency the solver uses to hide inner edges"
- @return "the mesh, or DEGENERATE_GEOMETRY when a count is below one or the arguments describe no triangle with area"
+ @param material_count : `how many distinct material indices to spread over the triangles`
+ @param identify_edges : `compute the shared-edge adjacency the solver uses to hide inner edges`
+ @return `the mesh`
+ @return? DEGENERATE_GEOMETRY : `a count is below one, or the arguments describe no triangle with
+   area`
 *>
-fn MeshData*? create_grid_mesh(int x_count, int z_count, float cell_width, int material_count, bool identify_edges) {
+fn MeshData*? create_grid_mesh(
+  int x_count,
+  int z_count,
+  float cell_width,
+  int material_count,
+  bool identify_edges,
+) {
     if (x_count < 1 || z_count < 1) return DEGENERATE_GEOMETRY~;
     return checked_geometry(create_grid_mesh_raw(
       x_count: x_count,
@@ -29,7 +36,9 @@ fn MeshData*? create_grid_mesh(int x_count, int z_count, float cell_width, int m
  Builds a grid of triangles in the x-z plane with a sine wave raised over it. Ownership and the
  fault work as they do for create_grid_mesh.
 
- @return "the mesh, or DEGENERATE_GEOMETRY when a count is below one or the arguments describe no triangle with area"
+ @return `the mesh`
+ @return? DEGENERATE_GEOMETRY : `a count is below one, or the arguments describe no triangle with
+   area`
 *>
 fn MeshData*? create_wave_mesh(
   int x_count,
@@ -54,11 +63,17 @@ fn MeshData*? create_wave_mesh(
  Builds a closed torus around the origin. Ownership and the fault work as they do for
  create_grid_mesh.
 
- @param radius : "the distance from the centre to the middle of the tube"
- @param thickness : "the radius of the tube itself"
- @return "the mesh, or DEGENERATE_GEOMETRY when the arguments describe no triangle with area"
+ @param radius : `the distance from the centre to the middle of the tube`
+ @param thickness : `the radius of the tube itself`
+ @return `the mesh`
+ @return? DEGENERATE_GEOMETRY : `the arguments describe no triangle with area`
 *>
-fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, float radius, float thickness) {
+fn MeshData*? create_torus_mesh(
+  int radial_resolution,
+  int tubular_resolution,
+  float radius,
+  float thickness,
+) {
     return checked_geometry(create_torus_mesh_raw(
       radial_resolution: radial_resolution,
       tubular_resolution: tubular_resolution,
@@ -68,11 +83,13 @@ fn MeshData*? create_torus_mesh(int radial_resolution, int tubular_resolution, f
 }
 
 <*
- Builds a closed box of twelve triangles wound outwards. Ownership and the fault work as they
- do for create_grid_mesh.
+ Builds a closed box of twelve triangles wound outwards. Ownership and the fault work as they do
+ for create_grid_mesh.
 
- @param extent : "the box half-widths; one zero component still builds, because the faces across the other two axes keep their area"
- @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
+ @param extent : `the box half-widths; one zero component still builds, because the faces across
+   the other two axes keep their area`
+ @return `the mesh`
+ @return? DEGENERATE_GEOMETRY : `the extent collapses every triangle`
 *>
 fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {
     return checked_geometry(create_box_mesh_raw(center, extent, identify_edges), DEGENERATE_GEOMETRY);
@@ -82,7 +99,8 @@ fn MeshData*? create_box_mesh(Vec3 center, Vec3 extent, bool identify_edges) {
  Builds a box of twelve triangles wound inwards, so bodies are contained by it rather than
  excluded from it. Ownership and the fault work as they do for create_grid_mesh.
 
- @return "the mesh, or DEGENERATE_GEOMETRY when the extent collapses every triangle"
+ @return `the mesh`
+ @return? DEGENERATE_GEOMETRY : `the extent collapses every triangle`
 *>
 fn MeshData*? create_hollow_box_mesh(Vec3 center, Vec3 extent) {
     return checked_geometry(create_hollow_box_mesh_raw(center, extent), DEGENERATE_GEOMETRY);
@@ -92,7 +110,8 @@ fn MeshData*? create_hollow_box_mesh(Vec3 center, Vec3 extent) {
  Builds a truncated pyramid standing on the y axis. Ownership and the fault work as they do for
  create_grid_mesh.
 
- @return "the mesh, or DEGENERATE_GEOMETRY when the height and the two widths collapse it"
+ @return `the mesh`
+ @return? DEGENERATE_GEOMETRY : `the height and the two widths collapse it`
 *>
 fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, float bottom_width) {
     return checked_geometry(create_platform_mesh_raw(
@@ -107,14 +126,18 @@ fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, f
  Builds a mesh from an arbitrary triangle soup. Ownership and the fault work as they do for
  create_grid_mesh, and box3d copies the definition's arrays, so nothing has to outlive the call.
 
- box3d skips triangles whose area is below its tolerance rather than failing on them, and
- refuses the mesh only once nothing is left. It can also report which triangles it skipped;
- that diagnostic is not bound, because the count it goes with lives in the opaque mesh.
+ box3d skips triangles whose area is below its tolerance rather than failing on them, and refuses
+ the mesh only once nothing is left. It can also report which triangles it skipped; that
+ diagnostic is not bound, because the count it goes with lives in the opaque mesh.
 
- @param [&in] def : "the vertices and indices to build from"
- @return "the mesh, or DEGENERATE_GEOMETRY when the definition names fewer than three vertices, no triangles, or no triangle with area"
+ @param [&in] def : `the vertices and indices to build from`
+ @return `the mesh`
+ @return? INVALID_DEFINITION : `def is null`
+ @return? DEGENERATE_GEOMETRY : `the definition names fewer than three vertices, no triangles, or
+   no triangle with area`
 *>
 fn MeshData*? create_mesh(MeshDef* def) {
+    if (def == null) return INVALID_DEFINITION~;
     return checked_geometry(
       create_mesh_raw(def: def, degenerate_triangle_indices: null, degenerate_capacity: 0),
       DEGENERATE_GEOMETRY,
@@ -122,17 +145,19 @@ fn MeshData*? create_mesh(MeshDef* def) {
 }
 
 <*
- Builds a flat height field of row_count by column_count grid points, sampled at the origin
- corner and running along positive x and z.
+ Builds a flat height field of row_count by column_count grid points, sampled at the origin corner
+ and running along positive x and z.
 
  The caller owns the field and must destroy() it; byte_count() carries the allocation until then,
- and no height field constructor touches a world. box3d itself never refuses: its
- check that a grid holds at least four points is an assertion this release build compiles out, and
- the count guard below restores it, negative counts that multiply to a positive product included.
+ and no height field constructor touches a world. box3d itself never refuses: its check that a
+ grid holds at least four points is an assertion this release build compiles out, and the count
+ guard below restores it, negative counts that multiply to a positive product included.
 
- @param scale : "how far apart the grid points sit in x and z, and what the heights are multiplied by in y"
- @param make_holes : "punch every sixteenth cell out of the field"
- @return "the height field, or DEGENERATE_GEOMETRY when either count is below 2"
+ @param scale : `how far apart the grid points sit in x and z, and what the heights are multiplied
+   by in y`
+ @param make_holes : `punch every sixteenth cell out of the field`
+ @return `the height field`
+ @return? DEGENERATE_GEOMETRY : `either count is below 2`
 *>
 fn HeightFieldData*? create_height_field_grid(int row_count, int column_count, Vec3 scale, bool make_holes) {
     if (row_count < 2 || column_count < 2) return DEGENERATE_GEOMETRY~;
@@ -148,7 +173,8 @@ fn HeightFieldData*? create_height_field_grid(int row_count, int column_count, V
  Builds a height field with two sine waves crossed over it. Ownership, the absent locked-world
  caveat and the count guard all work as they do for create_height_field_grid.
 
- @return "the height field, or DEGENERATE_GEOMETRY when either count is below 2"
+ @return `the height field`
+ @return? DEGENERATE_GEOMETRY : `either count is below 2`
 *>
 fn HeightFieldData*? create_height_field_wave(
   int row_count,
@@ -170,18 +196,21 @@ fn HeightFieldData*? create_height_field_wave(
 }
 
 <*
- Builds a height field from measured heights. Ownership and the absent locked-world caveat work
- as they do for create_height_field_grid, and box3d copies the definition's arrays, so nothing
- has to outlive the call.
+ Builds a height field from measured heights. Ownership and the absent locked-world caveat work as
+ they do for create_height_field_grid, and box3d copies its arrays, so nothing outlives the call.
 
- box3d reads count_x * count_z floats through def.heights without testing it for null, and its
- own checks that the grid holds at least four points and that the global range runs upwards are
- assertions this release build compiles out. The three guards below restore all of that.
+ box3d reads count_x * count_z floats through def.heights without testing it for null, and its own
+ checks that the grid holds at least four points and that the global range runs upwards are
+ assertions this release build compiles out. The guards below restore all of that.
 
- @param [&in] def : "the grid to build from"
- @return "the height field, DEGENERATE_GEOMETRY when either count is below 2, or INVALID_DEFINITION when the heights are missing or the global range runs backwards"
+ @param [&in] def : `the grid to build from`
+ @return `the height field`
+ @return? DEGENERATE_GEOMETRY : `either count is below 2`
+ @return? INVALID_DEFINITION : `def is null, the heights are missing, or the global range runs
+   backwards`
 *>
 fn HeightFieldData*? create_height_field(HeightFieldDef* def) {
+    if (def == null) return INVALID_DEFINITION~;
     if (def.count_x < 2 || def.count_z < 2) return DEGENERATE_GEOMETRY~;
     if (def.heights == null) return INVALID_DEFINITION~;
     if (def.global_minimum_height > def.global_maximum_height) return INVALID_DEFINITION~;
@@ -189,15 +218,17 @@ fn HeightFieldData*? create_height_field(HeightFieldDef* def) {
 }
 
 <*
- Writes the grid to the path as text: the two counts, the scale, the global range and the
- winding, then every height and every material index. A path box3d cannot open is a silent no-op,
- so a caller who needs to know reads the file back. The material indices are read here where
+ Writes the grid to the path as text: the two counts, the scale, the global range and the winding,
+ then every height and every material index. A path box3d cannot open is a silent no-op, so a
+ caller who needs to know reads the file back. The material indices are read here where
  create_height_field() leaves them optional, which is why they are guarded here and not there.
 
- @param [&in] def : "the grid to write"
- @return "void, DEGENERATE_GEOMETRY when either count is below 2, or INVALID_DEFINITION when either array is missing"
+ @param [&in] def : `the grid to write`
+ @return? DEGENERATE_GEOMETRY : `either count is below 2`
+ @return? INVALID_DEFINITION : `def is null, or either array is missing`
 *>
 fn void? dump_height_data(HeightFieldDef* def, ZString path) {
+    if (def == null) return INVALID_DEFINITION~;
     if (def.count_x < 2 || def.count_z < 2) return DEGENERATE_GEOMETRY~;
     if (def.heights == null || def.material_indices == null) return INVALID_DEFINITION~;
     dump_height_data_raw(def, path);
@@ -208,28 +239,32 @@ fn void? dump_height_data(HeightFieldDef* def, ZString path) {
  create_height_field_grid, and box3d answers a path it cannot open, a file that ends early and a
  number it cannot parse with the same null pointer, giving back everything it had taken first.
 
- @return "the height field, or FILE_UNAVAILABLE when the path could not be read or holds no grid"
+ @return `the height field`
+ @return? FILE_UNAVAILABLE : `the path could not be read, or holds no grid`
 *>
 fn HeightFieldData*? load_height_field(ZString path) {
     return checked_geometry(load_height_field_raw(path), FILE_UNAVAILABLE);
 }
 
 <*
- Attaches a mesh to this body, under the definition guard create_sphere_shape describes.
+ Attaches a mesh to this body.
 
  The shape borrows the mesh and reads through the pointer on every step, so the mesh must outlive
  every shape built from it: destroying it first is a use-after-free that nothing reports, and
  destroying the world takes the shape with it but not the mesh. The null guard is the difference
- between a fault and a segmentation fault: box3d reads a version field through the pointer before
- it tests anything.
+ between a fault and a segmentation fault: box3d reads a version field before it tests anything.
 
- @param [&in] def : "a definition obtained from default_shape_def()"
- @param mesh : "the mesh, which must outlive the shape; null is refused rather than dereferenced"
- @param scale : "how far the mesh's vertices are stretched along each axis, non-uniform or mirrored; a zero component is pushed away from zero rather than refused"
- @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the mesh is null, or INVALID_HANDLE if box3d returns a null identifier"
+ @param [&in] def : `a definition obtained from default_shape_def()`
+ @param mesh : `the mesh, which must outlive the shape`
+ @param scale : `how far the mesh's vertices are stretched along each axis, non-uniform or
+   mirrored; a zero component is pushed away from zero rather than refused`
+ @return `the shape`
+ @return? check_shape_def!
+ @return? INVALID_DEFINITION : `mesh is null`
+ @return? INVALID_HANDLE : `box3d returned a null identifier`
 *>
 fn ShapeId? BodyId.create_mesh_shape(self, ShapeDef* def, MeshData* mesh, Vec3 scale) {
-    if (def.internal_value != default_shape_def().internal_value) return INVALID_DEFINITION~;
+    check_shape_def(def)!;
     if (mesh == null) return INVALID_DEFINITION~;
     return create_mesh_shape_raw(
       body_id: self,
@@ -243,17 +278,21 @@ fn ShapeId? BodyId.create_mesh_shape(self, ShapeDef* def, MeshData* mesh, Vec3 s
  Attaches a height field to this body. The definition and null guards, the borrowed geometry and
  the use-after-free that follows destroying it early all work as they do for create_mesh_shape.
 
- box3d takes a height field only on a static body and hands back a null identifier for a
- kinematic or dynamic one, so INVALID_HANDLE here usually means the body was the wrong type
- rather than that anything is wrong with the field. There is no scale: the one the field was
- built with is the only one it has.
+ box3d takes a height field only on a static body and hands back a null identifier for a kinematic
+ or dynamic one, so INVALID_HANDLE here usually means the body was the wrong type rather than that
+ anything is wrong with the field. There is no scale: the one the field was built with is the only
+ one it has.
 
- @param [&in] def : "a definition obtained from default_shape_def()"
- @param height_field : "the field, which must outlive the shape; null is refused rather than dereferenced"
- @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the height field is null, or INVALID_HANDLE if box3d returns a null identifier"
+ @param [&in] def : `a definition obtained from default_shape_def()`
+ @param height_field : `the field, which must outlive the shape`
+ @return `the shape`
+ @return? check_shape_def!
+ @return? INVALID_DEFINITION : `height_field is null`
+ @return? INVALID_HANDLE : `box3d returned a null identifier, which a body that is not static
+   always does`
 *>
 fn ShapeId? BodyId.create_height_field_shape(self, ShapeDef* def, HeightFieldData* height_field) {
-    if (def.internal_value != default_shape_def().internal_value) return INVALID_DEFINITION~;
+    check_shape_def(def)!;
     if (height_field == null) return INVALID_DEFINITION~;
     return create_height_field_shape_raw(self, def, height_field).checked();
 }

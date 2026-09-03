@@ -5,6 +5,20 @@ module b3;
 // plane culls nothing and can answer with a NaN point.
 const float TRIANGLE_AREA_FLOOR @private = 1.17549435e-35f;
 
+<*
+ The plumbing every collide pair shares. box3d writes its points through an array the caller owns,
+ so the result lends its own and takes the normal and the count back afterwards — a copy-back each
+ pair would otherwise repeat, and silently answer a zero manifold if it forgot.
+*>
+macro CollisionManifold @manifold_from(; @fill(manifold)) @private {
+    CollisionManifold contact;
+    LocalManifold manifold = { .points = &contact.points[0] };
+    @fill(&manifold);
+    contact.normal = manifold.normal;
+    contact.point_count = manifold.point_count;
+    return contact;
+}
+
 fn bool triangle_has_area(Triangle* triangle) @private {
     Vec3 edge1 = (*triangle)[1] - (*triangle)[0];
     Vec3 edge2 = (*triangle)[2] - (*triangle)[0];
@@ -25,18 +39,15 @@ fn bool triangle_has_area(Triangle* triangle) @private {
  summed radii under a +y normal, box3d's fallback direction rather than a measured one.
 *>
 fn CollisionManifold Sphere.collide_sphere(&self, Sphere other, Transform transform_b_to_a) {
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
-    collide_spheres_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      sphere_a: self,
-      sphere_b: &other,
-      transform_b_to_a: transform_b_to_a,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_spheres_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          sphere_a: self,
+          sphere_b: &other,
+          transform_b_to_a: transform_b_to_a,
+        );
+    };
 }
 
 <*
@@ -48,18 +59,15 @@ fn CollisionManifold Sphere.collide_sphere(&self, Sphere other, Transform transf
  sphere on the capsule's axis reports a +y normal, box3d's fallback where there is none to measure.
 *>
 fn CollisionManifold Capsule.collide_sphere(&self, Sphere sphere, Transform transform_b_to_a) {
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
-    collide_capsule_and_sphere_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      capsule_a: self,
-      sphere_b: &sphere,
-      transform_b_to_a: transform_b_to_a,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_capsule_and_sphere_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          capsule_a: self,
+          sphere_b: &sphere,
+          transform_b_to_a: transform_b_to_a,
+        );
+    };
 }
 
 <*
@@ -71,42 +79,36 @@ fn CollisionManifold Capsule.collide_sphere(&self, Sphere sphere, Transform tran
  the greatest separation, which inside is the least negative.
 *>
 fn CollisionManifold HullData.collide_sphere(&self, Sphere sphere, Transform transform_b_to_a) {
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
     SimplexCache warm_start;
-    collide_hull_and_sphere_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      hull_a: self,
-      sphere_b: &sphere,
-      transform_b_to_a: transform_b_to_a,
-      cache: &warm_start,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_hull_and_sphere_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          hull_a: self,
+          sphere_b: &sphere,
+          transform_b_to_a: transform_b_to_a,
+          cache: &warm_start,
+        );
+    };
 }
 
 <*
  The contact between this capsule and another placed by transform_b_to_a, in this capsule's frame,
- the normal pointing towards the other. Two points arrive only when they are near parallel, overlap
- along their axes and touch; anything else gives one, and the four-slop window reaches only the
- one-point branch. Nothing at all is reported when either capsule is shorter than a linear slop, or
- the axes pass within a hundredth of one of each other — coaxial as well as crossing.
+ the normal pointing towards the other. Two points arrive only when they are near parallel,
+ overlap along their axes and touch; anything else gives one, and the four-slop window reaches only
+ the one-point branch. Nothing at all is reported when either capsule is shorter than a linear
+ slop, or the axes pass within a hundredth of one of each other — coaxial as well as crossing.
 *>
 fn CollisionManifold Capsule.collide_capsule(&self, Capsule other, Transform transform_b_to_a) {
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
-    collide_capsules_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      capsule_a: self,
-      capsule_b: &other,
-      transform_b_to_a: transform_b_to_a,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_capsules_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          capsule_a: self,
+          capsule_b: &other,
+          transform_b_to_a: transform_b_to_a,
+        );
+    };
 }
 
 <*
@@ -118,108 +120,104 @@ fn CollisionManifold Capsule.collide_capsule(&self, Capsule other, Transform tra
  alone and then reports both of, so the second can be far from contact — measured at +0.95.
 *>
 fn CollisionManifold HullData.collide_capsule(&self, Capsule capsule, Transform transform_b_to_a) {
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
     SimplexCache warm_start;
-    collide_hull_and_capsule_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      hull_a: self,
-      capsule_b: &capsule,
-      transform_b_to_a: transform_b_to_a,
-      cache: &warm_start,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_hull_and_capsule_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          hull_a: self,
+          capsule_b: &capsule,
+          transform_b_to_a: transform_b_to_a,
+          cache: &warm_start,
+        );
+    };
 }
 
 <*
  The contact between this hull and another placed by transform_b_to_a, in this hull's frame, the
  normal pointing towards the other. box3d reduces the clipped polygon to its own manifold size, so
- MAX_MANIFOLD_POINTS is a real bound here rather than a truncation. A four-slop speculative window,
- so a point can arrive with a positive separation — exactly zero where the two faces meet.
+ MAX_MANIFOLD_POINTS is a real bound here rather than a truncation. A four-slop speculative
+ window, so a point can arrive with a positive separation — exactly zero where the two faces meet.
 
- @param other : "the second hull, which box3d reads before testing anything"
- @return "the contact, or INVALID_DEFINITION when other is null"
+ @param other : `the second hull, which box3d reads before testing anything`
+ @return `the contact`
+ @return? INVALID_DEFINITION : `other is null`
 *>
 fn CollisionManifold? HullData.collide_hull(&self, HullData* other, Transform transform_b_to_a) {
     if (other == null) return INVALID_DEFINITION~;
 
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
     SatCache warm_start;
-    collide_hulls_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      hull_a: self,
-      hull_b: other,
-      transform_b_to_a: transform_b_to_a,
-      cache: &warm_start,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_hulls_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          hull_a: self,
+          hull_b: other,
+          transform_b_to_a: transform_b_to_a,
+          cache: &warm_start,
+        );
+    };
 }
 
 <*
  The contact between this triangle and a sphere in the same frame, the normal pointing from the
  triangle towards the sphere. One point at most, and the cull reads the sphere's own centre, so a
- sphere reaching past the plane still meets nothing while its centre is behind. A four-slop window,
- so the separation is positive for a sphere not yet reached and zero where the surfaces meet.
+ sphere reaching past the plane still meets nothing while its centre is behind. A four-slop
+ window, so the separation is positive for a sphere not yet reached and zero where the surfaces
+ meet.
 
- @return "the contact, or DEGENERATE_GEOMETRY when the triangle has no area"
+ @return `the contact`
+ @return? DEGENERATE_GEOMETRY : `the triangle has no area`
 *>
 fn CollisionManifold? Triangle.collide_sphere(&self, Sphere sphere) {
     if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
-    collide_triangle_and_sphere_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      triangle_a: (Vec3*)self,
-      sphere_b: &sphere,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_triangle_and_sphere_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          triangle_a: (Vec3*)self,
+          sphere_b: &sphere,
+        );
+    };
 }
 
 <*
  The contact between this triangle and a capsule in the same frame, the normal pointing from the
- triangle towards the capsule. Two points at most, from clipping the segment onto the face, and one
- of them can be far from contact. The cull reads the midpoint of the two centres, so a capsule with
- one end well in front of the plane but its midpoint behind meets nothing.
+ triangle towards the capsule. Two points at most, from clipping the segment onto the face, and
+ one of them can be far from contact. The cull reads the midpoint of the two centres, so a capsule
+ with one end well in front of the plane but its midpoint behind meets nothing.
 
- @return "the contact, or DEGENERATE_GEOMETRY when the triangle has no area"
+ @return `the contact`
+ @return? DEGENERATE_GEOMETRY : `the triangle has no area`
 *>
 fn CollisionManifold? Triangle.collide_capsule(&self, Capsule capsule) {
     if (!triangle_has_area(self)) return DEGENERATE_GEOMETRY~;
-    CollisionManifold contact;
-    LocalManifold manifold = { .points = &contact.points[0] };
     SimplexCache warm_start;
-    collide_triangle_and_capsule_raw(
-      manifold: &manifold,
-      capacity: MAX_MANIFOLD_POINTS,
-      triangle_a: (Vec3*)self,
-      capsule_b: &capsule,
-      cache: &warm_start,
-    );
-    contact.normal = manifold.normal;
-    contact.point_count = manifold.point_count;
-    return contact;
+    return @manifold_from(; LocalManifold* m) {
+        collide_triangle_and_capsule_raw(
+          manifold: m,
+          capacity: MAX_MANIFOLD_POINTS,
+          triangle_a: (Vec3*)self,
+          capsule_b: &capsule,
+          cache: &warm_start,
+        );
+    };
 }
 
 <*
  The contact between this triangle and a hull in the same frame, the normal running from triangle
  to hull and the points written into buffer. Alone among the collide pairs its count is bounded by
  that buffer: box3d truncates the clipped polygon rather than reducing it, so four slots keep a
- clip-order prefix of a contact reaching seven. The cull reads the hull's centroid against a linear
- slop, so a hull a slop behind still answers where one further back does not.
+ clip-order prefix of a contact reaching seven. The cull reads the hull's centroid against a
+ linear slop, so a hull a slop behind still answers where one further back does not.
 
- @param enable_speculative : "whether to report points the two have not reached, out to four linear slops"
- @param buffer : "where the points go; under MAX_MANIFOLD_POINTS box3d reports no contact at all, which is why that is refused"
- @return "the contact, DEGENERATE_GEOMETRY when the triangle has no area, INVALID_DEFINITION when hull is null, or BUFFER_TOO_SMALL when buffer holds fewer than MAX_MANIFOLD_POINTS"
+ @param enable_speculative : `whether to report points the two have not reached, out to four
+   linear slops`
+ @param buffer : `where the points go; under MAX_MANIFOLD_POINTS box3d reports no contact at all`
+ @return `the contact`
+ @return? DEGENERATE_GEOMETRY : `the triangle has no area`
+ @return? INVALID_DEFINITION : `hull is null`
+ @return? BUFFER_TOO_SMALL : `buffer holds fewer than MAX_MANIFOLD_POINTS`
 *>
 fn CollisionManifoldView? Triangle.collide_hull(
   &self,
@@ -255,7 +253,7 @@ fn CollisionManifoldView? Triangle.collide_hull(
  the manifold it was called on, so one taken straight from the call that produced a manifold
  outlives it: store the manifold first.
 
- @return "the points the pair produced, between none and MAX_MANIFOLD_POINTS of them"
+ @return `the points the pair produced, between none and MAX_MANIFOLD_POINTS of them`
 *>
 fn LocalManifoldPoint[] CollisionManifold.contact_points(&self) {
     return self.points[:self.point_count];

@@ -5,14 +5,16 @@ module b3;
 
  collide_connected does the suppressing, not the type, so set_collide_connected(true) puts the
  collision back; box3d islands the pair only while one body is dynamic and neither is disabled.
- The definition must come from default_filter_joint_def() and must name two bodies of this live
- world, checks box3d compiles out here: an unmarked one reports a joint event every awake step, an
- unresolvable identifier is indexed and written through, and frames and thresholds go unchecked.
 
- @param [&in] def : "a definition obtained from default_filter_joint_def(), naming two bodies of this world"
- @return "the joint, INVALID_DEFINITION if this world no longer exists, if the definition did not come from its type's default definition, or if it names a body this world cannot resolve, or INVALID_HANDLE if box3d returns a null identifier — which the type's constructor does only when the target world is locked, mid b3World_Step or inside a callback box3d runs during one"
+ @param [&in] def : `a definition obtained from default_filter_joint_def(), naming two bodies of
+   this world`
+ @return `the joint`
+ @return? check_joint_def!
+ @return? INVALID_HANDLE : `the world is locked, mid step or inside a callback box3d runs during
+   one`
 *>
 fn JointId? WorldId.create_filter_joint(self, FilterJointDef* def) {
+    if (def == null) return INVALID_DEFINITION~;
     check_joint_def(self, &def.base)!;
     return create_filter_joint_raw(self, def).checked();
 }
@@ -20,7 +22,8 @@ fn JointId? WorldId.create_filter_joint(self, FilterJointDef* def) {
 <*
  The soft-constraint tuning this joint is solved with.
 
- @return "the joint's stiffness in hertz and its damping ratio, 60 and 2 on a joint built from a default definition"
+ @return `the stiffness in hertz and the damping ratio, 60 and 2 on a joint built from a default
+   definition`
 *>
 fn ConstraintTuning JointId.constraint_tuning(self) {
     ConstraintTuning tuning;
@@ -34,7 +37,7 @@ fn ConstraintTuning JointId.constraint_tuning(self) {
  long is never truncated, and the fill keeps working while the world is locked, unlike the sensor
  filler.
 
- @return "the prefix of buffer that was filled"
+ @return `the prefix of buffer that was filled`
 *>
 fn JointId[] BodyId.joints(self, JointId[] buffer) {
     int written = body_joints_raw(self, buffer.ptr, (int)buffer.len);
@@ -42,14 +45,15 @@ fn JointId[] BodyId.joints(self, JointId[] buffer) {
 }
 
 <*
- The one implementation of the checks every joint constructor runs; WorldId.create_filter_joint
- says what they buy and where they stop. b3Body_IsValid answers for the world an identifier came
- from rather than the world the call was handed, so the two worlds are compared separately, and
- the world's own generation test is an assertion this release build compiles out — without the
- first line a handle to a destroyed world would reach whatever has since taken its slot.
+ The one implementation of the checks every joint constructor runs. b3Body_IsValid answers for the
+ world an identifier came from rather than the world the call was handed, so the two worlds are
+ compared separately, and the world's own generation test is an assertion this release build
+ compiles out — without the first line a handle to a destroyed world would reach whatever has
+ since taken its slot.
 
- @param [&in] def : "the base embedded in the caller's definition"
- @return "void, or INVALID_DEFINITION when this world no longer exists, when the definition is unmarked, or when it names a body this world cannot resolve"
+ @param [&in] def : `the base embedded in the caller's definition`
+ @return? INVALID_DEFINITION : `this world no longer exists, the definition is unmarked, or it
+   names a body this world cannot resolve`
 *>
 fn void? check_joint_def(WorldId world_id, JointDef* def) @private {
     if (!world_id.is_valid()) return INVALID_DEFINITION~;
@@ -58,4 +62,19 @@ fn void? check_joint_def(WorldId world_id, JointDef* def) @private {
 
     int world0 = world_id.index1 - 1;
     if (def.body_id_a.world0 != world0 || def.body_id_b.world0 != world0) return INVALID_DEFINITION~;
+}
+
+<*
+ The one implementation of the checks every joint narrowing runs. A narrowed handle's accessors
+ resolve through a joint-type assertion this release build compiles out, so one reaching a joint
+ of another type reinterprets that joint's solver union — nonsense from a getter, an overwrite
+ from a setter. Liveness is tested first: a destroyed joint's type resolves through that same
+ compiled-out check.
+
+ @return? INVALID_HANDLE : `the joint no longer exists`
+ @return? WRONG_JOINT_TYPE : `the joint is of another type`
+*>
+fn void? check_joint_type(JointId joint, JointType type) @private {
+    if (!joint.is_valid()) return INVALID_HANDLE~;
+    if (joint.type() != type) return WRONG_JOINT_TYPE~;
 }

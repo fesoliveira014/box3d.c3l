@@ -15,8 +15,10 @@ fn char[] Recording.data(&self) {
  after session. box3d refuses in silence — a locked world, a null recording, a world already
  recording — and writes its header when it accepts, which is what the fault reads.
 
- @param recording : "the buffer to write into, which must outlive the session"
- @return "void, or NOT_A_RECORDING when the buffer holds nothing after the call — so any buffer that is not empty when box3d refuses reads as accepted, including the one this world is already recording into and one just loaded from a file"
+ @param recording : `the buffer to write into, which must outlive the session`
+ @return? NOT_A_RECORDING : `the buffer holds nothing after the call — so any buffer that is not
+   empty when box3d refuses reads as accepted, including the one this world is already recording
+   into and one just loaded from a file`
 *>
 fn void? WorldId.start_recording(self, Recording* recording) {
     if (recording == null) return NOT_A_RECORDING~;
@@ -29,7 +31,7 @@ fn void? WorldId.start_recording(self, Recording* recording) {
  filled writes a well-formed empty file that load_recording() then refuses, so a round trip only
  survives bytes a session actually produced.
 
- @return "void, or FILE_UNAVAILABLE when box3d could not open the path or the write fell short"
+ @return? FILE_UNAVAILABLE : `box3d could not open the path, or the write fell short`
 *>
 fn void? Recording.save(&self, ZString path) {
     if (!save_recording_raw(self, path)) return FILE_UNAVAILABLE~;
@@ -40,7 +42,9 @@ fn void? Recording.save(&self, ZString path) {
  is refused at the load rather than at create_player(), and every refusal is allocation-free. The
  caller owns the result and must destroy() it — see Recording.
 
- @return "the recording, or FILE_UNAVAILABLE when the path could not be read or carries no recording, which box3d does not distinguish"
+ @return `the recording`
+ @return? FILE_UNAVAILABLE : `the path could not be read, or carries no recording, which box3d
+   does not distinguish`
 *>
 fn Recording*? load_recording(ZString path) {
     Recording* recording = load_recording_raw(path);
@@ -54,8 +58,10 @@ fn Recording*? load_recording(ZString path) {
  world_count() and byte_count() where it found them — but not the process-wide length unit, which
  a buffer refused past its header leaves at the recording's value with both counters clean.
 
- @param worker_count : "the count it stands its replay world up with, which it hands to create_player()"
- @return "true when the replay reproduced every recorded hash — false covers both a divergence and bytes box3d could not read as a recording"
+ @param worker_count : `the count it stands its replay world up with, which it hands to
+   create_player()`
+ @return `true when the replay reproduced every recorded hash — false covers both a divergence and
+   bytes box3d could not read as a recording`
 *>
 fn bool validate_replay(char[] data, int worker_count) {
     return validate_replay_raw(data.ptr, (int)data.len, worker_count);
@@ -68,8 +74,11 @@ fn bool validate_replay(char[] data, int worker_count) {
  only a player that was built gives it back: a buffer refused past its header keeps it, silently,
  with world_count() and byte_count() both correct.
 
- @param worker_count : "how many workers the replay world runs, clamped into box3d's worker range; the recording does not carry the count it was produced at, so replaying under a different one is the caller's own cross-thread determinism test"
- @return "the player, or NOT_A_RECORDING when the bytes carry no header box3d will replay"
+ @param worker_count : `how many workers the replay world runs, clamped into box3d's worker range;
+   the recording does not carry the count it was produced at, so replaying under a different one
+   is the caller's own cross-thread determinism test`
+ @return `the player`
+ @return? NOT_A_RECORDING : `the bytes carry no header box3d will replay`
 *>
 fn RecPlayer*? create_player(char[] data, int worker_count) {
     RecPlayer* player = create_player_raw(data.ptr, (int)data.len, worker_count);
@@ -81,7 +90,8 @@ fn RecPlayer*? create_player(char[] data, int worker_count) {
  Where the replay first stopped reproducing the recording, which is the frame to look at when
  has_diverged() answers true.
 
- @return "the frame, or NO_HIT while every state hash has matched — restart() puts it back to that"
+ @return `the frame`
+ @return? NO_HIT : `every state hash has matched — restart() puts it back to that`
 *>
 fn int? RecPlayer.diverge_frame(&self) {
     int frame = diverge_frame_raw(self);
@@ -93,7 +103,9 @@ fn int? RecPlayer.diverge_frame(&self) {
  The live body at a creation ordinal — see body_count() for why an ordinal below the count is not
  a promise of a body.
 
- @return "the body, INDEX_OUT_OF_RANGE outside 0 to body_count() - 1, or INVALID_HANDLE when the body at that ordinal has been destroyed"
+ @return `the body`
+ @return? INDEX_OUT_OF_RANGE : `index is outside 0 to body_count() - 1`
+ @return? INVALID_HANDLE : `the body at that ordinal has been destroyed`
 *>
 fn BodyId? RecPlayer.body_id(&self, int index) {
     if (index < 0 || index >= self.body_count()) return INDEX_OUT_OF_RANGE~;
@@ -104,7 +116,8 @@ fn BodyId? RecPlayer.body_id(&self, int index) {
  One of the queries the last replayed frame re-issued. box3d answers an index it does not hold
  with a zeroed struct, which reads as a real untagged overlap of nothing, hence the fault.
 
- @return "the query, or INDEX_OUT_OF_RANGE outside 0 to frame_query_count() - 1"
+ @return `the query`
+ @return? INDEX_OUT_OF_RANGE : `index is outside 0 to frame_query_count() - 1`
 *>
 fn RecQueryInfo? RecPlayer.frame_query(&self, int index) {
     if (index < 0 || index >= self.frame_query_count()) return INDEX_OUT_OF_RANGE~;
@@ -115,7 +128,9 @@ fn RecQueryInfo? RecPlayer.frame_query(&self, int index) {
  One result of one of the last replayed frame's queries — see RecQueryHit for the fields an
  overlap leaves holding the replay's scratch rather than a hit.
 
- @return "the hit, or INDEX_OUT_OF_RANGE when no query holds query_index or that query holds no hit_index"
+ @return `the hit`
+ @return? RecPlayer.frame_query!
+ @return? INDEX_OUT_OF_RANGE : `that query holds no hit_index`
 *>
 fn RecQueryHit? RecPlayer.frame_query_hit(&self, int query_index, int hit_index) {
     RecQueryInfo query = self.frame_query(query_index)!;

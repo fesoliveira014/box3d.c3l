@@ -9,10 +9,16 @@ module b3;
  children or more, and refuses before allocating; every other guard below restores a check it does
  not make at all: a null array segfaults, and a negative count hangs the allocator.
 
- @param [&in] def : "the children to bake"
- @return "the compound, CHILD_LIMIT_REACHED when the definition names MAX_CHILD_SHAPES children or more or box3d refuses one for its own ceiling, or INVALID_DEFINITION when a count is negative, a named array is missing, a hull or mesh child names no geometry, or a mesh child's material count is outside 1 to MAX_COMPOUND_MESH_MATERIALS"
+ @param [&in] def : `the children to bake`
+ @return `the compound`
+ @return? CHILD_LIMIT_REACHED : `the definition names MAX_CHILD_SHAPES children or more, or box3d
+   refuses one for its own ceiling`
+ @return? INVALID_DEFINITION : `def is null, a count is negative, a named array is missing, a hull
+   or mesh child names no geometry, or a mesh child's material count is outside 1 to
+   MAX_COMPOUND_MESH_MATERIALS`
 *>
 fn CompoundData*? create_compound(CompoundDef* def) {
+    if (def == null) return INVALID_DEFINITION~;
     if (def.capsule_count < 0 || def.hull_count < 0) return INVALID_DEFINITION~;
     if (def.mesh_count < 0 || def.sphere_count < 0) return INVALID_DEFINITION~;
 
@@ -49,11 +55,12 @@ fn int CompoundData.child_count(&self) {
  The child at a flat index over every kind the compound holds.
 
  The order is box3d's baking order — capsules, hulls, meshes, spheres — not the order the caller
- filled the definition in. box3d bounds the index with an assertion the release build compiles out,
- and both directions run past the array: an index at or above the count reaches past the spheres, a
- negative one reaches memory before them, and neither reports anything.
+ filled the definition in. box3d bounds the index with an assertion the release build compiles
+ out, and both directions run past the array: an index at or above the count reaches past the
+ spheres, a negative one reaches memory before them, and neither reports anything.
 
- @return "the child, or INDEX_OUT_OF_RANGE when the index is outside 0 to child_count() - 1"
+ @return `the child`
+ @return? INDEX_OUT_OF_RANGE : `the index is outside 0 to child_count() - 1`
 *>
 fn ChildShape? CompoundData.child(&self, int index) {
     if (index < 0 || index >= self.child_count()) return INDEX_OUT_OF_RANGE~;
@@ -64,7 +71,8 @@ fn ChildShape? CompoundData.child(&self, int index) {
  The capsule child at index, counting capsules alone. box3d's own bound on the index is an
  assertion the release build compiles out — see child().
 
- @return "the capsule child, or INDEX_OUT_OF_RANGE when the index is outside 0 to capsule_count - 1"
+ @return `the capsule child`
+ @return? INDEX_OUT_OF_RANGE : `the index is outside 0 to capsule_count - 1`
 *>
 fn CompoundCapsule? CompoundData.capsule(&self, int index) {
     if (index < 0 || index >= self.capsule_count) return INDEX_OUT_OF_RANGE~;
@@ -78,7 +86,8 @@ fn CompoundCapsule? CompoundData.capsule(&self, int index) {
  The hull it reports points inside the compound and belongs to it; destroying it separately frees
  a pointer that was never separately allocated — see CompoundHull.
 
- @return "the hull child, or INDEX_OUT_OF_RANGE when the index is outside 0 to hull_count - 1"
+ @return `the hull child`
+ @return? INDEX_OUT_OF_RANGE : `the index is outside 0 to hull_count - 1`
 *>
 fn CompoundHull? CompoundData.hull(&self, int index) {
     if (index < 0 || index >= self.hull_count) return INDEX_OUT_OF_RANGE~;
@@ -92,7 +101,8 @@ fn CompoundHull? CompoundData.hull(&self, int index) {
  The mesh it reports is the compound's clone, not the mesh create_compound() was given, and
  belongs to the compound; destroying it aborts the process — see CompoundMesh.
 
- @return "the mesh child, or INDEX_OUT_OF_RANGE when the index is outside 0 to mesh_count - 1"
+ @return `the mesh child`
+ @return? INDEX_OUT_OF_RANGE : `the index is outside 0 to mesh_count - 1`
 *>
 fn CompoundMesh? CompoundData.mesh(&self, int index) {
     if (index < 0 || index >= self.mesh_count) return INDEX_OUT_OF_RANGE~;
@@ -103,7 +113,8 @@ fn CompoundMesh? CompoundData.mesh(&self, int index) {
  The sphere child at index, counting spheres alone. box3d's own bound on the index is an assertion
  the release build compiles out — see child().
 
- @return "the sphere child, or INDEX_OUT_OF_RANGE when the index is outside 0 to sphere_count - 1"
+ @return `the sphere child`
+ @return? INDEX_OUT_OF_RANGE : `the index is outside 0 to sphere_count - 1`
 *>
 fn CompoundSphere? CompoundData.sphere(&self, int index) {
     if (index < 0 || index >= self.sphere_count) return INDEX_OUT_OF_RANGE~;
@@ -131,7 +142,8 @@ fn SurfaceMaterial[] CompoundData.materials(&self) {
  landing back inside the compound's own header that answers a zero-extent box at the transform's
  position — a plausible empty box rather than an obvious wrong one, which is why it is refused.
 
- @return "the bounds, or DEGENERATE_GEOMETRY when the compound holds no children"
+ @return `the bounds`
+ @return? DEGENERATE_GEOMETRY : `the compound holds no children`
 *>
 fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
     if (self.tree.root < 0) return DEGENERATE_GEOMETRY~;
@@ -151,11 +163,13 @@ fn char[] CompoundData.to_bytes(&self) {
 
 <*
  Points a compound's tree back into the caller's own bytes and hands them back read as one. It
- allocates nothing and takes nothing over: the bytes stay the caller's, so destroy() is right
- only for a compound box3d allocated. box3d reads the header through the pointer before it checks
- any length, which is what the first guard is for.
+ allocates nothing and takes nothing over: the bytes stay the caller's, so destroy() is right only
+ for a compound box3d allocated. box3d reads the header through the pointer before it checks any
+ length, which is what the first guard is for.
 
- @return "the compound, BUFFER_TOO_SMALL when the slice is shorter than a compound header, or NOT_A_COMPOUND when it carries another version, another length, or no tree"
+ @return `the compound`
+ @return? BUFFER_TOO_SMALL : `the slice is shorter than a compound header`
+ @return? NOT_A_COMPOUND : `it carries another version, another length, or no tree`
 *>
 fn CompoundData*? compound_from_bytes(char[] bytes) {
     if (bytes.len < CompoundData::size) return BUFFER_TOO_SMALL~;
@@ -163,20 +177,23 @@ fn CompoundData*? compound_from_bytes(char[] bytes) {
 }
 
 <*
- Attaches a baked compound to this body, under the definition and null guards create_mesh_shape
- describes and borrowing the compound exactly as that call borrows its mesh.
+ Attaches a baked compound to this body, borrowing it as create_mesh_shape borrows its mesh.
 
  box3d takes a baked compound only on a static body and hands back a null identifier for a
- kinematic or a dynamic one, so INVALID_HANDLE here usually means the body was the wrong type. What
- the shape copies is the compound's materials, not the definition's, so mesh_material_count() and
- mesh_surface_material() answer with CompoundData.materials() over again.
+ kinematic or a dynamic one, so INVALID_HANDLE here usually means the body was the wrong type.
+ What the shape copies is the compound's materials, not the definition's, so mesh_material_count()
+ and mesh_surface_material() answer with CompoundData.materials() over again.
 
- @param [&in] def : "a definition obtained from default_shape_def()"
- @param compound : "the compound, which must outlive the shape; null is refused rather than dereferenced"
- @return "the shape, INVALID_DEFINITION if the definition did not come from default_shape_def() or the compound is null, or INVALID_HANDLE if box3d returns a null identifier, which a body that is not static always does"
+ @param [&in] def : `a definition obtained from default_shape_def()`
+ @param compound : `the compound, which must outlive the shape`
+ @return `the shape`
+ @return? check_shape_def!
+ @return? INVALID_DEFINITION : `compound is null`
+ @return? INVALID_HANDLE : `box3d returned a null identifier, which a body that is not static
+   always does`
 *>
 fn ShapeId? BodyId.create_baked_compound_shape(self, ShapeDef* def, CompoundData* compound) {
-    if (def.internal_value != default_shape_def().internal_value) return INVALID_DEFINITION~;
+    check_shape_def(def)!;
     if (compound == null) return INVALID_DEFINITION~;
     return create_baked_compound_shape_raw(self, def, compound).checked();
 }

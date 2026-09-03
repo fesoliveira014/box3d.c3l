@@ -2,9 +2,11 @@ module b3;
 
 <*
  The colour box3d assigns a constraint graph slot, for a renderer drawing the solver's colouring.
- The last slot is the overflow colour.
+ The last slot is the overflow colour. box3d asserts the range and this release build compiles
+ that out, so the read past the table answers neither a colour nor a stable value.
 
- @return "the colour, or INDEX_OUT_OF_RANGE outside 0 to GRAPH_COLOR_COUNT - 1 — box3d asserts the range, this release build compiles that out, and the read past the table answers neither a colour nor the same value from one build to the next"
+ @return `the colour`
+ @return? INDEX_OUT_OF_RANGE : `index is outside 0 to GRAPH_COLOR_COUNT - 1`
 *>
 fn HexColor? graph_color(int index) {
     if (index < 0 || index >= GRAPH_COLOR_COUNT) return INDEX_OUT_OF_RANGE~;

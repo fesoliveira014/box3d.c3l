@@ -4,7 +4,7 @@ module b3;
 // the normal is finite and normalised, so this borrows box3d's own tolerance rather than mirroring
 // the constant it is written with.
 fn bool is_unit_vector(Vec3 v) @private {
-    Plane plane = { .normal = v, .offset = 0.0 };
+    Plane plane = { .normal = v, .offset = 0.0f };
     return is_valid_plane(plane);
 }
 
@@ -26,7 +26,10 @@ fn Quat make_quat_from_matrix(Matrix3 m) {
  The shortest rotation taking v1 onto v2. Antipodal vectors have no shortest rotation, so box3d
  answers a half turn about an axis it picks perpendicular to v1 rather than an identity.
 
- @return "the rotation, or NOT_A_UNIT_VECTOR when either vector is not one — box3d asserts both and this release build compiles that out, leaving an unequally scaled pair reading as a different angle and a pair shorter than about 1e-5 as no rotation at all"
+ @return `the rotation`
+ @return? NOT_A_UNIT_VECTOR : `either vector is not one — box3d asserts both and this release build
+   compiles that out, leaving an unequally scaled pair reading as a different angle and a pair
+   shorter than about 1e-5 as no rotation at all`
 *>
 fn Quat? compute_quat_between_unit_vectors(Vec3 v1, Vec3 v2) {
     if (!is_unit_vector(v1) || !is_unit_vector(v2)) return NOT_A_UNIT_VECTOR~;
@@ -38,7 +41,10 @@ fn Quat? compute_quat_between_unit_vectors(Vec3 v1, Vec3 v2) {
  endpoints, which is what segment_distance takes. The fractions run along the directions as given
  and are unbounded, so a closest point behind a line's own origin reports a negative one.
 
- @return "the closest points, or DEGENERATE_GEOMETRY when d1 has no length, which box3d divides by and answers a NaN point for. A zero d2 is answered rather than refused: it reports p2 itself and the point on the first line nearest it"
+ @return `the closest points`
+ @return? DEGENERATE_GEOMETRY : `d1 has no length, which box3d divides by and answers a NaN point
+   for. A zero d2 is answered rather than refused: it reports p2 itself and the point on the first
+   line nearest it`
 *>
 fn SegmentDistanceResult? line_distance(Vec3 p1, Vec3 d1, Vec3 p2, Vec3 d2) {
     if (!has_length(d1)) return DEGENERATE_GEOMETRY~;

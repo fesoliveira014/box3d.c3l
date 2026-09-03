@@ -13,7 +13,7 @@ fn uint hash(char[] data, uint seed = HASH_INIT) {
  Confirms the linked library uses the float ABI these bindings are declared against. A library
  built with BOX3D_DOUBLE_PRECISION widens every position and silently corrupts every call.
 
- @return "void, or DOUBLE_PRECISION_LIBRARY when the linked library uses double precision"
+ @return? DOUBLE_PRECISION_LIBRARY : `the linked library was built with double precision`
 *>
 fn void? require_float_abi() {
     if (is_double_precision()) return DOUBLE_PRECISION_LIBRARY~;

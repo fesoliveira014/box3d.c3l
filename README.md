@@ -30,7 +30,8 @@ exists a `T` in `nm -g --defined-only linked-libs/linux-x64/libbox3d.a`.
 
 ## Using it
 
-Add the package to a C3 project's dependency search path and list `b3` as a dependency:
+Download `b3.c3l` from a release, drop it into the directory your project searches for libraries,
+and name `b3` as a dependency:
 
 ```json
 {
@@ -38,6 +39,10 @@ Add the package to a C3 project's dependency search path and list `b3` as a depe
   "dependencies": [ "b3" ]
 }
 ```
+
+That file is a packed `.c3l` — a zip c3c reads as it stands — and it carries the sources and a
+prebuilt `libbox3d.a`, so a consumer needs neither this repository nor CMake. Do not unzip or
+rename it. Building from a clone works too; see "Building the native library" below.
 
 The module is `b3`, after the manifest's `provides` name — not the directory name `box3d.c3l`. The
 module takes the C library's own symbol prefix, so `b3CreateWorld` in C reads as `b3::create_world`
@@ -72,6 +77,17 @@ That produces `linked-libs/linux-x64/libbox3d.a`. `--check` verifies that no bou
 drifted from `scripts/abi-sizes.txt`; `--update` re-records them.
 
 Only `linux-x64` is built today.
+
+## Cutting a release
+
+```sh
+./scripts/package-release.sh 0.1.0
+```
+
+writes `dist/b3.c3l` and its `.sha256`. Pushing a `v*` tag runs the same thing under
+`.github/workflows/release.yml`, which builds box3d, checks the layout pins, compiles the package,
+runs both test targets and the comment audit, builds a consumer against the artifact it just made,
+and uploads it.
 
 ## Conventions
 

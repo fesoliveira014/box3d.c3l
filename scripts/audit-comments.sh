@@ -18,7 +18,13 @@
 # worse outcome than no cap, and only the aggregate shows it: the natural shape of the length
 # distribution declines, so a pile-up at the ceiling means length was chosen by the limit rather
 # than by the contract.
+#
+# --gate makes the two must-be-empty readings exit non-zero, for a build that has to fail on them.
+# The three backlogs are reported either way: a script cannot tell growth from a baseline it does
+# not carry, and pinning three numbers inside it would make every legitimate edit a script edit.
 set -eu
+GATE=0
+if [ "${1:-}" = "--gate" ]; then GATE=1; shift; fi
 CAP="${1:-6}"
 RUN="${2:-3}"
 WIDTH="${3:-100}"
@@ -46,19 +52,21 @@ scan() {
     ' "$1"
 }
 
-echo "== prose body over $CAP lines (must be empty) =="
-for f in $FILES; do
+over_cap=$(for f in $FILES; do
     scan "$f" | awk -F: -v cap="$CAP" '$3 > cap { printf "%s:%s: prose body is %s lines\n", $1, $2, $3 }'
-done
+done)
+echo "== prose body over $CAP lines (must be empty) =="
+[ -z "$over_cap" ] || printf '%s\n' "$over_cap"
 
-echo "== docstring lines over $WIDTH characters (must be empty) =="
-for f in $FILES; do
+over_width=$(for f in $FILES; do
     awk -v file="$f" -v width="$WIDTH" '
         /^[[:space:]]*<\*/ { inside = 1; next }
         inside && /\*>/ { inside = 0; next }
         inside { if (length($0) > width) printf "%s:%d: %d characters\n", file, NR, length($0) }
     ' "$f"
-done
+done)
+echo "== docstring lines over $WIDTH characters (must be empty) =="
+[ -z "$over_width" ] || printf '%s\n' "$over_width"
 
 echo "== inline // runs over $RUN lines =="
 for f in $FILES; do
@@ -78,3 +86,8 @@ echo "== docstrings over the $BUDGET-line budget, prose and directives together 
 for f in $FILES; do
     scan "$f" | awk -F: -v budget="$BUDGET" '$4 > budget { printf "%s:%s: %s lines\n", $1, $2, $4 }'
 done
+
+if [ "$GATE" = 1 ] && { [ -n "$over_cap" ] || [ -n "$over_width" ]; }; then
+    echo "ERROR: a must-be-empty comment reading is not empty." >&2
+    exit 1
+fi

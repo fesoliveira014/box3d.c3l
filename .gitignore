@@ -13,3 +13,6 @@ linked-libs/**/*.dll
 
 # Local working notes
 .dev/
+
+# Release artifacts — produced by scripts/package-release.sh
+dist/

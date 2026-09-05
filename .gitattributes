@@ -1,0 +1,8 @@
+# A Windows checkout must not rewrite line endings. scripts/abi-sizes.txt is diffed byte for byte
+# against the layout probe's own output, and a CRLF copy of it makes all 111 lines differ while
+# reading identically -- which is exactly how it failed. The shell scripts have the same stake.
+* text=auto eol=lf
+
+*.a   binary
+*.lib binary
+*.c3l binary

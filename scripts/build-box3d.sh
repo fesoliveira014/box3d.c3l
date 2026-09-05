@@ -113,19 +113,24 @@ fi
 # ABI, so it must stay OFF here — a build with it on silently corrupts every call.
 echo "Configuring box3d for $TARGET (float ABI, samples/tests/benchmarks off)"
 if [ "$TARGET" = "windows-x64" ]; then
-    # The Visual Studio generator locates MSVC itself, so the library build needs no vcvars shell.
+    # Everything MSVC runs inside the developer environment vswhere locates, rather than through a
+    # generator named for a Visual Studio version: the runner image's version is not ours to pin,
+    # and naming one is how this first failed. Ninja comes with that environment.
+    #
     # box3d pins CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded, the static CRT, which is why the
     # manifest's windows-x64 target sets "wincrt": "static" -- a consumer on the dynamic CRT will
     # not link against this archive.
-    cmake -S "$VENDOR" -B "$VENDOR/build" -G "Visual Studio 17 2022" -A x64 \
-        -DBUILD_SHARED_LIBS=OFF \
-        -DBOX3D_DOUBLE_PRECISION=OFF \
-        -DBOX3D_SAMPLES=OFF \
-        -DBOX3D_UNIT_TESTS=OFF \
-        -DBOX3D_BENCHMARKS=OFF \
-        -DBOX3D_DOCS=OFF \
-        -DBOX3D_VALIDATE=OFF
-    cmake --build "$VENDOR/build" --config Release --target box3d --parallel
+    BUILD_BAT="$VENDOR/build.bat"
+    mkdir -p "$VENDOR/build"
+    {
+        echo '@echo off'
+        echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
+        echo 'if not defined VSPATH (echo ERROR: vswhere found no Visual Studio installation & exit /b 1)'
+        echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1'
+        printf 'cmake -S "%s" -B "%s" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBOX3D_DOUBLE_PRECISION=OFF -DBOX3D_SAMPLES=OFF -DBOX3D_UNIT_TESTS=OFF -DBOX3D_BENCHMARKS=OFF -DBOX3D_DOCS=OFF -DBOX3D_VALIDATE=OFF || exit /b 1\n' "$(cygpath -w "$VENDOR")" "$(cygpath -w "$VENDOR/build")"
+        printf 'cmake --build "%s" --target box3d --parallel || exit /b 1\n' "$(cygpath -w "$VENDOR/build")"
+    } > "$BUILD_BAT"
+    cmd //c "$(cygpath -w "$BUILD_BAT")"
     LIBNAME="box3d.lib"
 else
     cmake -S "$VENDOR" -B "$VENDOR/build" \
@@ -146,7 +151,7 @@ LIB="$(find "$VENDOR/build" -name "$LIBNAME" -print -quit)"
 [ -n "$LIB" ] || { echo "ERROR: $LIBNAME not produced by the build" >&2; exit 1; }
 mkdir -p "$OUT"
 cp "$LIB" "$OUT/$LIBNAME"
-echo "Installed $OUT/libbox3d.a"
+echo "Installed $OUT/$LIBNAME"
 
 # --- layout probe -----------------------------------------------------------
 # scripts/abi-types.txt lists one C type per line, optionally followed by a space and a
@@ -209,8 +214,8 @@ if [ "$TARGET" = "windows-x64" ]; then
         echo '@echo off'
         echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
         echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul'
-        echo "cd /d $(cygpath -w "$VENDOR/build")"
-        echo "cl /nologo /std:c17 /I $(cygpath -w "$VENDOR/include") abi_probe.c /Fe:abi_probe.exe >nul"
+        printf 'cd /d "%s"\n' "$(cygpath -w "$VENDOR/build")"
+        printf 'cl /nologo /std:c17 /I "%s" abi_probe.c /Fe:abi_probe.exe >nul || exit /b 1\n' "$(cygpath -w "$VENDOR/include")"
         echo 'abi_probe.exe'
     } > "$BAT"
     probed="$(cmd //c "$(cygpath -w "$BAT")" | tr -d '\r')"

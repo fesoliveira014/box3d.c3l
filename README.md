@@ -73,10 +73,15 @@ git submodule update --init
 ./scripts/build-box3d.sh
 ```
 
-That produces `linked-libs/linux-x64/libbox3d.a`. `--check` verifies that no bound struct layout has
-drifted from `scripts/abi-sizes.txt`; `--update` re-records them.
+That produces the archive for whichever platform you are on — `linked-libs/linux-x64/libbox3d.a`
+under Linux, `linked-libs/windows-x64/box3d.lib` under a Windows shell, where the same script
+drives MSVC. There is no cross-compilation; the release workflow builds each target on its own
+runner. `--check` verifies that no bound struct layout has drifted from `scripts/abi-sizes.txt`;
+`--update` re-records them and is Linux-only, because that file is shared by both targets.
 
-Only `linux-x64` is built today.
+It is shared because the layouts are identical: probed against the real headers under both MSVC and
+GCC, all 111 pinned types agree on size, alignment and every field offset. `--check` on either
+platform is therefore a real gate on the other's pins.
 
 ## Cutting a release
 

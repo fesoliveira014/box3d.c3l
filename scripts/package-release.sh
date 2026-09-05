@@ -4,13 +4,12 @@
 # `project fetch` looks for <search-path>/<dependency>.c3l, and the dependency name is the
 # manifest's `provides`.
 #
-# What ships is what a consumer compiles and links against, and nothing else: the sources, the
-# static library, the licences and a consumer README. Not the vendored submodule, not the build
-# and audit scripts, not the test project.
+# What ships is what a consumer compiles and links against, and nothing else: the sources, one
+# static library per declared target, the licences and a consumer README. Not the vendored
+# submodule, not the build and audit scripts, not the test project.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-TARGET="linux-x64"
 VERSION="${1:-}"
 DIST="$ROOT/dist"
 STAGE="$DIST/.stage"
@@ -37,11 +36,21 @@ fi
 # corrupt every call it is used for, so this is a gate rather than a convenience.
 "$ROOT/scripts/build-box3d.sh" --check
 
+# Every target the manifest declares must have its library present. A release missing one would
+# resolve for a consumer on that platform and then fail at link, which is a worse failure than
+# refusing here: c3c reports the manifest's target as supported whether the archive is there or not.
+LINUX_LIB="$ROOT/linked-libs/linux-x64/libbox3d.a"
+WINDOWS_LIB="$ROOT/linked-libs/windows-x64/box3d.lib"
+for lib in "$LINUX_LIB" "$WINDOWS_LIB"; do
+    [ -f "$lib" ] || { echo "ERROR: $lib is missing; the release declares the target it belongs to." >&2; exit 1; }
+done
+
 rm -rf "$STAGE" "$ARCHIVE" "$ARCHIVE.sha256"
-mkdir -p "$STAGE/src" "$STAGE/linked-libs/$TARGET"
+mkdir -p "$STAGE/src" "$STAGE/linked-libs/linux-x64" "$STAGE/linked-libs/windows-x64"
 
 cp "$ROOT"/src/*.c3 "$ROOT"/src/*.c3i "$STAGE/src/"
-cp "$ROOT/linked-libs/$TARGET/libbox3d.a" "$STAGE/linked-libs/$TARGET/"
+cp "$LINUX_LIB" "$STAGE/linked-libs/linux-x64/"
+cp "$WINDOWS_LIB" "$STAGE/linked-libs/windows-x64/"
 cp "$ROOT/LICENSE" "$ROOT/LICENSE.box3d.mit" "$ROOT/NOTICE" "$STAGE/"
 
 BOX3D_COMMIT="$(git -C "$ROOT/vendor/box3d" rev-parse --short HEAD)"

@@ -1,8 +1,9 @@
 # b3 — C3 bindings for box3d
 
 Version @VERSION@, built against box3d @BOX3D_DESCRIBE@ (Erin Catto's 3D rigid body physics
-library, C17). This package ships the sources and a prebuilt `linked-libs/linux-x64/libbox3d.a`,
-so nothing here needs CMake, a submodule or a C compiler.
+library, C17). This package ships the sources and a prebuilt static library per target —
+`linked-libs/linux-x64/libbox3d.a` and `linked-libs/windows-x64/box3d.lib` — so nothing here needs
+CMake, a submodule or a C compiler.
 
 box3d's exported surface is bound — 575 of the 580 `B3_API` functions. Worlds and bodies, every
 shape kind, the world's event arrays and callbacks, casts, overlaps and queries, all nine joint
@@ -87,9 +88,14 @@ silently.
 
 ## Target support
 
-`linux-x64` only. The package is built against the float ABI — a box3d built with
+`linux-x64` and `windows-x64`. Both are built against the float ABI — a box3d built with
 `BOX3D_DOUBLE_PRECISION` widens every position and would corrupt every call, so
 `b3::require_float_abi()` refuses one.
+
+The Windows archive is MSVC, built against the **static** CRT, which is what box3d itself pins. The
+manifest declares `"wincrt": "static"` to match; a project on the dynamic CRT will not link against
+it. `windows-x64` is the MSVC target — c3c's `mingw-x64` is a different ABI and this package does
+not ship one.
 
 ## License
 

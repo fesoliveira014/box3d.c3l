@@ -7,12 +7,23 @@
 #   scripts/build-box3d.sh --check    build, then fail if a layout drifted from scripts/abi-sizes.txt
 #   scripts/build-box3d.sh --update   build, then rewrite scripts/abi-sizes.txt from the probe
 #
-# Cross-compiling the other manifest targets is deferred; this builds the host target only.
+# The target is the host's: linux-x64 under a Linux shell, windows-x64 under a Windows one (Git
+# Bash on a runner, say), where the library is box3d.lib built by MSVC rather than libbox3d.a.
+# There is no cross-compilation here -- each target is built on its own platform, which is what
+# the release workflow's two jobs are for.
+#
+# scripts/abi-sizes.txt is shared by both targets, and deliberately so: the MSVC and GCC layouts
+# were measured identical across all 111 pinned types, so one file records both and --check on
+# either platform is a real gate on the other's pins. --update is Linux-only, so the recorded file
+# has one author.
 set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENDOR="$ROOT/vendor/box3d"
-TARGET="linux-x64"
+case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) TARGET="windows-x64" ;;
+    *)                    TARGET="linux-x64" ;;
+esac
 OUT="$ROOT/linked-libs/$TARGET"
 TYPES="$ROOT/scripts/abi-types.txt"
 SIZES="$ROOT/scripts/abi-sizes.txt"
@@ -100,24 +111,41 @@ fi
 # BOX3D_DOUBLE_PRECISION is a PUBLIC compile definition: it switches b3Vec3/b3Pos and every
 # struct that embeds them from float to double. The C3 binding is written against the float
 # ABI, so it must stay OFF here — a build with it on silently corrupts every call.
-echo "Configuring box3d (float ABI, samples/tests/benchmarks off)"
-cmake -S "$VENDOR" -B "$VENDOR/build" \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
-    -DBUILD_SHARED_LIBS=OFF \
-    -DBOX3D_DOUBLE_PRECISION=OFF \
-    -DBOX3D_SAMPLES=OFF \
-    -DBOX3D_UNIT_TESTS=OFF \
-    -DBOX3D_BENCHMARKS=OFF \
-    -DBOX3D_DOCS=OFF \
-    -DBOX3D_VALIDATE=OFF
+echo "Configuring box3d for $TARGET (float ABI, samples/tests/benchmarks off)"
+if [ "$TARGET" = "windows-x64" ]; then
+    # The Visual Studio generator locates MSVC itself, so the library build needs no vcvars shell.
+    # box3d pins CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded, the static CRT, which is why the
+    # manifest's windows-x64 target sets "wincrt": "static" -- a consumer on the dynamic CRT will
+    # not link against this archive.
+    cmake -S "$VENDOR" -B "$VENDOR/build" -G "Visual Studio 17 2022" -A x64 \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBOX3D_DOUBLE_PRECISION=OFF \
+        -DBOX3D_SAMPLES=OFF \
+        -DBOX3D_UNIT_TESTS=OFF \
+        -DBOX3D_BENCHMARKS=OFF \
+        -DBOX3D_DOCS=OFF \
+        -DBOX3D_VALIDATE=OFF
+    cmake --build "$VENDOR/build" --config Release --target box3d --parallel
+    LIBNAME="box3d.lib"
+else
+    cmake -S "$VENDOR" -B "$VENDOR/build" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBOX3D_DOUBLE_PRECISION=OFF \
+        -DBOX3D_SAMPLES=OFF \
+        -DBOX3D_UNIT_TESTS=OFF \
+        -DBOX3D_BENCHMARKS=OFF \
+        -DBOX3D_DOCS=OFF \
+        -DBOX3D_VALIDATE=OFF
+    cmake --build "$VENDOR/build" --target box3d --parallel
+    LIBNAME="libbox3d.a"
+fi
 
-cmake --build "$VENDOR/build" --target box3d --parallel
-
-LIB="$(find "$VENDOR/build" -name 'libbox3d.a' -print -quit)"
-[ -n "$LIB" ] || { echo "ERROR: libbox3d.a not produced by the build" >&2; exit 1; }
+LIB="$(find "$VENDOR/build" -name "$LIBNAME" -print -quit)"
+[ -n "$LIB" ] || { echo "ERROR: $LIBNAME not produced by the build" >&2; exit 1; }
 mkdir -p "$OUT"
-cp "$LIB" "$OUT/libbox3d.a"
+cp "$LIB" "$OUT/$LIBNAME"
 echo "Installed $OUT/libbox3d.a"
 
 # --- layout probe -----------------------------------------------------------
@@ -172,11 +200,32 @@ PROBE="$VENDOR/build/abi_probe.c"
     echo '}'
 } > "$PROBE"
 
-"${CC:-cc}" -std=c17 -I"$VENDOR/include" "$PROBE" -o "$VENDOR/build/abi_probe"
-probed="$("$VENDOR/build/abi_probe")"
+if [ "$TARGET" = "windows-x64" ]; then
+    # cl needs the developer environment, which vswhere locates without hard-coding an edition or
+    # a version. The probe runs as a real Windows binary, so what it reports is MSVC's own layout
+    # rather than a cross-compiler's guess at it.
+    BAT="$VENDOR/build/abi_probe.bat"
+    {
+        echo '@echo off'
+        echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
+        echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul'
+        echo "cd /d $(cygpath -w "$VENDOR/build")"
+        echo "cl /nologo /std:c17 /I $(cygpath -w "$VENDOR/include") abi_probe.c /Fe:abi_probe.exe >nul"
+        echo 'abi_probe.exe'
+    } > "$BAT"
+    probed="$(cmd //c "$(cygpath -w "$BAT")" | tr -d '\r')"
+else
+    "${CC:-cc}" -std=c17 -I"$VENDOR/include" "$PROBE" -o "$VENDOR/build/abi_probe"
+    probed="$("$VENDOR/build/abi_probe")"
+fi
 
 case "$MODE" in
     --update)
+        if [ "$TARGET" != "linux-x64" ]; then
+            echo "ERROR: --update is linux-x64 only. $SIZES is shared by both targets and has one" >&2
+            echo "author; run --check here instead, which gates this platform against that record." >&2
+            exit 1
+        fi
         printf '%s\n' "$probed" > "$SIZES"
         generate_layout "$probed" > "$LAYOUT"
         echo "Wrote $SIZES and $LAYOUT:"
@@ -188,7 +237,7 @@ case "$MODE" in
             exit 1
         fi
         if ! printf '%s\n' "$probed" | diff -u "$SIZES" - ; then
-            echo "ERROR: box3d struct layout drifted from $SIZES." >&2
+            echo "ERROR: box3d struct layout drifted from $SIZES on $TARGET." >&2
             echo "The \$assert pins in the C3 binding are now wrong. Update both together." >&2
             exit 1
         fi

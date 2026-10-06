@@ -70,8 +70,8 @@ jobs:
 
       - name: Check glibc 2.35 baseline
         run: |
-          nm -u linked-libs/linux-x64/libbox3d.a | sort -u > undefined.txt
-          ! grep -E '__isoc23_|strlcpy|strlcat|arc4random|pidfd_|__libc_single_threaded' undefined.txt
+          nm -u linked-libs/linux-x64/libbox3d.a | sort -u > "$RUNNER_TEMP/undefined.txt"
+          ! grep -E '__isoc23_|strlcpy|strlcat|arc4random|pidfd_|__libc_single_threaded' "$RUNNER_TEMP/undefined.txt"
 
       # The archive the windows job built. Packaging refuses to ship without it, since the manifest
       # declares the target either way and a consumer would reach link before finding out.

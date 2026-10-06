@@ -4,9 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   C3C_VERSION: v0.8.3
@@ -35,8 +37,13 @@ jobs:
           if-no-files-found: error
 
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: windows
+    permissions:
+      contents: write
+    env:
+      # Tags publish at their own version; pull requests and manual runs build the same artifacts as a dry run.
+      RELEASE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.0.0-dev' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -60,6 +67,11 @@ jobs:
       # Builds libbox3d.a and fails if any probed struct layout drifted from the $assert pins.
       - name: Build box3d and check the layout pins
         run: ./scripts/build-box3d.sh --check
+
+      - name: Check glibc 2.35 baseline
+        run: |
+          nm -u linked-libs/linux-x64/libbox3d.a | sort -u > "$RUNNER_TEMP/undefined.txt"
+          ! grep -E '__isoc23_|strlcpy|strlcat|arc4random|pidfd_|__libc_single_threaded' "$RUNNER_TEMP/undefined.txt"
 
       # The archive the windows job built. Packaging refuses to ship without it, since the manifest
       # declares the target either way and a consumer would reach link before finding out.
@@ -87,7 +99,7 @@ jobs:
         run: ./scripts/audit-assertions.sh
 
       - name: Package
-        run: ./scripts/package-release.sh "${GITHUB_REF_NAME#v}"
+        run: ./scripts/package-release.sh "${RELEASE_VERSION#v}"
 
       # The artifact must build a consumer that has neither this repository nor CMake.
       # The project is checked in at scripts/consumer-smoke so a sweep over the package sources
@@ -96,14 +108,23 @@ jobs:
         run: |
           cp -r scripts/consumer-smoke "$RUNNER_TEMP/consumer"
           mkdir -p "$RUNNER_TEMP/consumer/libs"
-          cp dist/b3.c3l "$RUNNER_TEMP/consumer/libs/b3.c3l"
+          cp "dist/b3-${RELEASE_VERSION}-linux-x64.c3l" "$RUNNER_TEMP/consumer/libs/"
           cd "$RUNNER_TEMP/consumer" && c3c build consumer && ./out/consumer
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b3-release-artifacts
+          path: |
+            dist/b3-v*.c3l
+            dist/SHA256SUMS
+          if-no-files-found: error
+
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            dist/b3.c3l dist/b3.c3l.sha256
+            dist/b3-v*.c3l dist/SHA256SUMS

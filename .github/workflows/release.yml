@@ -4,9 +4,11 @@ on:
   push:
     tags:
       - 'v*'
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   C3C_VERSION: v0.8.3
@@ -37,6 +39,11 @@ jobs:
   release:
     runs-on: ubuntu-latest
     needs: windows
+    permissions:
+      contents: write
+    env:
+      # Tags publish at their own version; pull requests and manual runs build the same artifacts as a dry run.
+      RELEASE_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v0.0.0-dev' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,7 +94,7 @@ jobs:
         run: ./scripts/audit-assertions.sh
 
       - name: Package
-        run: ./scripts/package-release.sh "${GITHUB_REF_NAME#v}"
+        run: ./scripts/package-release.sh "${RELEASE_VERSION#v}"
 
       # The artifact must build a consumer that has neither this repository nor CMake.
       # The project is checked in at scripts/consumer-smoke so a sweep over the package sources
@@ -96,14 +103,23 @@ jobs:
         run: |
           cp -r scripts/consumer-smoke "$RUNNER_TEMP/consumer"
           mkdir -p "$RUNNER_TEMP/consumer/libs"
-          cp dist/b3.c3l "$RUNNER_TEMP/consumer/libs/b3.c3l"
+          cp "dist/b3-${RELEASE_VERSION}-linux-x64.c3l" "$RUNNER_TEMP/consumer/libs/"
           cd "$RUNNER_TEMP/consumer" && c3c build consumer && ./out/consumer
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: b3-release-artifacts
+          path: |
+            dist/b3-v*.c3l
+            dist/SHA256SUMS
+          if-no-files-found: error
+
       - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            dist/b3.c3l dist/b3.c3l.sha256
+            dist/b3-v*.c3l dist/SHA256SUMS

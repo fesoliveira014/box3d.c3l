@@ -12,7 +12,7 @@ manifold functions, debug draw, and recording and replay.
 
 ## Using it
 
-Drop `b3.c3l` into the directory your project searches for libraries, and name `b3` as a
+Drop this package into the directory your project searches for libraries, and name `b3` as a
 dependency:
 
 ```json

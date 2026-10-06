@@ -30,7 +30,7 @@ exists a `T` in `nm -g --defined-only linked-libs/linux-x64/libbox3d.a`.
 
 ## Using it
 
-Download `b3.c3l` from a release, drop it into the directory your project searches for libraries,
+Download `b3-v<version>-<platform>.c3l` (`linux-x64` or `windows-x64`) from a release, drop it into the directory your project searches for libraries,
 and name `b3` as a dependency:
 
 ```json
@@ -89,10 +89,11 @@ platform is therefore a real gate on the other's pins.
 ./scripts/package-release.sh 0.1.0
 ```
 
-writes `dist/b3.c3l` and its `.sha256`. Pushing a `v*` tag runs the same thing under
-`.github/workflows/release.yml`, which builds box3d, checks the layout pins, compiles the package,
-runs both test targets and the comment audit, builds a consumer against the artifact it just made,
-and uploads it.
+writes `dist/b3-v0.1.0-linux-x64.c3l`, `dist/b3-v0.1.0-windows-x64.c3l` and `dist/SHA256SUMS`. Pushing a
+`v*` tag runs the same thing under `.github/workflows/release.yml`, which builds box3d, checks the layout pins, compiles the package,
+runs both test targets and the comment audit, builds a consumer against the Linux artifact it just made,
+and publishes both artifacts and `SHA256SUMS`. A pull request or manual run does the same with version
+`0.0.0-dev` and uploads the artifacts without publishing.
 
 ## Conventions
 

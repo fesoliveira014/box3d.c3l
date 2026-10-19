@@ -1,5 +1,8 @@
 module b3;
 
+const char HEIGHT_FIELD_APRON_SIDES @private = HEIGHT_FIELD_APRON_NEGATIVE_X | HEIGHT_FIELD_APRON_POSITIVE_X
+  | HEIGHT_FIELD_APRON_NEGATIVE_Z | HEIGHT_FIELD_APRON_POSITIVE_Z;
+
 <*
  Builds a flat grid of triangles in the x-z plane, x_count by z_count cells around the origin.
 
@@ -199,29 +202,31 @@ fn HeightFieldData*? create_height_field_wave(
  Builds a height field from measured heights. Ownership and the absent locked-world caveat work as
  they do for create_height_field_grid, and box3d copies its arrays, so nothing outlives the call.
 
- box3d reads count_x * count_z floats through def.heights without testing it for null, and its own
- checks that the grid holds at least four points and that the global range runs upwards are
- assertions this release build compiles out. The guards below restore all of that.
+ box3d reads def.heights without testing it for null, and its own checks that the grid holds four
+ points and that the global range runs upwards are assertions this release build compiles out; the
+ guards below restore them. A neighbour that shares an apron must share the global range.
 
  @param [&in] def : `the grid to build from`
  @return `the height field`
  @return? DEGENERATE_GEOMETRY : `either count is below 2`
- @return? INVALID_DEFINITION : `def is null, the heights are missing, or the global range runs
-   backwards`
+ @return? INVALID_DEFINITION : `def is null, the heights are missing, the global range runs
+   backwards, or apron_sides holds a bit that is no side`
 *>
 fn HeightFieldData*? create_height_field(HeightFieldDef* def) {
     if (def == null) return INVALID_DEFINITION~;
     if (def.count_x < 2 || def.count_z < 2) return DEGENERATE_GEOMETRY~;
     if (def.heights == null) return INVALID_DEFINITION~;
     if (def.global_minimum_height > def.global_maximum_height) return INVALID_DEFINITION~;
+    if (def.apron_sides & ~HEIGHT_FIELD_APRON_SIDES) return INVALID_DEFINITION~;
     return create_height_field_raw(def);
 }
 
 <*
  Writes the grid to the path as text: the two counts, the scale, the global range and the winding,
- then every height and every material index. A path box3d cannot open is a silent no-op, so a
- caller who needs to know reads the file back. The material indices are read here where
- create_height_field() leaves them optional, which is why they are guarded here and not there.
+ then every height and every material index, without any apron. A path box3d cannot open is a
+ silent no-op, so a caller who needs to know reads the file back. The material indices are read
+ here where create_height_field() leaves them optional, which is why they are guarded here and
+ not there.
 
  @param [&in] def : `the grid to write`
  @return? DEGENERATE_GEOMETRY : `either count is below 2`

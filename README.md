@@ -73,6 +73,11 @@ git submodule update --init
 ./scripts/build-box3d.sh
 ```
 
+The library is box3d with the patches listed in `patches/series` applied: the script copies the pinned
+commit to `build/box3d-src/`, applies the series there and builds that copy, so the submodule itself
+stays exactly the upstream commit and a patch that no longer applies fails the build. The one patch
+today, `0001-height-field-apron.patch`, adds `HeightFieldDef.apron_sides`.
+
 That produces the archive for whichever platform you are on — `linked-libs/linux-x64/libbox3d.a`
 under Linux, `linked-libs/windows-x64/box3d.lib` under a Windows shell, where the same script
 drives MSVC. There is no cross-compilation; the release workflow builds each target on its own

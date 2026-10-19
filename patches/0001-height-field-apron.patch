@@ -1,0 +1,475 @@
+Height field apron
+
+Adds b3HeightFieldDef::apronSides, a mask of the grid sides that touch another
+height field. The height and material arrays of the definition are then padded
+by one sample on every side, and the edge flags along a marked side are
+computed against the padding, which holds the neighbour's samples. Two height
+fields placed side by side flag their shared border as flat when the surface
+is continuous, so capsules and hulls skip the ghost contact on it.
+
+A sphere has no such filter across shapes, so its edge or vertex contact on a
+flat border edge is replaced by the contact against the plane of the
+triangle, the same contact the neighbouring height field makes with its face.
+
+The apron is read while the height field is created and is not stored. The
+blob, its bounds and its hash are the same as without an apron, and a zero
+apronSides is the unmodified behaviour.
+
+b3DumpHeightData writes the interior grid only, so b3LoadHeightField returns
+a height field without an apron.
+
+diff --git a/include/box3d/types.h b/include/box3d/types.h
+index 90d8d4a..d123385 100644
+--- a/include/box3d/types.h
++++ b/include/box3d/types.h
+@@ -2244,11 +2244,17 @@ typedef struct b3HeightFieldDef
+ {
+ 	/// Grid point heights
+ 	/// count = countX * countZ
++	/// When apronSides is not zero the grid is padded by one sample on every side, so that
++	/// count = (countX + 2) * (countZ + 2) and sample (row, column) of the field is at
++	/// (row + 1) * (countX + 2) + column + 1.
+ 	float* heights;
+ 
+ 	/// Grid cell material
+ 	/// A value of 0xFF is reserved for holes
+ 	/// count = (countX - 1) * (countZ - 1)
++	/// When apronSides is not zero the cells are padded the same way, so that
++	/// count = (countX + 1) * (countZ + 1) and cell (row, column) of the field is at
++	/// (row + 1) * (countX + 1) + column + 1.
+ 	uint8_t* materialIndices;
+ 
+ 	/// The height field scale. All components must be positive values.
+@@ -2272,8 +2278,37 @@ typedef struct b3HeightFieldDef
+ 
+ 	/// Use clock-wise winding. This effectively inverts the height-field along the y-axis.
+ 	bool clockwiseWinding;
++
++	/// A mask of b3HeightFieldApronSides. Each set bit marks a side of the grid that touches another
++	/// height field placed next to this one. Zero means the grid stands alone.
++	/// An apron is a ring of samples from the neighbouring height field. It is only read while the
++	/// height field is created, to compute the edge flags of the cells along that side as if the
++	/// two fields were one surface. The apron is not stored, so the height field data, its bounds and
++	/// its hash are the same as without it. The padding on a side whose bit is clear, and the four
++	/// corners of the padding, are never read and may hold any value.
++	/// Apron samples are quantized like every other sample, so they must be given in the same
++	/// global minimum and maximum height as the neighbour. A neighbour cell that is a hole leaves
++	/// the shared edge open. A height field loaded or dumped through b3LoadHeightField and
++	/// b3DumpHeightData does not keep its apron.
++	uint8_t apronSides;
+ } b3HeightFieldDef;
+ 
++/// The sides of a height field grid that can carry an apron. These are bits of b3HeightFieldDef::apronSides.
++typedef enum b3HeightFieldApronSides
++{
++	/// The side at column 0.
++	b3_apronNegativeX = 0x01,
++
++	/// The side at the last column.
++	b3_apronPositiveX = 0x02,
++
++	/// The side at row 0.
++	b3_apronNegativeZ = 0x04,
++
++	/// The side at the last row.
++	b3_apronPositiveZ = 0x08,
++} b3HeightFieldApronSides;
++
+ /// This material index is used to designate holes in a height field.
+ #define B3_HEIGHT_FIELD_HOLE 0xFF
+ 
+diff --git a/src/height_field.c b/src/height_field.c
+index cf22c6a..1c891c2 100644
+--- a/src/height_field.c
++++ b/src/height_field.c
+@@ -99,6 +99,37 @@
+ 	   21  3  22
+  */
+ 
++static bool b3IsHoleCell( const uint8_t* cellMaterials, int cellIndex )
++{
++	return cellMaterials != NULL && cellMaterials[cellIndex] == B3_HEIGHT_FIELD_HOLE;
++}
++
++// The row and column are relative to the height field, so the apron is at -1 and at the count. The
++// corners of the apron are never read: the neighbouring cell across an edge only spans that edge.
++static bool b3IsReadSample( uint8_t apronSides, int row, int column, int rowCount, int columnCount )
++{
++	bool insideRows = 0 <= row && row < rowCount;
++	bool insideColumns = 0 <= column && column < columnCount;
++	if ( insideRows && insideColumns )
++	{
++		return true;
++	}
++
++	if ( insideRows )
++	{
++		return ( column == -1 && ( apronSides & b3_apronNegativeX ) != 0 ) ||
++			   ( column == columnCount && ( apronSides & b3_apronPositiveX ) != 0 );
++	}
++
++	if ( insideColumns )
++	{
++		return ( row == -1 && ( apronSides & b3_apronNegativeZ ) != 0 ) ||
++			   ( row == rowCount && ( apronSides & b3_apronPositiveZ ) != 0 );
++	}
++
++	return false;
++}
++
+ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ {
+ 	int columnCount = data->countX;
+@@ -110,6 +141,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 	int cellCount = ( columnCount - 1 ) * ( rowCount - 1 );
+ 	int triangleCount = 2 * cellCount;
+ 
++	// The definition arrays are padded by one on every side when there is an apron. The blob and
++	// everything derived from its layout only ever hold the interior.
++	uint8_t apronSides = data->apronSides;
++	int padding = apronSides != 0 ? 1 : 0;
++	int sampleColumnCount = columnCount + 2 * padding;
++	int sampleRowCount = rowCount + 2 * padding;
++	int sampleCount = sampleColumnCount * sampleRowCount;
++	int cellColumnCount = columnCount - 1 + 2 * padding;
++	int paddedCellCount = cellColumnCount * ( rowCount - 1 + 2 * padding );
++	const uint8_t* cellMaterials = data->materialIndices;
++	B3_UNUSED( paddedCellCount );
++
+ 	// Single blob: struct followed by the height, material, and flag arrays. Layout
+ 	// mirrors b3HullData/b3MeshData so the recording path can copy it with one memcpy.
+ 	size_t byteCount = b3AlignUp8( sizeof( b3HeightFieldData ) );
+@@ -151,37 +194,46 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 	float lowerHeightBound = hf->maxHeight;
+ 	float upperHeightBound = hf->minHeight;
+ 
++	// Use decompressed heights for accurate convexity metrics. Apron samples are quantized like the
++	// interior ones, but only the interior is stored and bounds the heights. Padding that is not
++	// read is left at zero.
+ 	float invHeightScale = 1.0f / hf->heightScale;
+-	for ( int i = 0; i < heightCount; ++i )
++	float* decompressedHeights = (float*)b3Alloc( sampleCount * sizeof( float ) );
++	memset( decompressedHeights, 0, sampleCount * sizeof( float ) );
++	for ( int sampleRow = 0; sampleRow < sampleRowCount; ++sampleRow )
+ 	{
+-		float clampedHeight = b3ClampFloat( heights[i], hf->minHeight, hf->maxHeight );
+-		float scaledHeight = ( clampedHeight - hf->minHeight ) * invHeightScale;
+-		compressedHeights[i] = (uint16_t)( b3MinFloat( scaledHeight, (float)UINT16_MAX ) );
++		for ( int sampleColumn = 0; sampleColumn < sampleColumnCount; ++sampleColumn )
++		{
++			int row = sampleRow - padding;
++			int column = sampleColumn - padding;
++			if ( b3IsReadSample( apronSides, row, column, rowCount, columnCount ) == false )
++			{
++				continue;
++			}
+ 
+-		lowerHeightBound = b3MinFloat( lowerHeightBound, clampedHeight );
+-		upperHeightBound = b3MaxFloat( upperHeightBound, clampedHeight );
+-	}
++			int sampleIndex = sampleRow * sampleColumnCount + sampleColumn;
++			float clampedHeight = b3ClampFloat( heights[sampleIndex], hf->minHeight, hf->maxHeight );
++			float scaledHeight = ( clampedHeight - hf->minHeight ) * invHeightScale;
++			uint16_t compressedHeight = (uint16_t)( b3MinFloat( scaledHeight, (float)UINT16_MAX ) );
++			decompressedHeights[sampleIndex] = hf->minHeight + hf->heightScale * compressedHeight;
+ 
+-	// Use decompressed heights for accurate convexity metrics.
+-	float* decompressedHeights = (float*)b3Alloc( heightCount * sizeof( float ) );
+-	for ( int i = 0; i < heightCount; ++i )
+-	{
+-		decompressedHeights[i] = hf->minHeight + hf->heightScale * compressedHeights[i];
+-	}
+-	heights = decompressedHeights;
++			if ( 0 <= row && row < rowCount && 0 <= column && column < columnCount )
++			{
++				compressedHeights[row * columnCount + column] = compressedHeight;
+ 
+-	if ( data->materialIndices != NULL )
+-	{
+-		for ( int i = 0; i < cellCount; ++i )
+-		{
+-			materialIndices[i] = data->materialIndices[i];
++				lowerHeightBound = b3MinFloat( lowerHeightBound, clampedHeight );
++				upperHeightBound = b3MaxFloat( upperHeightBound, clampedHeight );
++			}
+ 		}
+ 	}
+-	else
++	heights = decompressedHeights;
++
++	for ( int row = 0; row < rowCount - 1; ++row )
+ 	{
+-		for ( int i = 0; i < cellCount; ++i )
++		for ( int column = 0; column < columnCount - 1; ++column )
+ 		{
+-			materialIndices[i] = 0;
++			int paddedCellIndex = ( row + padding ) * cellColumnCount + column + padding;
++			materialIndices[row * ( columnCount - 1 ) + column] = cellMaterials != NULL ? cellMaterials[paddedCellIndex] : 0;
+ 		}
+ 	}
+ 
+@@ -220,9 +272,9 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 			b3Plane plane1, plane2;
+ 			b3Vec3 center1, center2;
+ 
+-			int index11 = row * columnCount + column;
++			int index11 = ( row + padding ) * sampleColumnCount + column + padding;
+ 			int index12 = index11 + 1;
+-			int index21 = ( row + 1 ) * columnCount + column;
++			int index21 = index11 + sampleColumnCount;
+ 			int index22 = index21 + 1;
+ 
+ 			{
+@@ -272,17 +324,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 			B3_UNUSED( center2 );
+ 
+ 			// top
+-			int topCellIndex = ( row - 1 ) * ( columnCount - 1 ) + column;
+-			if ( row > 0 && materialIndices[topCellIndex] != B3_HEIGHT_FIELD_HOLE )
++			int topCellIndex = ( row - 1 + padding ) * cellColumnCount + column + padding;
++			bool hasTop = row > 0 || ( apronSides & b3_apronNegativeZ ) != 0;
++			if ( hasTop && b3IsHoleCell( cellMaterials, topCellIndex ) == false )
+ 			{
+-				B3_ASSERT( 0 <= topCellIndex && topCellIndex < cellCount );
++				B3_ASSERT( 0 <= topCellIndex && topCellIndex < paddedCellCount );
+ 
+ 				int r = row - 1;
+ 				int c = column;
+ 
+-				int i11 = r * columnCount + c;
++				int i11 = ( r + padding ) * sampleColumnCount + c + padding;
+ 				int i12 = i11 + 1;
+-				int i21 = ( r + 1 ) * columnCount + c;
++				int i21 = i11 + sampleColumnCount;
+ 				int i22 = i21 + 1;
+ 
+ 				B3_ASSERT( i21 == index11 );
+@@ -318,17 +371,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 				}
+ 			}
+ 
+-			int bottomCellIndex = ( row + 1 ) * ( columnCount - 1 ) + column;
+-			if ( row + 1 < rowCount - 1 && materialIndices[bottomCellIndex] != B3_HEIGHT_FIELD_HOLE )
++			int bottomCellIndex = ( row + 1 + padding ) * cellColumnCount + column + padding;
++			bool hasBottom = row + 1 < rowCount - 1 || ( apronSides & b3_apronPositiveZ ) != 0;
++			if ( hasBottom && b3IsHoleCell( cellMaterials, bottomCellIndex ) == false )
+ 			{
+-				B3_ASSERT( 0 <= bottomCellIndex && bottomCellIndex < cellCount );
++				B3_ASSERT( 0 <= bottomCellIndex && bottomCellIndex < paddedCellCount );
+ 
+ 				int r = row + 1;
+ 				int c = column;
+ 
+-				int i11 = r * columnCount + c;
++				int i11 = ( r + padding ) * sampleColumnCount + c + padding;
+ 				int i12 = i11 + 1;
+-				int i21 = ( r + 1 ) * columnCount + c;
++				int i21 = i11 + sampleColumnCount;
+ 				// int i22 = i21 + 1;
+ 
+ 				B3_ASSERT( i11 == index21 );
+@@ -364,17 +418,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 				}
+ 			}
+ 
+-			int leftCellIndex = row * ( columnCount - 1 ) + column - 1;
+-			if ( column - 1 >= 0 && materialIndices[leftCellIndex] != B3_HEIGHT_FIELD_HOLE )
++			int leftCellIndex = ( row + padding ) * cellColumnCount + column - 1 + padding;
++			bool hasLeft = column > 0 || ( apronSides & b3_apronNegativeX ) != 0;
++			if ( hasLeft && b3IsHoleCell( cellMaterials, leftCellIndex ) == false )
+ 			{
+-				B3_ASSERT( 0 <= leftCellIndex && leftCellIndex < cellCount );
++				B3_ASSERT( 0 <= leftCellIndex && leftCellIndex < paddedCellCount );
+ 
+ 				int r = row;
+ 				int c = column - 1;
+ 
+-				int i11 = r * columnCount + c;
++				int i11 = ( r + padding ) * sampleColumnCount + c + padding;
+ 				int i12 = i11 + 1;
+-				int i21 = ( r + 1 ) * columnCount + c;
++				int i21 = i11 + sampleColumnCount;
+ 				int i22 = i21 + 1;
+ 
+ 				B3_ASSERT( i12 == index11 );
+@@ -410,17 +465,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 				}
+ 			}
+ 
+-			int rightCellIndex = row * ( columnCount - 1 ) + column + 1;
+-			if ( column + 1 < columnCount - 1 && materialIndices[rightCellIndex] != B3_HEIGHT_FIELD_HOLE )
++			int rightCellIndex = ( row + padding ) * cellColumnCount + column + 1 + padding;
++			bool hasRight = column + 1 < columnCount - 1 || ( apronSides & b3_apronPositiveX ) != 0;
++			if ( hasRight && b3IsHoleCell( cellMaterials, rightCellIndex ) == false )
+ 			{
+-				B3_ASSERT( 0 <= rightCellIndex && rightCellIndex < cellCount );
++				B3_ASSERT( 0 <= rightCellIndex && rightCellIndex < paddedCellCount );
+ 
+ 				int r = row;
+ 				int c = column + 1;
+ 
+-				int i11 = r * columnCount + c;
++				int i11 = ( r + padding ) * sampleColumnCount + c + padding;
+ 				int i12 = i11 + 1;
+-				int i21 = ( r + 1 ) * columnCount + c;
++				int i21 = i11 + sampleColumnCount;
+ 				// int i22 = i21 + 1;
+ 
+ 				B3_ASSERT( i11 == index12 );
+@@ -466,7 +522,7 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+ 
+ 	B3_ASSERT( triangleIndex == triangleCount );
+ 
+-	b3Free( decompressedHeights, heightCount * sizeof( float ) );
++	b3Free( decompressedHeights, sampleCount * sizeof( float ) );
+ 
+ 	hf->hash = 0;
+ 	hf->hash = b3Hash64NonZero( (const uint8_t*)hf, hf->byteCount );
+@@ -1448,6 +1504,8 @@ void b3DestroyHeightField( b3HeightFieldData* heightField )
+ 	b3Free( heightField, heightField->byteCount );
+ }
+ 
++// The dump holds the interior grid only. An apron is not written, so a height field loaded from a
++// dump has its border edges open.
+ void b3DumpHeightData( const b3HeightFieldDef* data, const char* fileName )
+ {
+ 	FILE* file = NULL;
+@@ -1471,16 +1529,23 @@ void b3DumpHeightData( const b3HeightFieldDef* data, const char* fileName )
+ 	fprintf( file, "%.9f %.9f\n", data->globalMinimumHeight, data->globalMaximumHeight );
+ 	fprintf( file, "%d\n", data->clockwiseWinding );
+ 
+-	int heightCount = data->countX * data->countZ;
+-	for ( int i = 0; i < heightCount; ++i )
++	int padding = data->apronSides != 0 ? 1 : 0;
++	int sampleColumnCount = data->countX + 2 * padding;
++	for ( int row = 0; row < data->countZ; ++row )
+ 	{
+-		fprintf( file, "%.9f\n", data->heights[i] );
++		for ( int column = 0; column < data->countX; ++column )
++		{
++			fprintf( file, "%.9f\n", data->heights[( row + padding ) * sampleColumnCount + column + padding] );
++		}
+ 	}
+ 
+-	int materialCount = ( data->countX - 1 ) * ( data->countZ - 1 );
+-	for ( int i = 0; i < materialCount; ++i )
++	int cellColumnCount = data->countX - 1 + 2 * padding;
++	for ( int row = 0; row < data->countZ - 1; ++row )
+ 	{
+-		fprintf( file, "%d\n", data->materialIndices[i] );
++		for ( int column = 0; column < data->countX - 1; ++column )
++		{
++			fprintf( file, "%d\n", data->materialIndices[( row + padding ) * cellColumnCount + column + padding] );
++		}
+ 	}
+ 
+ 	fclose( file );
+diff --git a/src/mesh_contact.c b/src/mesh_contact.c
+index 60158e4..19df484 100644
+--- a/src/mesh_contact.c
++++ b/src/mesh_contact.c
+@@ -522,6 +522,90 @@ typedef struct b3Cluster
+ 	int pointCount;
+ } b3Cluster;
+ 
++// Is the edge between two height field vertices on the outer border of the grid?
++static bool b3IsHeightFieldBorderEdge( const b3HeightFieldData* heightField, int index1, int index2 )
++{
++	int columnCount = heightField->columnCount;
++	int rowCount = heightField->rowCount;
++	int row1 = index1 / columnCount;
++	int row2 = index2 / columnCount;
++	int column1 = index1 - row1 * columnCount;
++	int column2 = index2 - row2 * columnCount;
++
++	bool alongRow = row1 == row2 && ( row1 == 0 || row1 == rowCount - 1 );
++	bool alongColumn = column1 == column2 && ( column1 == 0 || column1 == columnCount - 1 );
++	return alongRow || alongColumn;
++}
++
++// A border edge is only ever flagged flat when the height field was created with an apron on that
++// side, so the surface continues past it. A sphere edge or vertex contact there is a ghost of the
++// neighbouring height field, which makes its own contact with the sphere.
++static bool b3IsApronFeature( const b3HeightFieldData* heightField, const b3LocalManifold* manifold )
++{
++	int flags = manifold->triangleFlags;
++	bool isBorder[3] = {
++		b3IsHeightFieldBorderEdge( heightField, manifold->i1, manifold->i2 ),
++		b3IsHeightFieldBorderEdge( heightField, manifold->i2, manifold->i3 ),
++		b3IsHeightFieldBorderEdge( heightField, manifold->i3, manifold->i1 ),
++	};
++	bool isFlat[3] = {
++		( flags & b3_flatEdge1 ) == b3_flatEdge1,
++		( flags & b3_flatEdge2 ) == b3_flatEdge2,
++		( flags & b3_flatEdge3 ) == b3_flatEdge3,
++	};
++
++	// The two triangle edges that meet at each vertex
++	int edgeA = 0;
++	int edgeB = 0;
++	switch ( manifold->feature )
++	{
++		case b3_featureEdge1:
++			return isBorder[0] && isFlat[0];
++
++		case b3_featureEdge2:
++			return isBorder[1] && isFlat[1];
++
++		case b3_featureEdge3:
++			return isBorder[2] && isFlat[2];
++
++		case b3_featureVertex1:
++			edgeA = 0;
++			edgeB = 2;
++			break;
++
++		case b3_featureVertex2:
++			edgeA = 0;
++			edgeB = 1;
++			break;
++
++		case b3_featureVertex3:
++			edgeA = 1;
++			edgeB = 2;
++			break;
++
++		default:
++			return false;
++	}
++
++	// A vertex qualifies when it meets the border and every border edge there is flat
++	bool meetsBorder = isBorder[edgeA] || isBorder[edgeB];
++	bool borderIsFlat = ( isBorder[edgeA] == false || isFlat[edgeA] ) && ( isBorder[edgeB] == false || isFlat[edgeB] );
++	return meetsBorder && borderIsFlat;
++}
++
++// Replace a sphere edge or vertex manifold with the contact against the plane of its triangle. The
++// point is half way between the sphere and the plane, as in b3CollideTriangleAndSphere, so the
++// contact matches the one the neighbouring height field makes with its own face.
++static void b3SnapSphereManifoldToTriangleFace( b3LocalManifold* manifold, b3Vec3 vertex, const b3Sphere* sphere )
++{
++	b3Vec3 normal = manifold->triangleNormal;
++	float distance = b3Dot( b3Sub( sphere->center, vertex ), normal );
++
++	manifold->normal = normal;
++	manifold->points[0].point = b3MulSub( sphere->center, 0.5f * ( sphere->radius + distance ), normal );
++	manifold->points[0].separation = distance - sphere->radius;
++}
++
+ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact, const b3Shape* shapeA, const int* materialMap,
+ 							 b3WorldTransform xfA, const b3Shape* shapeB, b3WorldTransform xfB, bool isFast, b3Arena arena )
+ {
+@@ -785,6 +869,13 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
+ 
+ 			if ( shouldCollide == true )
+ 			{
++				if ( shapeA->type == b3_heightShape && b3IsApronFeature( shapeA->heightField, m ) )
++				{
++					b3Triangle triangle = b3GetHeightFieldTriangle( shapeA->heightField, m->triangleIndex );
++					b3Vec3 vertex = b3Add( b3MulMV( relativeMatrix, triangle.vertices[0] ), transformAtoB.p );
++					b3SnapSphereManifoldToTriangleFace( m, vertex, &shapeB->sphere );
++				}
++
+ 				acceptedManifolds[acceptedManifoldCount++] = m;
+ 			}
+ 		}

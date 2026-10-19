@@ -56,8 +56,8 @@ typedef HeightFieldData = void;
  so neither array has to outlive the call, and there is no default definition or cookie.
 
  heights holds count_x * count_z samples, clamped to the global range; material_indices is
- optional, one index per cell, where 0xFF marks a hole. A non-zero apron_sides pads both arrays
- by one on every side, and each set HEIGHT_FIELD_APRON_* bit reads that padding as the neighbour.
+ optional, one index per cell, 0xFF a hole. A non-zero apron_sides pads both by one on every side,
+ and only padding along a set HEIGHT_FIELD_APRON_* side is read; clear sides and corners never are.
 *>
 struct HeightFieldDef {
     float* heights;

@@ -19,7 +19,7 @@ b3DumpHeightData writes the interior grid only, so b3LoadHeightField returns
 a height field without an apron.
 
 diff --git a/include/box3d/types.h b/include/box3d/types.h
-index 90d8d4a..662c1b7 100644
+index 90d8d4a..d123385 100644
 --- a/include/box3d/types.h
 +++ b/include/box3d/types.h
 @@ -2244,11 +2244,17 @@ typedef struct b3HeightFieldDef
@@ -40,7 +40,7 @@ index 90d8d4a..662c1b7 100644
  	uint8_t* materialIndices;
  
  	/// The height field scale. All components must be positive values.
-@@ -2272,8 +2278,36 @@ typedef struct b3HeightFieldDef
+@@ -2272,8 +2278,37 @@ typedef struct b3HeightFieldDef
  
  	/// Use clock-wise winding. This effectively inverts the height-field along the y-axis.
  	bool clockwiseWinding;
@@ -50,7 +50,8 @@ index 90d8d4a..662c1b7 100644
 +	/// An apron is a ring of samples from the neighbouring height field. It is only read while the
 +	/// height field is created, to compute the edge flags of the cells along that side as if the
 +	/// two fields were one surface. The apron is not stored, so the height field data, its bounds and
-+	/// its hash are the same as without it. Sides whose bit is clear are padded but not read.
++	/// its hash are the same as without it. The padding on a side whose bit is clear, and the four
++	/// corners of the padding, are never read and may hold any value.
 +	/// Apron samples are quantized like every other sample, so they must be given in the same
 +	/// global minimum and maximum height as the neighbour. A neighbour cell that is a hole leaves
 +	/// the shared edge open. A height field loaded or dumped through b3LoadHeightField and
@@ -78,10 +79,10 @@ index 90d8d4a..662c1b7 100644
  #define B3_HEIGHT_FIELD_HOLE 0xFF
  
 diff --git a/src/height_field.c b/src/height_field.c
-index cf22c6a..a1538be 100644
+index cf22c6a..1c891c2 100644
 --- a/src/height_field.c
 +++ b/src/height_field.c
-@@ -99,6 +99,11 @@
+@@ -99,6 +99,37 @@
  	   21  3  22
   */
  
@@ -90,10 +91,36 @@ index cf22c6a..a1538be 100644
 +	return cellMaterials != NULL && cellMaterials[cellIndex] == B3_HEIGHT_FIELD_HOLE;
 +}
 +
++// The row and column are relative to the height field, so the apron is at -1 and at the count. The
++// corners of the apron are never read: the neighbouring cell across an edge only spans that edge.
++static bool b3IsReadSample( uint8_t apronSides, int row, int column, int rowCount, int columnCount )
++{
++	bool insideRows = 0 <= row && row < rowCount;
++	bool insideColumns = 0 <= column && column < columnCount;
++	if ( insideRows && insideColumns )
++	{
++		return true;
++	}
++
++	if ( insideRows )
++	{
++		return ( column == -1 && ( apronSides & b3_apronNegativeX ) != 0 ) ||
++			   ( column == columnCount && ( apronSides & b3_apronPositiveX ) != 0 );
++	}
++
++	if ( insideColumns )
++	{
++		return ( row == -1 && ( apronSides & b3_apronNegativeZ ) != 0 ) ||
++			   ( row == rowCount && ( apronSides & b3_apronPositiveZ ) != 0 );
++	}
++
++	return false;
++}
++
  b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  {
  	int columnCount = data->countX;
-@@ -110,6 +115,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -110,6 +141,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  	int cellCount = ( columnCount - 1 ) * ( rowCount - 1 );
  	int triangleCount = 2 * cellCount;
  
@@ -112,58 +139,64 @@ index cf22c6a..a1538be 100644
  	// Single blob: struct followed by the height, material, and flag arrays. Layout
  	// mirrors b3HullData/b3MeshData so the recording path can copy it with one memcpy.
  	size_t byteCount = b3AlignUp8( sizeof( b3HeightFieldData ) );
-@@ -151,37 +168,39 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -151,37 +194,46 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  	float lowerHeightBound = hf->maxHeight;
  	float upperHeightBound = hf->minHeight;
  
 +	// Use decompressed heights for accurate convexity metrics. Apron samples are quantized like the
-+	// interior ones, but only the interior is stored and bounds the heights.
++	// interior ones, but only the interior is stored and bounds the heights. Padding that is not
++	// read is left at zero.
  	float invHeightScale = 1.0f / hf->heightScale;
 -	for ( int i = 0; i < heightCount; ++i )
 +	float* decompressedHeights = (float*)b3Alloc( sampleCount * sizeof( float ) );
++	memset( decompressedHeights, 0, sampleCount * sizeof( float ) );
 +	for ( int sampleRow = 0; sampleRow < sampleRowCount; ++sampleRow )
  	{
 -		float clampedHeight = b3ClampFloat( heights[i], hf->minHeight, hf->maxHeight );
 -		float scaledHeight = ( clampedHeight - hf->minHeight ) * invHeightScale;
 -		compressedHeights[i] = (uint16_t)( b3MinFloat( scaledHeight, (float)UINT16_MAX ) );
--
++		for ( int sampleColumn = 0; sampleColumn < sampleColumnCount; ++sampleColumn )
++		{
++			int row = sampleRow - padding;
++			int column = sampleColumn - padding;
++			if ( b3IsReadSample( apronSides, row, column, rowCount, columnCount ) == false )
++			{
++				continue;
++			}
+ 
 -		lowerHeightBound = b3MinFloat( lowerHeightBound, clampedHeight );
 -		upperHeightBound = b3MaxFloat( upperHeightBound, clampedHeight );
 -	}
-+		for ( int sampleColumn = 0; sampleColumn < sampleColumnCount; ++sampleColumn )
-+		{
 +			int sampleIndex = sampleRow * sampleColumnCount + sampleColumn;
 +			float clampedHeight = b3ClampFloat( heights[sampleIndex], hf->minHeight, hf->maxHeight );
 +			float scaledHeight = ( clampedHeight - hf->minHeight ) * invHeightScale;
 +			uint16_t compressedHeight = (uint16_t)( b3MinFloat( scaledHeight, (float)UINT16_MAX ) );
 +			decompressedHeights[sampleIndex] = hf->minHeight + hf->heightScale * compressedHeight;
-+
-+			int row = sampleRow - padding;
-+			int column = sampleColumn - padding;
-+			if ( 0 <= row && row < rowCount && 0 <= column && column < columnCount )
-+			{
-+				compressedHeights[row * columnCount + column] = compressedHeight;
  
 -	// Use decompressed heights for accurate convexity metrics.
 -	float* decompressedHeights = (float*)b3Alloc( heightCount * sizeof( float ) );
 -	for ( int i = 0; i < heightCount; ++i )
 -	{
 -		decompressedHeights[i] = hf->minHeight + hf->heightScale * compressedHeights[i];
-+				lowerHeightBound = b3MinFloat( lowerHeightBound, clampedHeight );
-+				upperHeightBound = b3MaxFloat( upperHeightBound, clampedHeight );
-+			}
-+		}
- 	}
- 	heights = decompressedHeights;
+-	}
+-	heights = decompressedHeights;
++			if ( 0 <= row && row < rowCount && 0 <= column && column < columnCount )
++			{
++				compressedHeights[row * columnCount + column] = compressedHeight;
  
 -	if ( data->materialIndices != NULL )
 -	{
 -		for ( int i = 0; i < cellCount; ++i )
 -		{
 -			materialIndices[i] = data->materialIndices[i];
--		}
--	}
++				lowerHeightBound = b3MinFloat( lowerHeightBound, clampedHeight );
++				upperHeightBound = b3MaxFloat( upperHeightBound, clampedHeight );
++			}
+ 		}
+ 	}
 -	else
++	heights = decompressedHeights;
++
 +	for ( int row = 0; row < rowCount - 1; ++row )
  	{
 -		for ( int i = 0; i < cellCount; ++i )
@@ -175,7 +208,7 @@ index cf22c6a..a1538be 100644
  		}
  	}
  
-@@ -220,9 +239,9 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -220,9 +272,9 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  			b3Plane plane1, plane2;
  			b3Vec3 center1, center2;
  
@@ -187,7 +220,7 @@ index cf22c6a..a1538be 100644
  			int index22 = index21 + 1;
  
  			{
-@@ -272,17 +291,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -272,17 +324,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  			B3_UNUSED( center2 );
  
  			// top
@@ -211,7 +244,7 @@ index cf22c6a..a1538be 100644
  				int i22 = i21 + 1;
  
  				B3_ASSERT( i21 == index11 );
-@@ -318,17 +338,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -318,17 +371,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  				}
  			}
  
@@ -235,7 +268,7 @@ index cf22c6a..a1538be 100644
  				// int i22 = i21 + 1;
  
  				B3_ASSERT( i11 == index21 );
-@@ -364,17 +385,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -364,17 +418,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  				}
  			}
  
@@ -259,7 +292,7 @@ index cf22c6a..a1538be 100644
  				int i22 = i21 + 1;
  
  				B3_ASSERT( i12 == index11 );
-@@ -410,17 +432,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -410,17 +465,18 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  				}
  			}
  
@@ -283,7 +316,7 @@ index cf22c6a..a1538be 100644
  				// int i22 = i21 + 1;
  
  				B3_ASSERT( i11 == index12 );
-@@ -466,7 +489,7 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
+@@ -466,7 +522,7 @@ b3HeightFieldData* b3CreateHeightField( const b3HeightFieldDef* data )
  
  	B3_ASSERT( triangleIndex == triangleCount );
  
@@ -292,7 +325,7 @@ index cf22c6a..a1538be 100644
  
  	hf->hash = 0;
  	hf->hash = b3Hash64NonZero( (const uint8_t*)hf, hf->byteCount );
-@@ -1448,6 +1471,8 @@ void b3DestroyHeightField( b3HeightFieldData* heightField )
+@@ -1448,6 +1504,8 @@ void b3DestroyHeightField( b3HeightFieldData* heightField )
  	b3Free( heightField, heightField->byteCount );
  }
  
@@ -301,7 +334,7 @@ index cf22c6a..a1538be 100644
  void b3DumpHeightData( const b3HeightFieldDef* data, const char* fileName )
  {
  	FILE* file = NULL;
-@@ -1471,16 +1496,23 @@ void b3DumpHeightData( const b3HeightFieldDef* data, const char* fileName )
+@@ -1471,16 +1529,23 @@ void b3DumpHeightData( const b3HeightFieldDef* data, const char* fileName )
  	fprintf( file, "%.9f %.9f\n", data->globalMinimumHeight, data->globalMaximumHeight );
  	fprintf( file, "%d\n", data->clockwiseWinding );
  

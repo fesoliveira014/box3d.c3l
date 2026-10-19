@@ -42,6 +42,7 @@ feels the edge of one field as a bump, because neither field knows the other is 
 (`(count_x + 2) * (count_z + 2)`, the field's own samples starting at `(1, 1)`), and
 `material_indices` one extra cell (`(count_x + 1) * (count_z + 1)`). The padding on a marked side
 holds the neighbour's own samples, and the shared edge is then treated as part of one surface. The
+padding on a side without its bit, and the four corners, are never read and may hold anything. The
 neighbour must use the same `global_minimum_height` and `global_maximum_height`. A neighbour cell
 that is a hole leaves the edge open. The padding is read while the field is created and is not
 stored; `apron_sides = 0` is a field exactly as it was without the feature.

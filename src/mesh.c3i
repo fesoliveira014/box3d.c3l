@@ -55,9 +55,9 @@ typedef HeightFieldData = void;
  The grid create_height_field() builds a height field from. box3d copies everything it reads,
  so neither array has to outlive the call, and there is no default definition or cookie.
 
- heights must hold count_x * count_z samples, one per grid point, in units the scale is applied
- to afterwards; heights outside the global range are clamped to it before being quantised into
- 16 bits. material_indices is optional and holds one index per cell, where 0xFF marks a hole.
+ heights holds count_x * count_z samples, clamped to the global range; material_indices is
+ optional, one index per cell, where 0xFF marks a hole. A non-zero apron_sides pads both arrays
+ by one on every side, and each set HEIGHT_FIELD_APRON_* bit reads that padding as the neighbour.
 *>
 struct HeightFieldDef {
     float* heights;
@@ -68,7 +68,29 @@ struct HeightFieldDef {
     float global_minimum_height;
     float global_maximum_height;
     bool clockwise_winding;
+    char apron_sides;
 }
+
+<*
+ The apron_sides bit for the side at column 0. A padded def holds (count_x + 2) * (count_z + 2)
+ heights and (count_x + 1) * (count_z + 1) cells, with the field's own samples starting at (1, 1).
+*>
+const char HEIGHT_FIELD_APRON_NEGATIVE_X = 0x01;
+
+<*
+ The apron_sides bit for the side at the last column.
+*>
+const char HEIGHT_FIELD_APRON_POSITIVE_X = 0x02;
+
+<*
+ The apron_sides bit for the side at row 0.
+*>
+const char HEIGHT_FIELD_APRON_NEGATIVE_Z = 0x04;
+
+<*
+ The apron_sides bit for the side at the last row.
+*>
+const char HEIGHT_FIELD_APRON_POSITIVE_Z = 0x08;
 
 <*
  Raw mesh constructors. Every one of them builds a b3MeshDef and hands it to b3CreateMesh, so

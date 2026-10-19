@@ -1,7 +1,7 @@
 # b3 — C3 bindings for box3d
 
 Version @VERSION@, built against box3d @BOX3D_DESCRIBE@ (Erin Catto's 3D rigid body physics
-library, C17). This package ships the sources and a prebuilt static library per target —
+library, C17) with the patches @BOX3D_PATCHES@ applied. This package ships the sources and a prebuilt static library per target —
 `linked-libs/linux-x64/libbox3d.a` and `linked-libs/windows-x64/box3d.lib` — so nothing here needs
 CMake, a submodule or a C compiler.
 
@@ -32,6 +32,19 @@ b3::WorldId world = b3::create_world(&def)!;
 defer b3::destroy_world(world);
 b3::world_step(world, 1.0f / 60.0f, 4);
 ```
+
+## Height field aprons
+
+Height fields placed side by side meet at shared edges. A capsule or a sphere crossing such a seam
+feels the edge of one field as a bump, because neither field knows the other is there. Setting
+`HeightFieldDef.apron_sides` marks the sides that touch a neighbour, with the
+`HEIGHT_FIELD_APRON_*` bits. The `heights` array then holds one extra sample on every side
+(`(count_x + 2) * (count_z + 2)`, the field's own samples starting at `(1, 1)`), and
+`material_indices` one extra cell (`(count_x + 1) * (count_z + 1)`). The padding on a marked side
+holds the neighbour's own samples, and the shared edge is then treated as part of one surface. The
+neighbour must use the same `global_minimum_height` and `global_maximum_height`. A neighbour cell
+that is a hole leaves the edge open. The padding is read while the field is created and is not
+stored; `apron_sides = 0` is a field exactly as it was without the feature.
 
 ## Modules
 

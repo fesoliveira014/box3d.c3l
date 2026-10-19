@@ -512,6 +512,7 @@ $assert HeightFieldDef::members[4].offset == 32 && HeightFieldDef::members[4].na
 $assert HeightFieldDef::members[5].offset == 36 && HeightFieldDef::members[5].name == "global_minimum_height";
 $assert HeightFieldDef::members[6].offset == 40 && HeightFieldDef::members[6].name == "global_maximum_height";
 $assert HeightFieldDef::members[7].offset == 44 && HeightFieldDef::members[7].name == "clockwise_winding";
+$assert HeightFieldDef::members[8].offset == 45 && HeightFieldDef::members[8].name == "apron_sides";
 $assert Mesh::size == 24;
 $assert Mesh::alignment == 8;
 $assert Mesh::members[0].offset == 0 && Mesh::members[0].name == "data";

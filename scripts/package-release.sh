@@ -48,6 +48,8 @@ mkdir -p "$DIST"
 
 BOX3D_COMMIT="$(git -C "$ROOT/vendor/box3d" rev-parse --short HEAD)"
 BOX3D_DESCRIBE="$(git -C "$ROOT/vendor/box3d" describe --tags 2>/dev/null || echo "$BOX3D_COMMIT")"
+BOX3D_PATCHES="$(sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$ROOT/patches/series" | sed -e 's/.*/`&`/' | paste -sd, - | sed -e 's/,/, /g')"
+[ -n "$BOX3D_PATCHES" ] || BOX3D_PATCHES="none"
 
 pack_platform() {
     platform="$1"
@@ -67,6 +69,7 @@ pack_platform() {
 
     sed -e "s/@VERSION@/$VERSION/g" \
         -e "s/@BOX3D_DESCRIBE@/$BOX3D_DESCRIBE/g" \
+        -e "s/@BOX3D_PATCHES@/$BOX3D_PATCHES/g" \
         "$ROOT/scripts/README.dist.md" > "$stage/README.md"
 
     # manifest.json must sit at the archive root: c3c reports "Missing manifest" for an archive
@@ -81,4 +84,4 @@ rm -rf "$STAGE_ROOT"
 
 ( cd "$DIST" && sha256sum b3-v"$VERSION"-linux-x64.c3l b3-v"$VERSION"-windows-x64.c3l > SHA256SUMS )
 
-echo "box3d $BOX3D_DESCRIBE, version $VERSION"
+echo "box3d $BOX3D_DESCRIBE with patches $BOX3D_PATCHES, version $VERSION"

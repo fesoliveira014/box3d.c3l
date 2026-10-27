@@ -5,7 +5,7 @@ Mirror of the Notion page [Style Guide (docs/style.md)](https://app.notion.com/p
 ## 1. Scope & precedence
 
 - Applies to every `.c3`, `.c3i`, and `.glsl` file, hand-written or reviewed. Generated code is exempt from formatting rules but not from layout pins.
-- Precedence: this baseline → project refinements → the configured compiler (C3 0.8.3) — later entries may narrow, never widen.
+- Precedence: this baseline → project refinements → the configured compiler (C3 0.8.5_1) — later entries may narrow, never widen.
 - Skills `c3-expert`, `c3-style`, `c3-bindings`, `shader-dev` are loaded before writing or reviewing code. A review without them is not valid.
 
 ## 2. Naming

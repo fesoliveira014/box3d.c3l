@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 env:
-  C3C_VERSION: v0.8.3
+  C3C_VERSION: v0.8.5_1
 
 jobs:
   # box3d is built on each platform it ships for; there is no cross-compilation. This job's only

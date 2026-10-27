@@ -75,7 +75,7 @@ Struct initializers use `.field = value` for every supplied field; calls with �
 c3c compile-only --no-obj src/*.c3i src/*.c3
 ```
 
-Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.3 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.
+Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.5_1 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.
 
 ## 6. Scope and report
 

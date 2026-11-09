@@ -13,6 +13,18 @@ struct Version {
 
 extern fn Version version() @cname("b3GetVersion");
 extern fn bool is_double_precision() @cname("b3IsDoublePrecision");
+
+<*
+ The manifold size the linked box3d was compiled with. Every Manifold and CollisionManifold this
+ package declares holds MAX_MANIFOLD_POINTS points, so any other answer means they misread it.
+*>
+extern fn int max_manifold_points() @cname("b3GetMaxManifoldPoints");
+
+<*
+ Whether the CPU has AVX2 and the OS saves its registers, which is when a world's contact solver
+ runs eight lanes wide unless WorldId.enable_sse2_fallback() holds it to four.
+*>
+extern fn bool is_avx2_available() @cname("b3IsAVX2Available");
 extern fn long byte_count() @cname("b3GetByteCount");
 extern fn void set_allocator(AllocFn alloc_fn, FreeFn free_fn) @cname("b3SetAllocator");
 extern fn void set_assert_fn(AssertFn assert_fn) @cname("b3SetAssertFcn");

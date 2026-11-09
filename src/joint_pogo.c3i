@@ -1,9 +1,18 @@
 module b3;
 
 <*
- A pogo joint definition: the spring that holds a dynamic character body off the ground along the
- y-axis of local frame B. impulse and velocity seed the spring's internal state, for a pogo that is
- recreated every frame.
+ A joint known to be a pogo joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_pogo(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef PogoJointId = inline JointId;
+
+<*
+ A pogo joint definition: a spring holding body B off body A, measured along local frame B's
+ y-axis and pushing along normal. impulse and velocity seed its internal state, for a pogo
+ recreated every frame. Must come from default_pogo_joint_def(), which sets normal to (0, 1, 0)
+ and zeroes the rest, so a default pogo pushes nothing. box3d's assertions that normal has unit
+ length and the other fields are finite and non-negative are compiled out here.
 *>
 struct PogoJointDef {
     inline JointDef base;
@@ -16,3 +25,101 @@ struct PogoJointDef {
     float impulse;
     float velocity;
 }
+
+extern fn PogoJointDef default_pogo_joint_def() @cname("b3DefaultPogoJointDef");
+
+<*
+ Raw pogo joint constructor. Bypasses create_pogo_joint's definition guard and hands back a
+ joint of no particular type, so it is private to the module — src/joint_pogo.c3's
+ create_pogo_joint is the only caller and is the only public way to a live pogo joint.
+*>
+extern fn JointId create_pogo_joint_raw(
+  WorldId world_id,
+  PogoJointDef* def,
+) @cname("b3CreatePogoJoint") @private;
+
+<*
+ Sets the length the spring rests at, measured from anchor A to anchor B along local frame B's
+ y-axis. Asserted finite and at or above 0 under an assertion this build compiles out.
+*>
+extern fn void PogoJointId.set_rest_length(self, float length) @cname("b3PogoJoint_SetRestLength");
+
+<*
+ The length the spring rests at. 0 on a joint built from a default definition.
+*>
+extern fn float PogoJointId.rest_length(self) @cname("b3PogoJoint_GetRestLength");
+
+<*
+ Sets the spring's stiffness in hertz, asserted finite and at or above 0 under an assertion this
+ build compiles out. 0 stops the spring and clears its impulse and velocity on the next step.
+*>
+extern fn void PogoJointId.set_spring_hertz(self, float hertz) @cname("b3PogoJoint_SetSpringHertz");
+
+<*
+ The spring's stiffness in hertz. 0 on a joint built from a default definition.
+*>
+extern fn float PogoJointId.spring_hertz(self) @cname("b3PogoJoint_GetSpringHertz");
+
+<*
+ Sets the spring's damping ratio, non-dimensional. Asserted finite and at or above 0 under an
+ assertion this build compiles out.
+*>
+extern fn void PogoJointId.set_spring_damping_ratio(self, float damping_ratio) @cname("b3PogoJoint_SetSpringDampingRatio");
+
+<*
+ The spring's damping ratio, non-dimensional. 0 on a joint built from a default definition.
+*>
+extern fn float PogoJointId.spring_damping_ratio(self) @cname("b3PogoJoint_GetSpringDampingRatio");
+
+<*
+ Sets the ceiling in newtons on the force pulling body B towards body A, which decides how hard
+ the body sticks to the ground. Asserted finite and at or above 0 under an assertion this build
+ compiles out.
+*>
+extern fn void PogoJointId.set_max_tension_force(self, float force) @cname("b3PogoJoint_SetMaxTensionForce");
+
+<*
+ The ceiling in newtons on the pulling force. 0 on a joint built from a default definition.
+*>
+extern fn float PogoJointId.max_tension_force(self) @cname("b3PogoJoint_GetMaxTensionForce");
+
+<*
+ Sets the ceiling in newtons on the force pushing body B away from body A, which decides how much
+ weight the spring carries. Asserted finite and at or above 0 under an assertion this build
+ compiles out.
+*>
+extern fn void PogoJointId.set_max_compression_force(self, float force) @cname("b3PogoJoint_SetMaxCompressionForce");
+
+<*
+ The ceiling in newtons on the pushing force. 0 on a joint built from a default definition.
+*>
+extern fn float PogoJointId.max_compression_force(self) @cname("b3PogoJoint_GetMaxCompressionForce");
+
+<*
+ Sets the world-space direction the spring pushes along, the ground normal under body B. Asserted
+ finite and of unit length under an assertion this build compiles out; it is stored unnormalised.
+*>
+extern fn void PogoJointId.set_normal(self, Vec3 normal) @cname("b3PogoJoint_SetNormal");
+
+<*
+ The world-space direction the spring pushes along. (0, 1, 0) on a joint built from a default
+ definition.
+*>
+extern fn Vec3 PogoJointId.normal(self) @cname("b3PogoJoint_GetNormal");
+
+<*
+ The current distance from anchor A to anchor B along local frame B's y-axis, the length
+ rest_length() is compared against. Negative once anchor B is below anchor A on that axis.
+*>
+extern fn float PogoJointId.current_length(self) @cname("b3PogoJoint_GetCurrentLength");
+
+<*
+ The spring's internal velocity, the state PogoJointDef.velocity seeds: not body B's speed.
+*>
+extern fn float PogoJointId.current_speed(self) @cname("b3PogoJoint_GetCurrentSpeed");
+
+<*
+ The spring's accumulated impulse over the last sub-step, the state PogoJointDef.impulse seeds.
+ Positive pushes body B away from body A.
+*>
+extern fn float PogoJointId.impulse(self) @cname("b3PogoJoint_GetImpulse");

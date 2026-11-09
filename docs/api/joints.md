@@ -53,7 +53,9 @@ b3::RevoluteJointId hinge = b3::create_revolute_joint(world, &def)!;
 | filter | `FilterJointDef` | `default_filter_joint_def` | `create_filter_joint` | `JointId` |
 | distance | `DistanceJointDef` | `default_distance_joint_def` | `create_distance_joint` | `DistanceJointId` |
 | motor | `MotorJointDef` | `default_motor_joint_def` | `create_motor_joint` | `MotorJointId` |
+| mover | `MoverJointDef` | `default_mover_joint_def` | `create_mover_joint` | `MoverJointId` |
 | parallel | `ParallelJointDef` | `default_parallel_joint_def` | `create_parallel_joint` | `ParallelJointId` |
+| pogo | `PogoJointDef` | `default_pogo_joint_def` | `create_pogo_joint` | `PogoJointId` |
 | prismatic | `PrismaticJointDef` | `default_prismatic_joint_def` | `create_prismatic_joint` | `PrismaticJointId` |
 | revolute | `RevoluteJointDef` | `default_revolute_joint_def` | `create_revolute_joint` | `RevoluteJointId` |
 | spherical | `SphericalJointDef` | `default_spherical_joint_def` | `create_spherical_joint` | `SphericalJointId` |
@@ -95,8 +97,8 @@ foreach (joint : arm.joints(storage[..])) {
 }
 ```
 
-`as_distance`, `as_motor`, `as_parallel`, `as_prismatic`, `as_revolute`, `as_spherical`,
-`as_weld` and `as_wheel` each return:
+`as_distance`, `as_motor`, `as_mover`, `as_parallel`, `as_pogo`, `as_prismatic`, `as_revolute`,
+`as_spherical`, `as_weld` and `as_wheel` each return:
 
 | Fault | Cause |
 |---|---|
@@ -117,6 +119,7 @@ All of these are methods on `JointId` unless written as a free function.
 | Identity | `type()` → `JointType`, `world()`, `body_a()`, `body_b()` |
 | Frames | `local_frame_a()`, `set_local_frame_a(t)`, `local_frame_b()`, `set_local_frame_b(t)` |
 | Collision | `collide_connected()`, `set_collide_connected(bool)` |
+| Sleep | `is_awake()` |
 | Tuning | `constraint_tuning()` → `ConstraintTuning { hertz, damping_ratio }`, `set_constraint_tuning(hertz, damping_ratio)` |
 | Events | `force_threshold()`, `set_force_threshold(f)`, `torque_threshold()`, `set_torque_threshold(t)` |
 | Reporting | `constraint_force()`, `constraint_torque()`, `linear_separation()`, `angular_separation()` |
@@ -132,7 +135,10 @@ b3::joint_wake_bodies(joint);
 ```
 
 `JointType` values: `PARALLEL`, `DISTANCE`, `FILTER`, `MOTOR`, `PRISMATIC`, `REVOLUTE`,
-`SPHERICAL`, `WELD`, `WHEEL`, `MOVER`, `POGO`. No constructor for the last two is bound.
+`SPHERICAL`, `WELD`, `WHEEL`, `MOVER`, `POGO`.
+
+`is_awake()` is true while at least one of the joint's bodies is awake. It is false while both
+sleep, while either body is disabled, and for a joint that links no dynamic body.
 
 ### Collision between the linked bodies
 
@@ -169,7 +175,8 @@ Only awake joints are checked.
 `angular_separation()` branch on the joint type. Read them against the type:
 
 - A zero can mean the joint is unloaded, the type never measures that channel, or the type
-  measures it only in some states. A filter joint reports zero on all four.
+  measures it only in some states. A filter joint reports zero on all four. Mover and pogo joints
+  report zero for `constraint_torque()` and both separations.
 - `angular_separation()` is built from the two body rotations and ignores the local frames. It is
   always 0 on a wheel joint.
 - On a prismatic joint, `linear_separation()` uses body A's axis, which differs from the axis
@@ -184,6 +191,8 @@ per-type accessor where one exists:
 | prismatic | `constraint_force()` components are cyclically permuted, and an opposed limit and motor add instead of cancel. `constraint_torque()` is rotated twice; only its magnitude is right. | `motor_force()` |
 | distance | `constraint_force()` sums each impulse once and is sound. | `motor_force()` for the motor share |
 | motor | Both readings are sound. | none needed |
+| mover | `constraint_force()` is the planar drive force and is sound. `constraint_torque()` is 0. | none needed |
+| pogo | `constraint_force()` is the spring force along `normal` and is sound. `constraint_torque()` is 0, even when offset anchors let the spring turn the bodies. | `impulse()` for the per-sub-step impulse |
 | spherical | `constraint_torque()` is wrong while a cone or twist limit is acting. | `motor_torque()` for the motor share |
 | wheel | `constraint_force()` is permuted and mixes in a stored length. `constraint_torque()` lays the spin impulse on frame A's z axis instead of the wheel's spin axis. | `spin_torque()`, `steering_torque()`, with the caveats below |
 
@@ -496,6 +505,89 @@ Defaults: every added field is zero, so a default motor joint applies nothing.
 - Dropping a ceiling to 0 after the channel has worked does not remove the impulse it holds.
 - There is no per-type force or torque getter. `constraint_force()` and `constraint_torque()` are
   sound on this type.
+
+## Mover joint
+
+Drives a character body (body B) towards a velocity relative to body A, in the xz plane of local
+frame B. Pair it with a pogo joint for a physics-driven character.
+
+```c3
+b3::MoverJointDef def = b3::default_mover_joint_def();
+def.body_id_a = ground;
+def.body_id_b = character;
+def.collide_connected = true;
+def.linear_velocity = {2.0, 0.0, 0.0};
+def.max_force = 500.0f;
+b3::MoverJointId mover = b3::create_mover_joint(world, &def)!;
+
+mover.set_linear_velocity({0.0, 0.0, -2.0});
+b3::world_step(world, 1.0f / 60.0f, 4);
+b3::Vec3 push = mover.constraint_force();
+```
+
+`collide_connected = true` keeps the character colliding with the body it is jointed to.
+
+Defaults: both added fields are zero, so a default mover joint drives nothing.
+
+| Feature | Read | Write |
+|---|---|---|
+| drive | `linear_velocity()`, `max_velocity_force()` | `set_linear_velocity(v)`, `set_max_velocity_force(f)` |
+
+- The target is in world axes, but only its projection on local frame B's x and z axes is driven,
+  as body B is turned now. The component along frame B's y axis is ignored, and
+  `linear_velocity()` still reports it.
+- The force acts at body B's centre of mass and never turns either body.
+- `MoverJointDef.max_force` and `max_velocity_force()` are the same ceiling. A ceiling of 0 drives
+  nothing; dropping it to 0 mid-run leaves the body coasting at its current velocity.
+- A negative ceiling is stored. It acts as its magnitude until the drive saturates, then pushes
+  away from the target.
+- A saturated drive reports its ceiling through `constraint_force()`.
+
+## Pogo joint
+
+A spring that holds a character body (body B) off body A. The spring's length is measured along
+local frame B's y axis, and it pushes along `normal`, a world-space ground normal.
+
+```c3
+b3::PogoJointDef def = b3::default_pogo_joint_def();
+def.body_id_a = ground;
+def.body_id_b = character;
+def.collide_connected = true;
+def.local_frame_a.p = {0.0, 1.0, 0.0};
+def.rest_length = 1.0f;
+def.hertz = 5.0f;
+def.damping_ratio = 1.0f;
+def.max_compression_force = 2000.0f;
+def.max_tension_force = 200.0f;
+b3::PogoJointId pogo = b3::create_pogo_joint(world, &def)!;
+
+b3::world_step(world, 1.0f / 60.0f, 4);
+float length = pogo.current_length();
+float support = pogo.constraint_force().y;
+```
+
+Defaults: `normal` is (0, 1, 0) and every other added field is 0. A default pogo joint pushes
+nothing: hertz 0 stops the spring and both force ceilings are 0.
+
+| Feature | Read | Write |
+|---|---|---|
+| spring | `rest_length()`, `spring_hertz()`, `spring_damping_ratio()` | `set_rest_length(l)`, `set_spring_hertz(h)`, `set_spring_damping_ratio(r)` |
+| force ceilings | `max_compression_force()`, `max_tension_force()` | `set_max_compression_force(f)`, `set_max_tension_force(f)` |
+| direction | `normal()` | `set_normal(n)` |
+| state | `current_length()`, `current_speed()`, `impulse()` | seeded by `PogoJointDef.impulse` and `.velocity` |
+
+- `current_length()` is the distance from anchor A to anchor B along local frame B's y axis. It is
+  negative once anchor B is below anchor A on that axis.
+- Compression pushes body B away from body A and carries its weight; tension pulls it back
+  towards the ground. A positive `impulse()` is compression.
+- `impulse()` is per sub-step. `constraint_force()` is that impulse times the sub-steps per second,
+  along `normal`.
+- `current_speed()` is the spring's internal velocity, not body B's speed.
+- Hertz 0 clears the impulse and the internal velocity on the next step, seeds included. A world
+  with warm starting disabled clears both at every step.
+- `set_normal` does not normalise its argument. Pass a unit vector.
+- For a pogo recreated every frame, copy `impulse()` and `current_speed()` into the next
+  definition's `impulse` and `velocity` before destroying the old joint.
 
 ## Contracts
 

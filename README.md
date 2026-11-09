@@ -23,7 +23,7 @@ fn void? simulate() {
 
 - Worlds, bodies, and every shape kind: sphere, capsule, convex hull, mesh, height field, and baked
   compound.
-- All nine joint types.
+- All eleven joint types, including mover and pogo.
 - Ray casts, shape casts, overlap queries, and contact data.
 - Body, contact, sensor, and joint event arrays; pre-solve, custom-filter, friction, and
   restitution callbacks.

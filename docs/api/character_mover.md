@@ -191,6 +191,26 @@ id and `PlaneResult`) per touching shape and returns the filled prefix of `buffe
 capsules and hulls are considered. A buffer that fills up drops the rest without a report. A
 locked world fills nothing.
 
+```c3
+b3::BodyToiResult? hit = b3::body_time_of_impact_mover(
+  body: platform,
+  origin: position,
+  mover: mover,
+  mover_translation: delta,
+  filter: b3::default_query_filter(),
+  body_transform1: platform.transform(),
+  body_transform2: platform_next,
+);
+if (try hit) delta *= hit.fraction;
+```
+
+`b3::body_time_of_impact_mover` sweeps the capsule along `mover_translation` while the body moves
+from `body_transform1` to `body_transform2`, and returns the earliest hit as a `BodyToiResult`:
+the hit `point` in world space, a `normal` pointing from the body towards the mover, the
+`fraction` of the sweep, and the `shape_id` struck. Only spheres, capsules and hulls are
+considered, and a shape the mover overlaps at the start is passed over. A sweep that reaches
+nothing returns `NO_HIT`, as does a locked world.
+
 ## Explosions
 
 ```c3
@@ -219,7 +239,7 @@ area each shape presents to the blast and its `ShapeDef.explosion_scale`. A nega
 ## Contracts
 
 - The mover is a capsule relative to `origin`; every plane and point reported is relative to the
-  same origin.
+  same origin, except the world-space hit point of `body_time_of_impact_mover`.
 - `world_collide_mover` needs a callback. Copy plane results out of the callback; the array dies
   with the call.
 - Mesh, height field and compound shapes report at most 64 planes each.

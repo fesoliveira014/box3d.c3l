@@ -145,6 +145,12 @@ extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
 extern fn void joint_wake_bodies(JointId joint) @cname("b3Joint_WakeBodies");
 
 <*
+ Whether this joint is in the awake set, which means at least one of its bodies is awake. False
+ while both bodies sleep, while either is disabled, and for a joint linking no dynamic body.
+*>
+extern fn bool JointId.is_awake(self) @cname("b3Joint_IsAwake");
+
+<*
  The force this joint is applying to hold its constraint, in newtons. box3d branches on the
  joint's own type, so a zero says nothing until read against that type: the joint may be unloaded,
  the channel may be one the type never measures, or one it measures only in some states.

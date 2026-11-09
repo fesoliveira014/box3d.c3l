@@ -150,3 +150,17 @@ extern fn int body_collide_mover_raw(
   QueryFilter filter,
   WorldTransform body_transform,
 ) @cname("b3Body_CollideMover") @private;
+
+<*
+ Raw body-local mover sweep. Private because it answers a miss with a fraction of 1 and a null
+ shape, which body_time_of_impact_mover() turns into NO_HIT.
+*>
+extern fn BodyToiResult body_time_of_impact_mover_raw(
+  BodyId body_id,
+  Pos origin,
+  Capsule* mover,
+  Vec3 mover_translation,
+  QueryFilter filter,
+  WorldTransform body_transform1,
+  WorldTransform body_transform2,
+) @cname("b3Body_TimeOfImpactMover") @private;

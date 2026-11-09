@@ -177,6 +177,36 @@ extern fn bool WorldId.is_continuous_enabled(self) @cname("b3World_IsContinuousE
 extern fn void WorldId.enable_warm_starting(self, bool flag) @cname("b3World_EnableWarmStarting");
 extern fn bool WorldId.is_warm_starting_enabled(self) @cname("b3World_IsWarmStartingEnabled");
 extern fn void WorldId.enable_speculative(self, bool flag) @cname("b3World_EnableSpeculative");
+
+<*
+ How many restitution passes a step runs. A count outside 0 to MAX_RESTITUTION_ITERATIONS is
+ clamped into it rather than refused, and a locked world keeps the count it has.
+*>
+extern fn void WorldId.set_restitution_iterations(self, int iterations) @cname("b3World_SetRestitutionIterations");
+extern fn int WorldId.restitution_iterations(self) @cname("b3World_GetRestitutionIterations");
+
+<*
+ Runs the restitution passes over contacts whose own restitution is zero as well, so a bounce
+ carries on through a resting stack. A locked world keeps the setting it has.
+*>
+extern fn void WorldId.enable_restitution_propagation(self, bool flag) @cname("b3World_EnableRestitutionPropagation");
+extern fn bool WorldId.is_restitution_propagation_enabled(self) @cname("b3World_IsRestitutionPropagationEnabled");
+
+<*
+ How far a body's rotational inertia may stray from a sphere's before box3d applies gyroscopic
+ torque to it. Clamped into 0 to 1 rather than refused; box3d asserts it is a number and this
+ build compiles that out, so a NaN is stored and turns the torque off. A body reads it only when
+ its mass is next computed, and a locked world keeps the value it has.
+*>
+extern fn void WorldId.set_isotropic_inertia_tolerance(self, float tolerance) @cname("b3World_SetIsotropicInertiaTolerance");
+extern fn float WorldId.isotropic_inertia_tolerance(self) @cname("b3World_GetIsotropicInertiaTolerance");
+
+<*
+ Holds the contact solver to four lanes where is_avx2_available() would let it run eight; false
+ returns it to the width box3d detected. Nothing reads the setting back, a recording does not
+ capture it, and a locked world ignores it.
+*>
+extern fn void WorldId.enable_sse2_fallback(self, bool flag) @cname("b3World_EnableSSE2Fallback");
 extern fn int WorldId.worker_count(self) @cname("b3World_GetWorkerCount");
 extern fn void WorldId.set_worker_count(self, int count) @cname("b3World_SetWorkerCount");
 extern fn int WorldId.awake_body_count(self) @cname("b3World_GetAwakeBodyCount");

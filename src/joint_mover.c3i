@@ -1,11 +1,61 @@
 module b3;
 
 <*
+ A joint known to be a mover joint, so its per-type accessors need no check at each call. It
+ converts to a JointId on its own, so every shared accessor reaches it uncast; the way back is
+ JointId.as_mover(), which checks — see there for what a wrong-typed accessor does.
+*>
+typedef MoverJointId = inline JointId;
+
+<*
  A mover joint definition: drives a dynamic character body towards linear_velocity with at most
  max_force newtons, applied only in the xz plane of local frame B. It does not affect rotation.
+ Must come from default_mover_joint_def(), which zeroes both fields, so a default mover drives
+ nothing. box3d's assertion that max_force is finite and at or above 0 is compiled out here.
 *>
 struct MoverJointDef {
     inline JointDef base;
     Vec3 linear_velocity;
     float max_force;
 }
+
+extern fn MoverJointDef default_mover_joint_def() @cname("b3DefaultMoverJointDef");
+
+<*
+ Raw mover joint constructor. Bypasses create_mover_joint's definition guard and hands back a
+ joint of no particular type, so it is private to the module — src/joint_mover.c3's
+ create_mover_joint is the only caller and is the only public way to a live mover joint.
+*>
+extern fn JointId create_mover_joint_raw(
+  WorldId world_id,
+  MoverJointDef* def,
+) @cname("b3CreateMoverJoint") @private;
+
+<*
+ Sets the velocity of body B relative to body A that the joint drives towards, in metres per
+ second along the world axes. Only its projection on local frame B's x and z axes is driven, as
+ those axes stand on body B now, so the component along frame B's y axis is ignored. Asserted
+ finite under an assertion this build compiles out. The accumulated impulse stands.
+*>
+extern fn void MoverJointId.set_linear_velocity(self, Vec3 velocity) @cname("b3MoverJoint_SetLinearVelocity");
+
+<*
+ The velocity the joint drives body B towards relative to body A, in world axes. What was set,
+ including any component the joint ignores, not what the bodies are doing. Zero on a joint built
+ from a default definition.
+*>
+extern fn Vec3 MoverJointId.linear_velocity(self) @cname("b3MoverJoint_GetLinearVelocity");
+
+<*
+ Sets the ceiling in newtons on the planar force the drive may apply. 0, a default definition's
+ value, drives nothing and cancels the impulse the drive held. Asserted finite and at or above 0
+ under an assertion this build compiles out: a negative is stored, acts as its magnitude until the
+ drive saturates, and then pushes away from the target.
+*>
+extern fn void MoverJointId.set_max_velocity_force(self, float max_force) @cname("b3MoverJoint_SetMaxVelocityForce");
+
+<*
+ The ceiling in newtons on the planar force the drive may apply. MoverJointDef names it max_force.
+ 0 on a joint built from a default definition.
+*>
+extern fn float MoverJointId.max_velocity_force(self) @cname("b3MoverJoint_GetMaxVelocityForce");

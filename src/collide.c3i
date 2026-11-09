@@ -76,6 +76,14 @@ struct Point2D {
 }
 
 <*
+ Raw 2D hull and simplification. Private because each takes a pointer and a count where the
+ wrappers in src/collide.c3 take slices, and because the hull writes its output past the count it
+ is handed.
+*>
+extern fn int hull_2d_raw(Point2D* pts, int count, Point2D* hull) @cname("b3Hull2D") @private;
+extern fn int simplify_hull_2d_raw(Point2D* hull, int count, int target) @cname("b3SimplifyHull2D") @private;
+
+<*
  One contact point of a manifold, in shape A's frame. A separation is zero where the surfaces
  exactly meet, negative for an overlap, and positive for a point the two have not reached — which
  only some pairs report at all.

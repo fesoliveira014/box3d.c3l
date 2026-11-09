@@ -151,6 +151,7 @@ defer b3::destroy_hull(turned);
 | `b3::create_cylinder` | a cylinder on the y axis | `sides` outside 3 to `MAX_HULL_RING_STEPS`, or points box3d will not close |
 | `b3::create_cone` | a cone on the y axis, `radius1` at y 0, `radius2` at y `height` | `slices` outside 3 to `MAX_HULL_RING_STEPS`, or points box3d will not close |
 | `b3::create_rock` | ten points scattered over a sphere | a radius too small to separate the points |
+| `b3::create_complex_hull` | the hull of 32 points scattered over a sphere from a fixed seed | a radius too small to separate the points |
 | `b3::clone_hull` | a copy | a null `hull` |
 | `b3::clone_and_transform_hull` | a copy with transform and scale baked in | a scaled volume that underflows |
 
@@ -555,13 +556,14 @@ plain getters read. A shape whose definition named fewer than two materials hold
 shape holds the compound's distinct materials. The count is
 fixed at creation and does not follow later geometry changes.
 
-Geometry getters: `shape.sphere()`, `shape.capsule()`, `shape.hull()`, `shape.mesh()` and
-`shape.height_field()` return `WRONG_SHAPE_TYPE` unless the shape currently has that type.
+Geometry getters: `shape.sphere()`, `shape.capsule()`, `shape.hull()`, `shape.mesh()`,
+`shape.height_field()` and `shape.compound()` return `WRONG_SHAPE_TYPE` unless the shape currently
+has that type.
 
 - `hull()` returns the world's shared copy. It stays valid until the shape is destroyed or given
   other geometry. Never pass it to `b3::destroy_hull`.
-- `mesh()` returns the caller's own mesh pointer with its scale; `height_field()` returns the
-  caller's own field.
+- `mesh()` returns the caller's own mesh pointer with its scale; `height_field()` and
+  `compound()` return the caller's own field and compound.
 
 Geometry setters: `shape.set_sphere()`, `shape.set_capsule()`, `shape.set_hull()` and
 `shape.set_mesh(mesh, scale)` replace the geometry and change the shape's type to match. They

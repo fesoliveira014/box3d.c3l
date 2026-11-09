@@ -135,6 +135,18 @@ fn HeightFieldData*? ShapeId.height_field(self) {
 }
 
 <*
+ The compound belongs to the caller rather than to the world, as the mesh does: data is the very
+ pointer create_baked_compound_shape() was handed, and it must outlive this shape.
+
+ @return `the compound`
+ @return? WRONG_SHAPE_TYPE : `this shape is not a compound`
+*>
+fn CompoundData*? ShapeId.compound(self) {
+    if (self.type() != ShapeType.COMPOUND) return WRONG_SHAPE_TYPE~;
+    return compound_raw(self);
+}
+
+<*
  Gives this shape a mesh, replacing whatever geometry it had and making its type MESH — there is
  no type guard, unlike on mesh(), because changing the type is what the call is for.
 

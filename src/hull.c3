@@ -84,6 +84,18 @@ fn HullData*? create_rock(float radius) {
 }
 
 <*
+ Builds the hull of 32 points box3d scatters over a sphere of the given radius from a fixed seed,
+ so every call with one radius builds the same hull. The caller owns it and must destroy_hull()
+ it — see HullData.
+
+ @return `the hull`
+ @return? DEGENERATE_GEOMETRY : `the radius collapses the 32 points`
+*>
+fn HullData*? create_complex_hull(float radius) {
+    return checked_geometry(create_complex_hull_raw(radius), DEGENERATE_GEOMETRY);
+}
+
+<*
  Copies the hull into a second allocation the caller owns and must destroy_hull() separately. The
  original is untouched and byte_count() carries both.
 

@@ -11,24 +11,27 @@ limits an application designs around, and the sharp edges that cross domains.
 
 - Library hooks: version, allocator, log and assert handlers, timers, length units, the byte count.
 - Math types mapped onto the C3 standard library, with box3d's validity predicates and helpers.
-- Worlds: creation, stepping, tuning, worker threads and task callbacks, profile and counters,
+- Worlds: creation, stepping, tuning (including restitution iterations and propagation, and the
+  isotropic inertia tolerance), worker threads and task callbacks, profile and counters,
   friction and restitution mixing callbacks, pre-solve and custom-filter callbacks.
 - Events: contact begin, end and hit; sensor begin and end; body moves; joint thresholds.
 - Bodies: type, pose, velocity, forces and impulses, mass data, damping, sleep, motion locks,
-  bullets, contact and joint listing.
+  bullets, safety factor and extents, contact and joint listing.
 - Shapes: sphere, capsule, convex hull, triangle mesh, height field and baked compound, with
   materials, filters, sensor flags and geometry replacement.
-- Geometry builders: hulls from points, boxes, cylinders, cones and rocks; grid, wave, torus, box and
-  platform meshes; height fields from grids, samples and files; compounds, and reading their
-  bytes back.
-- Joints: nine types (distance, filter, motor, parallel, prismatic, revolute, spherical, weld,
-  wheel), with typed identifiers for the eight that have accessors of their own.
+- Geometry builders: hulls from points, boxes, cylinders, cones, rocks and a fixed complex hull; grid, wave, torus, box and
+  platform meshes; height fields from grids, samples and files, with aprons that join neighbours;
+  compounds, and validating their serialized bytes.
+- Joints: eleven types (distance, filter, motor, mover, parallel, pogo, prismatic, revolute,
+  spherical, weld, wheel), with typed identifiers for the ten that have accessors of their own.
 - World queries: closest and callback ray casts, shape casts, box and shape overlaps, collecting
   variants that fill a caller buffer, body-level casts and overlaps, contact data with manifolds.
 - Standalone geometry with no world: local ray and shape casts, overlap predicates, the nine
-  collide pairs, distance, time of impact, mesh and compound queries.
+  collide pairs, distance, time of impact, mesh and compound queries, 2D hull construction and
+  simplification.
 - The dynamic tree: proxies, queries, ray and box traversals, closest search, save and load.
-- The character mover: world and body collide, cast, the plane solver and velocity clip; explosions.
+- The character mover: world and body collide, cast, body time of impact, the plane solver and
+  velocity clip; explosions.
 - Debug draw (`b3::draw`): the nine draw callbacks and the per-shape renderer handles.
 - Recording and replay (`b3::record`): recordings, file save and load, determinism validation, a
   frame-stepping player with seeking, keyframes, recorded queries and query drawing.
@@ -44,14 +47,6 @@ Five exported functions are deliberately absent:
 | `b3DynamicTree_Validate` | Its body compiles to nothing unless box3d is built with validation, which the shipped build is not. A call that cannot validate would mislead. |
 | `b3DynamicTree_ValidateNoMoved` | The same as `b3DynamicTree_Validate`. |
 | `b3DynamicTree_GetProxyCount` | A read of the `proxy_count` field the binding already exposes on `DynamicTree`, and a C3 method may not share a name with a field. Read `tree.proxy_count`. |
-
-43 further functions are not bound: the mover and pogo joints (`b3CreateMoverJoint`,
-`b3CreatePogoJoint`, their default definitions and every `b3MoverJoint_*` and `b3PogoJoint_*`
-accessor), `b3Body_TimeOfImpactMover`, the body extent and safety-factor accessors,
-`b3CreateComplexHull`, `b3Hull2D`, `b3SimplifyHull2D`, `b3GetMaxManifoldPoints`,
-`b3IsAVX2Available`, `b3Joint_IsAwake`, `b3Shape_GetCompound`, and the world's restitution,
-isotropic-inertia and SSE2-fallback accessors. Their types (`MoverJointDef`, `PogoJointDef`,
-`BodyToiResult`, `Point2D`, the `MOVER` and `POGO` joint types) are declared.
 
 The wrapper layer also leaves out one diagnostic it could not represent: `create_mesh` does not
 report which triangles it skipped, because the count that goes with that list lives inside the
@@ -75,8 +70,8 @@ comm -23 bound.txt defined.txt      # bound but not built: must print nothing
 ```
 
 At the pinned box3d commit: 619 functions are declared, 617 of them are defined in the archive
-(all but `b3World_DumpShapeBounds` and `b3InternalAssert`), and 571 are bound. The first `comm`
-prints the 48 functions above, the second prints the two undefined ones, and the third prints
+(all but `b3World_DumpShapeBounds` and `b3InternalAssert`), and 614 are bound. The first `comm`
+prints the five functions above, the second prints the two undefined ones, and the third prints
 nothing.
 
 ## Targets and toolchain

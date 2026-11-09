@@ -48,7 +48,7 @@ do not move.
 `MAX_RESTITUTION_ITERATIONS` (63); `enable_restitution_propagation` (default off) runs the
 expensive full contact propagation in that solver. `isotropic_inertia_tolerance` (default 0.2,
 clamped to 0 to 1) is how near to a sphere a body's inertia must be for box3d to skip its
-gyroscopic torque. All three are read when the world is built.
+gyroscopic torque. All three can be changed later; see [settings](#settings).
 
 `WorldDef.capacity`, a `Capacity` of expected shape, body and contact counts, pre-sizes the
 world's internal arrays. `world.max_capacity()` reports the high-water marks reached so far,
@@ -125,8 +125,17 @@ world.set_friction_callback(&min_friction);
 | `is_continuous_enabled()` | `enable_continuous(flag)` | continuous collision of dynamic against static bodies |
 | `is_warm_starting_enabled()` | `enable_warm_starting(flag)` | solver warm starting; disabling it is for testing |
 | | `enable_speculative(flag)` | speculative contacts; for testing |
+| `restitution_iterations()` | `set_restitution_iterations(n)` | restitution passes per step, clamped to 0 to `MAX_RESTITUTION_ITERATIONS` |
+| `is_restitution_propagation_enabled()` | `enable_restitution_propagation(flag)` | restitution passes also run over contacts whose restitution is zero |
+| `isotropic_inertia_tolerance()` | `set_isotropic_inertia_tolerance(v)` | gyroscopic torque tolerance, clamped to 0 to 1 |
+| | `enable_sse2_fallback(flag)` | holds the contact solver to four SIMD lanes where [AVX2](library_and_math.md#startup) allows eight; for testing |
 | `awake_body_count()` | | bodies currently awake |
 | `bounds()` | | a box covering the current simulation, possibly padded |
+
+A body reads the isotropic inertia tolerance only when its mass is next computed, so a change
+leaves existing bodies as they are until then. The tolerance is clamped but not checked: a NaN is
+stored and turns gyroscopic torque off for every body computed under it. The SSE2 fallback has no
+getter and is not captured by a recording.
 
 ### Mixing callbacks
 

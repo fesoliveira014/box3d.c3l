@@ -107,6 +107,37 @@ buffer instead of reducing it, so a count equal to the buffer length may have dr
 buffer shorter than `MAX_MANIFOLD_POINTS` returns `BUFFER_TOO_SMALL`; a null hull
 `INVALID_DEFINITION`. `enable_speculative` controls the four-slop speculative points.
 
+### 2D hulls
+
+```c3
+b3::Point2D[6] points = {
+    { .p = { 0, 0 }, .original_index = 0 },
+    { .p = { 2, 0 }, .original_index = 1 },
+    { .p = { 2, 2 }, .original_index = 2 },
+    { .p = { 0, 2 }, .original_index = 3 },
+    { .p = { 1, 1 }, .original_index = 4 },
+    { .p = { 1, -0.1f }, .original_index = 5 },
+};
+b3::Point2D[12] buffer;
+
+b3::Point2D[] hull = b3::hull_2d(points[..], buffer[..])!;
+b3::Point2D[] square = b3::simplify_hull_2d(hull, 4);
+```
+
+These are the two steps box3d uses to reduce a contact manifold, exposed for testing. A `Point2D`
+carries a 2D point, its contact's `separation` and its `original_index`.
+
+`b3::hull_2d` writes the convex hull of `points` into `buffer` and returns the filled prefix:
+counter-clockwise from the lowest leftmost point, with points on an edge dropped. It sorts and
+welds `points` in place; points within a quarter linear slop become one, keeping the lowest
+`original_index`. box3d needs room for twice the points while it builds the hull, so a `buffer`
+shorter than that returns `BUFFER_TOO_SMALL`. The two slices must not overlap.
+
+`b3::simplify_hull_2d` rewrites a counter-clockwise hull in place and returns its prefix. It drops
+the vertex spanning the least area until at most `target` remain, and drops a vertex flatter than
+an eighth of a square linear slop even below `target`. It stops at three; a `target` under three
+acts as three, and a hull of three or fewer comes back unchanged.
+
 ## Distance
 
 ```c3
@@ -220,6 +251,7 @@ inside its own continuous solver. `distance_iterations`, `push_back_iterations` 
 - `collide_triangle_and_hull` needs a buffer of at least `MAX_MANIFOLD_POINTS` and may truncate
   silently at the buffer's length.
 - Triangle pairs refuse a zero-area triangle with `DEGENERATE_GEOMETRY`.
+- `hull_2d` reorders its input and needs an output buffer of twice the input's length.
 - Proxies must hold 1 to `MAX_SHAPE_CAST_POINTS` points through a non-null array; the points are
   borrowed for the call.
 - A zero `DistanceOutput.normal` means the cores overlap. Normalising it gives NaN.

@@ -164,18 +164,27 @@ b3::body_enable(body);
   locks the named axes.
 - `set_bullet(true)` gives the body continuous collision against other dynamic bodies (not other
   bullets). Continuous collision against static bodies is on by default for every dynamic body.
+- `set_safety_factor(v)` replaces the definition's `safety_factor`. A negative factor sweeps the
+  body on every step it is not settling into sleep and a NaN never does; neither is refused.
 - `body_allow_fast_rotation(body, true)` lifts the rotation-speed clamp, for bodies that spin
   fast only about a symmetry axis, such as wheels.
 - `enable_contact_recycling(flag)` affects only contacts created after the call.
 - `enable_hit_events(flag)` sets `enable_hit_events` on every shape of the body.
 
 Each setter has a getter: `is_sleep_enabled`, `sleep_threshold`, `motion_locks`, `is_bullet`,
-`is_fast_rotation_allowed`, `is_contact_recycling_enabled`. Damping and gravity scale are
+`safety_factor`, `is_fast_rotation_allowed`, `is_contact_recycling_enabled`. Damping and gravity scale are
 `linear_damping()`, `angular_damping()` and `gravity_scale()`, set with `set_linear_damping(v)`,
 `set_angular_damping(v)` and `set_gravity_scale(v)`.
 
 `compute_aabb()` returns the union of the body's shape bounds, a zero-size box at the body origin
 when it has no shapes, and a zero box while the world is locked.
+
+`min_extent()` is the thinnest of the body's shapes (a sphere's or capsule's radius, a hull's inner
+radius), the length continuous collision measures a step's motion against. `max_extent()` is, per
+axis, the farthest the shapes reach from the centre of mass; `max_extent_origin()` widens it by the
+centre of mass's offset on each axis, which bounds the reach from the body origin. A kinematic
+body measures both from its origin. A static body, or one without shapes, reports a `min_extent()`
+of 1e5 length units and zero for the other two.
 
 ## Shapes, joints and contacts of a body
 

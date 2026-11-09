@@ -31,6 +31,12 @@ float, so a double build corrupts every call. Call it once before anything else.
 
 `version` returns the linked library's `Version` (`major`, `minor`, `revision`).
 
+`max_manifold_points` returns the manifold size the linked library was compiled with. Every
+`Manifold` and `CollisionManifold` holds `MAX_MANIFOLD_POINTS` (4) points, so any other answer
+means the library does not match these bindings. `is_avx2_available` reports whether the CPU has
+AVX2 and the OS saves its registers; when it does, a world's contact solver runs eight SIMD lanes
+wide unless [`enable_sse2_fallback`](worlds.md#settings) holds it to four.
+
 ### Length units
 
 `set_length_units_per_meter` scales box3d's internal tolerances (linear slop, AABB margin, the

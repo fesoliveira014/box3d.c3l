@@ -35,7 +35,7 @@ fn void? simulate() {
 
 ## Requirements and status
 
-C3 **0.8.3**. Targets `linux-x64` (GCC) and `windows-x64` (MSVC, static CRT). The release archive
+C3 **0.8.5**. Targets `linux-x64` (GCC) and `windows-x64` (MSVC, static CRT). The release archive
 carries a prebuilt box3d for both, so consumers need neither CMake nor a C compiler. box3d is
 pinned in `manifest.json`.
 

@@ -8,7 +8,7 @@ walked through in sections; the complete source is at the [end](#complete-progra
 
 ## Prerequisites
 
-- `c3c --version` reports 0.8.3.
+- `c3c --version` reports 0.8.5.
 - A `linux-x64` or `windows-x64` host. These are the only two targets `b3` ships.
 - Building from a clone also needs Git with submodule support, CMake and the platform C compiler:
   GCC on Linux, MSVC on Windows.

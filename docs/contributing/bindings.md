@@ -152,7 +152,7 @@ value keeps a plain `@return`.
 
 `@return? check_shape_proxy!` inherits a shared guard's faults instead of restating them.
 
-What c3c 0.8.3 checks: a literal `return SOME_FAULT~;` in the body is checked against the list,
+What c3c 0.8.5 checks: a literal `return SOME_FAULT~;` in the body is checked against the list,
 and an inherited name that does not resolve is a hard error. A fault arriving through
 `callee(...)!`, `return callee(...)`, or a macro body is not checked, and neither is a declared
 fault that is never returned. A clean build is not proof the list is complete.
@@ -169,7 +169,7 @@ fault that is never returned. A clean build is not proof the list is complete.
 - §8's `c3c build`/`c3c test` describe a consuming project. This package's checks are in
   [testing.md](testing.md).
 
-## C3 0.8.3 spellings
+## C3 0.8.5 spellings
 
 All confirmed against the compiler at `/home/fesol/opt/c3/c3c` (the `c3-linux-static` build; the
 host glibc is too old for the stock release).

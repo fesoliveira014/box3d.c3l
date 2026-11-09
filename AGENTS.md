@@ -3,7 +3,7 @@
 `box3d.c3l` is a C3 binding for [box3d](https://github.com/erincatto/box3d), Erin Catto's C17 3D
 physics library, packaged as a C3 library (`.c3l`), not a program. The module is `b3` (the
 manifest's `provides`); `b3::draw` and `b3::record` are its two submodules. The project targets
-**C3 0.8.3** (`/home/fesol/opt/c3/c3c`).
+**C3 0.8.5** (`/home/fesol/opt/c3/c3c`).
 
 ## Before changing code
 

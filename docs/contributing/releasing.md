@@ -67,7 +67,7 @@ native archives, and runs `build-box3d.sh --check` first.
 Pushing a `v*` tag runs `.github/workflows/release.yml`:
 
 1. `windows`: build `box3d.lib`, check the layout pins, upload the archive.
-2. `release`: install c3c 0.8.3 (the static tarball), build `libbox3d.a` with `--check`, fetch the
+2. `release`: install c3c 0.8.5 (the static tarball), build `libbox3d.a` with `--check`, fetch the
    Windows archive, compile the package, run `smoke`, `unit`, `unit-checked`, the comment gate,
    the assertion survey, and the docs gate, package, build `scripts/consumer-smoke/` against the
    packed archive alone, and publish `b3.c3l` and its checksum.

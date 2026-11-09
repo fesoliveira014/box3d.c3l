@@ -78,7 +78,7 @@ nothing.
 | `linux-x64` | `linked-libs/linux-x64/libbox3d.a` | GCC | glibc; links `m` and `pthread` |
 | `windows-x64` | `linked-libs/windows-x64/box3d.lib` | MSVC | static (`"wincrt": "static"`) |
 
-- C3 0.8.3.
+- C3 0.8.5.
 - The release `b3.c3l` carries both archives. A clone builds only the host's, with
   `scripts/build-box3d.sh`; there is no cross-compilation.
 - Windows is the MSVC ABI only. c3c's `mingw-x64` target is a different ABI and is not shipped.

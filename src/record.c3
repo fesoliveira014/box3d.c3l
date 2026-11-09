@@ -3,8 +3,8 @@ module b3::record;
 <*
  The bytes recorded so far, empty until a session has written into it. The slice borrows box3d's
  buffer, which moves as it grows, so a recorded step invalidates every slice taken before it, as
- destroy() does. box3d's header calls the pointer null before the first write; it is not, and the
- count is what says a recording is empty.
+ destroy_recording() does. box3d's header calls the pointer null before the first write; it is not,
+ and the count is what says a recording is empty.
 *>
 fn char[] Recording.data(&self) {
     return recording_data_raw(self)[:recording_size_raw(self)];
@@ -38,9 +38,9 @@ fn void? save_recording_to_file(Recording* recording, ZString path) {
 }
 
 <*
- Reads back what save() wrote. box3d checks the file's magic here, so a file that is no recording
- is refused at the load rather than at create_player(), and every refusal is allocation-free. The
- caller owns the result and must destroy() it — see Recording.
+ Reads back what save_recording_to_file() wrote. box3d checks the file's magic here, so a file that
+ is no recording is refused at the load rather than at create_player(), and every refusal is
+ allocation-free. The caller owns the result and must destroy_recording() it — see Recording.
 
  @return `the recording`
  @return? b3::FILE_UNAVAILABLE : `the path could not be read, or carries no recording, which box3d

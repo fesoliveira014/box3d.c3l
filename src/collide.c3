@@ -1,6 +1,6 @@
 module b3;
 
-// box3d's own degeneracy threshold, 1000 * FLT_MIN, which C3 0.8.3 cannot spell. Mirrored rather
+// box3d's own degeneracy threshold, 1000 * FLT_MIN, which C3 has no constant for. Mirrored rather
 // than approximated because below it box3d hands back a zero plane normal, and a triangle with no
 // plane culls nothing and can answer with a NaN point.
 const float TRIANGLE_AREA_FLOOR @private = 1.17549435e-35f;

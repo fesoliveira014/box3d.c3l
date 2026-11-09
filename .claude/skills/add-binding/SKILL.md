@@ -7,13 +7,13 @@ description: Bind a box3d C symbol into the b3 C3 module across the three layers
 
 Bind the requested box3d symbol(s) into the `b3` module. Input: `$ARGUMENTS` (a C symbol, a feature area, or a description). If empty, ask what to bind.
 
-Before writing any C3: invoke the `c3-expert`, `c3-style`, and `c3-bindings` skills, and read `docs/style.md` and `CLAUDE.md`. Those are the source of truth and override anything here.
+Before writing any C3: invoke the `c3-expert`, `c3-style`, and `c3-bindings` skills, and read `AGENTS.md`, `docs/contributing/bindings.md` and `docs/contributing/style.md`. Those are the source of truth and override anything here.
 
 ## 1. Read the real signature — never bind from memory
 
 The box3d C headers are the only source of truth. A transcribed parameter or return type that is wrong corrupts memory silently across the ABI — the worst and hardest-to-find binding bug.
 
-- Headers live in the box3d submodule under `include/box3d/`. If the submodule is not checked out, run `git submodule update --init` (or ask the user where box3d is) rather than guessing.
+- Read headers from `build/box3d-src/include/box3d/`, the patched copy `scripts/build-box3d.sh` builds from; the submodule under `vendor/box3d/include/box3d/` lacks whatever `patches/series` adds. If neither exists, run `git submodule update --init && ./scripts/build-box3d.sh` (or ask the user where box3d is) rather than guessing.
 - Grep for the specific symbol; do not read whole headers:
   - function → `grep -rnA6 'b3CreateWorld' include/box3d/`
   - ID / struct / enum → `grep -rnA25 'typedef struct b3WorldDef' include/box3d/`
@@ -38,9 +38,9 @@ The box3d C headers are the only source of truth. A transcribed parameter or ret
 - **Structs C3 reads** are declared in full, field for field, in header order.
 - **Constants / enum values** → `SCREAMING_SNAKE_CASE`, prefix stripped. A closed C set becomes a C3 `enum`; a flag-bits set becomes a `bitstruct X : uint { bool field : 0; ... }`.
 - Keep the extern layer faithful to C: raw return types, raw out-parameters, no interpretation. No `@builtin` on any declaration.
-- File order per `docs/style.md`: typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions — except within a `src/<area>.c3i`, where `CLAUDE.md`'s carve-out applies instead: declarations are grouped by area, not by declaration kind.
+- File order per `docs/contributing/style.md`: typedefs → aliases → constants → enums/bitstructs → structs → struct methods → free functions — except within a `src/<area>.c3i`, where the carve-out in `docs/contributing/bindings.md` applies instead: declarations are grouped by area, not by declaration kind.
 
-- **Which file, and which module.** The symbol goes in the pair for its area — `b3Body_*` in `src/body.c3i` + `src/body.c3`, and a genuinely new area gets a new pair, following `src/world.*`. Where an extern has no wrapper, it goes with the type it is a method on. Almost every file is `module b3;`; the two exceptions are `src/draw.*` (`module b3::draw;`) and `src/record.*` (`module b3::record;`), and a new symbol joins one of those only if it is part of debug draw or of recording and replay. **Do not create a third submodule** — `CLAUDE.md` records why the rest of the API is flat. Inside a submodule, a fault named in a `@return?` must be written `b3::NAME`; the compiler enforces it.
+- **Which file, and which module.** The symbol goes in the pair for its area — `b3Body_*` in `src/body.c3i` + `src/body.c3`, and a genuinely new area gets a new pair, following `src/world.*`. Where an extern has no wrapper, it goes with the type it is a method on. Almost every file is `module b3;`; the two exceptions are `src/draw.*` (`module b3::draw;`) and `src/record.*` (`module b3::record;`), and a new symbol joins one of those only if it is part of debug draw or of recording and replay. **Do not create a third submodule** — `docs/contributing/bindings.md` records why the rest of the API is flat. Inside a submodule, a fault named in a `@return?` must be written `b3::NAME`; the compiler enforces it.
 
 ## 3. Pin every declared struct's layout
 
@@ -63,7 +63,7 @@ wrapper must not leak C's error conventions:
 - Fallible operations return an optional (`?`) with a named fault. **Never** return null-as-error, a sentinel, or a raw status code.
 - An invalid or zero ID coming back from C becomes a fault, not a value the caller has to test. Route it through that type's `.checked()` macro in `src/check.c3` (add one, following `WorldId.checked()`/`BodyId.checked()`, if the type doesn't have one yet); add a new `faultdef` there (one fault per line) when no existing one fits.
 - Out-parameters become return values. A `pointer + count` pair becomes a slice.
-- Ownership follows `docs/style.md` §6 without exception: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup. `create_body(world, def)` and `destroy_world(world)` are free functions like every other routine — the carve-outs that used to make them methods are gone.
+- Ownership follows `docs/contributing/style.md` §6 without exception: `create_x`/`destroy_x` free functions, `defer catch destroy` for failure-only cleanup. `create_body(world, def)` and `destroy_world(world)` are free functions like every other routine.
 
 Struct initializers use `.field = value` for every supplied field; calls with ≥4 arguments use named arguments, one per line, trailing comma.
 
@@ -77,6 +77,10 @@ c3c compile-only --no-obj src/*.c3i src/*.c3
 
 Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.5_1 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.
 
-## 6. Scope and report
+## 6. Document it
+
+Add the symbol to the owning page under `docs/api/` (the symbol map in `docs/api/index.md` names the page for each area) and to that page's entry in the symbol map. Compile any snippet you add against the library. `./scripts/check-docs.sh` must pass.
+
+## 7. Scope and report
 
 Bind only what was asked plus the types those signatures need to compile. box3d is large; do not mirror it wholesale. When done, report: which symbols you added, which structs you declared and the `$assert` sizes you pinned (and how you obtained them), which faults you added, and anything in the header you could not resolve.

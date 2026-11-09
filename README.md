@@ -1,37 +1,59 @@
 # box3d.c3l
 
-C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rigid body physics
+C3 bindings for [box3d](https://github.com/erincatto/box3d), Erin Catto's 3D rigid-body physics
 library written in C17.
 
-Status: box3d's exported surface is bound — 575 of the 580 `B3_API` functions across its headers.
-Worlds and bodies, every shape kind — sphere, capsule, convex hull, mesh, height field and baked
-compound — the world's event arrays with the pre-solve and custom-filter callbacks, the ray casts,
-shape casts, overlap queries and contact data, all nine joint types, the dynamic tree and its two
-traversals, the character mover and explosions, the world's two contact callbacks, the math and
-validity singles, the standalone geometry, distance and manifold functions that answer about shapes
-with no world in play, debug draw, and the recording and replay surface with the file and buffer
-round trips that ride with it.
+The module is `b3`. It binds box3d's exported C API and wraps it in idiomatic C3: optionals with
+named faults instead of null identifiers and status codes, slices instead of count-and-pointer
+pairs, and box3d's vectors and matrices as the C3 standard library's own math types.
 
-The other five are left out on purpose, and the reason is not the same one twice:
+```c3
+import b3;
 
-- `b3World_DumpShapeBounds` is declared in `box3d.h` and defined nowhere, so a call could not link.
-- `b3InternalAssert` is box3d's own assertion hook, declared and defined behind the same
-  `NDEBUG` guard, so it is absent from the Release build this package ships.
-- `b3DynamicTree_Validate` and `b3DynamicTree_ValidateNoEnlarged` have bodies that compile to
-  nothing unless box3d is built with validation on, which this package does not do. A bound call
-  that cannot validate is worse than no call at all.
-- `b3DynamicTree_GetProxyCount` reads the `proxy_count` field the binding already exposes, and a C3
-  method may not share a name with one of its struct's fields. Read the field.
+fn void? simulate() {
+    b3::require_float_abi()!;
+    b3::WorldDef def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&def)!;
+    defer b3::destroy_world(world);
+    for (int i = 0; i < 60; i++) b3::world_step(world, 1.0f / 60.0f, 4);
+}
+```
 
-Rather than trust the paragraph above, derive it — and intersect three sets, not two, because a
-header declaration is not evidence the symbol was built. Every bound symbol is a `@cname` in
-`src/*.c3i`, every declared one a `B3_API` in `vendor/box3d/include/box3d/*.h`, and every one that
-exists a `T` in `nm -g --defined-only linked-libs/linux-x64/libbox3d.a`.
+## Highlights
 
-## Using it
+- Worlds, bodies, and every shape kind: sphere, capsule, convex hull, mesh, height field, and baked
+  compound.
+- All nine joint types.
+- Ray casts, shape casts, overlap queries, and contact data.
+- Body, contact, sensor, and joint event arrays; pre-solve, custom-filter, friction, and
+  restitution callbacks.
+- The dynamic tree, the character mover, and explosions.
+- Standalone geometry, distance, and manifold functions that need no world.
+- Debug draw (`b3::draw`) and recording and replay (`b3::record`).
+- Constructors that refuse a definition not obtained from its `default_*_def()`, which box3d's
+  Release build would accept silently.
 
-Download `b3-v<version>-<platform>.c3l` (`linux-x64` or `windows-x64`) from a release, drop it into the directory your project searches for libraries,
-and name `b3` as a dependency:
+## Requirements and status
+
+C3 **0.8.5_1**. Targets `linux-x64` (GCC, glibc 2.35 or newer) and `windows-x64` (MSVC, static
+CRT). Each release archive carries a prebuilt box3d for its target, so consumers need neither CMake
+nor a C compiler. box3d is pinned in `manifest.json` and built with the patches in
+`patches/series`; see [NOTICE](NOTICE).
+
+Pre-1.0. See [features and limitations](docs/features_and_limitations.md) for what is and is not
+bound.
+
+## Start here
+
+- [Getting started](docs/getting_started.md): install, then a falling body and its contact events.
+- [Documentation](docs/index.md): architecture, recipes, and API reference.
+- [Public API](docs/api/index.md): conventions, faults, and every symbol by domain.
+
+## Install
+
+Download `b3-v<version>-linux-x64.c3l` or `b3-v<version>-windows-x64.c3l` from the
+[latest release](https://github.com/fesoliveira014/box3d.c3l/releases/latest), put it in a directory
+your project searches for libraries, and name `b3` as a dependency:
 
 ```json
 {
@@ -40,94 +62,18 @@ and name `b3` as a dependency:
 }
 ```
 
-That file is a packed `.c3l` — a zip c3c reads as it stands — and it carries the sources and a
-prebuilt `libbox3d.a`, so a consumer needs neither this repository nor CMake. Do not unzip or
-rename it. Building from a clone works too; see "Building the native library" below.
+The file is a packed `.c3l` that c3c reads as it stands and resolves by its `provides` name, `b3`.
+Do not unzip it. On Windows, the project must also set `"wincrt": "static"`.
 
-The module is `b3`, after the manifest's `provides` name — not the directory name `box3d.c3l`. The
-module takes the C library's own symbol prefix, so `b3CreateWorld` in C reads as `b3::create_world`
-in C3.
+To build from a clone instead, see [getting started](docs/getting_started.md#install).
 
-Two optional subsystems carry a namespace of their own, and `import b3;` reaches both because it
-imports submodules recursively: debug draw is `b3::draw` (`draw::DebugDraw`,
-`draw::default_debug_draw()`, `world.draw()`) and recording and replay is `b3::record`
-(`record::Recording`, `record::Player`, `world.start_recording()`). The faults stay in `b3`
-whichever module returns them — a `b3::record` call refuses with `b3::NOT_A_RECORDING`.
+## Contributing
 
-The per-type `.checked()` macros (`WorldId.checked()`, `BodyId.checked()`, …) turn a null
-identifier into a named fault instead of undefined behavior; a caller opts in by routing an
-identifier through one explicitly. The `BOX3D_CHECKED` feature does not gate them — it only flips
-what `checked_access()` reports, for callers that want to branch on whether the build asked for
-checking:
-
-```json
-{ "features": [ "BOX3D_CHECKED" ] }
-```
-
-## Building the native library
-
-box3d itself is a submodule and is not committed as a binary. Build it once:
-
-```sh
-git submodule update --init
-./scripts/build-box3d.sh
-```
-
-The library is box3d with the patches listed in `patches/series` applied: the script copies the pinned
-commit to `build/box3d-src/`, applies the series there and builds that copy, so the submodule itself
-stays exactly the upstream commit and a patch that no longer applies fails the build. The one patch
-today, `0001-height-field-apron.patch`, adds `HeightFieldDef.apron_sides`.
-
-That produces the archive for whichever platform you are on — `linked-libs/linux-x64/libbox3d.a`
-under Linux, `linked-libs/windows-x64/box3d.lib` under a Windows shell, where the same script
-drives MSVC. There is no cross-compilation; the release workflow builds each target on its own
-runner. `--check` verifies that no bound struct layout has drifted from `scripts/abi-sizes.txt`;
-`--update` re-records them and is Linux-only, because that file is shared by both targets.
-
-It is shared because the layouts are identical: probed against the real headers under both MSVC and
-GCC, all 111 pinned types agree on size, alignment and every field offset. `--check` on either
-platform is therefore a real gate on the other's pins.
-
-## Cutting a release
-
-```sh
-./scripts/package-release.sh 0.1.0
-```
-
-writes `dist/b3-v0.1.0-linux-x64.c3l`, `dist/b3-v0.1.0-windows-x64.c3l` and `dist/SHA256SUMS`. Pushing a
-`v*` tag runs the same thing under `.github/workflows/release.yml`, which builds box3d, checks the layout pins, compiles the package,
-runs both test targets and the comment audit, builds a consumer against the Linux artifact it just made,
-and publishes both artifacts and `SHA256SUMS`. A pull request or manual run does the same with version
-`0.0.0-dev` and uploads the artifacts without publishing.
-
-## Conventions
-
-The `b3` prefix is the module name and never appears inside an identifier — `b3::create_world`, not
-`b3CreateWorld`. Functions are `snake_case`, types `PascalCase`.
-
-The C symbol decides whether a binding is a method or a free function. A symbol that reads or writes
-a property is a method on its type — `b3World_GetGravity` is `world.gravity()`, `b3World_SetGravity`
-is `world.set_gravity(v)`, `b3Body_IsAwake` is `body.is_awake()`, `b3Body_ComputeAABB` is
-`body.compute_aabb()`. Everything else is a free function taking the receiver first, named from the C
-symbol with nothing reordered: `b3World_Step` is `world_step(world, dt, sub)`, `b3Body_ApplyForce` is
-`body_apply_force(body, …)`, `b3RayCastSphere` is `ray_cast_sphere(&sphere, input)`, `b3DestroyWorld`
-is `destroy_world(world)`.
-
-Operations that can fail return an optional with a named fault; no wrapper returns a null handle or a
-sentinel. `create_world`, `create_body` and the seven shape constructors
-(`create_sphere_shape` and friends) in particular validate that their definition came from the
-matching `default_*_def()` before calling into box3d — a behaviour they have that calling C directly
-does not, since a release build of box3d compiles out its own check for this and would otherwise
-construct silently with a garbage definition.
-
-box3d's vectors, quaternions and matrices all map onto the C3 standard library's own types, so the
-usual operators and methods work directly on values that cross the ABI: `Matrix3` is `Matrix3f`,
-which matches `b3Matrix3` byte for byte and shares its convention — column-major storage, `m * v`
-reading the columns `b3MulMV` reads. `m01` is row 0 of column 1, the transpose of the order the C
-field names `cx`, `cy`, `cz` read in, so a caller filling a matrix from rows still transposes it
-silently; `a_quaternion_from_a_matrix_reads_columns_and_not_rows` is the test that says so.
+[AGENTS.md](AGENTS.md) holds the contributor rules. Details are in
+[docs/contributing/](docs/contributing/bindings.md): binding conventions, docstrings, testing, and
+releasing.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). box3d is also MIT; see [NOTICE](NOTICE) and
+MIT; see [LICENSE](LICENSE). box3d is also MIT; see [NOTICE](NOTICE) and
 [LICENSE.box3d.mit](LICENSE.box3d.mit).

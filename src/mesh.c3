@@ -6,11 +6,11 @@ const char HEIGHT_FIELD_APRON_SIDES @private = HEIGHT_FIELD_APRON_NEGATIVE_X | H
 <*
  Builds a flat grid of triangles in the x-z plane, x_count by z_count cells around the origin.
 
- The caller owns the mesh and must destroy() it; byte_count() carries it until then, as for every
- mesh constructor below. A refusal leaks — box3d frees back only part of what it cloned — so a
- test must not reach one. The count guard covers something worse: box3d turns a large negative
- count into a large positive vertex count and charges the allocation without giving it back,
- measured 36 MB at -1000.
+ The caller owns the mesh and must destroy_mesh() it; byte_count() carries it until then, as for
+ every mesh constructor below. A refusal leaks — box3d frees back only part of what it cloned — so a
+ test must not reach one. The count guard covers something worse: box3d turns a large negative count
+ into a large positive vertex count and charges the allocation without giving it back, measured
+ 36 MB at -1000.
 
  @param material_count : `how many distinct material indices to spread over the triangles`
  @param identify_edges : `compute the shared-edge adjacency the solver uses to hide inner edges`
@@ -151,10 +151,10 @@ fn MeshData*? create_mesh(MeshDef* def) {
  Builds a flat height field of row_count by column_count grid points, sampled at the origin corner
  and running along positive x and z.
 
- The caller owns the field and must destroy() it; byte_count() carries the allocation until then,
- and no height field constructor touches a world. box3d itself never refuses: its check that a
- grid holds at least four points is an assertion this release build compiles out, and the count
- guard below restores it, negative counts that multiply to a positive product included.
+ The caller owns the field and must destroy_height_field() it; byte_count() carries the allocation
+ until then, and no height field constructor touches a world. box3d itself never refuses: its check
+ that a grid holds at least four points is an assertion this release build compiles out, and the
+ count guard below restores it, negative counts that multiply to a positive product included.
 
  @param scale : `how far apart the grid points sit in x and z, and what the heights are multiplied
    by in y`

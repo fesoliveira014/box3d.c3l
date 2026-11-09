@@ -3,9 +3,9 @@ module b3;
 <*
  The contacts that began touching during the last step.
 
- The array belongs to the world and the next step() overwrites it, so anything that must outlive
- the step is copied out; destroying the world frees it outright. A shape reports contact events
- only if its definition asked for them, and enabling them on one of the two shapes is enough.
+ The array belongs to the world and the next world_step() overwrites it, so anything that must
+ outlive the step is copied out; destroying the world frees it outright. A shape reports contact
+ events only if its definition asked for them, and enabling them on one of the two shapes is enough.
 *>
 fn ContactBeginTouchEvent[] WorldId.contact_begin_touch_events(self) {
     ContactEvents events = contact_events_raw(self);

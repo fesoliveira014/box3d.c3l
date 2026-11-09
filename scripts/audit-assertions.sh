@@ -1,11 +1,11 @@
 #!/bin/sh
 # Surveys bound declarations whose C body asserts the validity of an argument -- an assertion this
 # release build compiles out, so a bad value is accepted in silence -- and whose docstring says
-# nothing about it. CLAUDE.md names a compiled-out assertion as the first contract that earns a
-# docstring its length, so this is the line that must never be the one a trim cuts.
+# nothing about it. docs/contributing/docstrings.md names a compiled-out assertion as the first
+# contract that earns a docstring its length, so this is the line a trim must never cut.
 #
-# This is a survey, not a gate: the list is a standing backlog recorded in .dev/notes.md, and it is
-# long because it predates the rule. What it must never do is GROW.
+# This is a survey, not a gate: the list is a standing backlog, and it is long because it predates
+# the rule. What it must never do is GROW.
 #
 # The predicate list below is the whole of what this survey can see, so a family missing from it is
 # a blind spot rather than a clean result. Position and the two transform predicates were absent

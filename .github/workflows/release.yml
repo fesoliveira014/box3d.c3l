@@ -98,6 +98,9 @@ jobs:
       - name: Assertion survey
         run: ./scripts/audit-assertions.sh
 
+      - name: Docs gate
+        run: ./scripts/check-docs.sh
+
       - name: Package
         run: ./scripts/package-release.sh "${RELEASE_VERSION#v}"
 

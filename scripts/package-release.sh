@@ -3,9 +3,10 @@
 # manifest.json. The names are b3-v<version>-<platform>.c3l; c3c resolves a library by the
 # manifest's `provides`, not by file name.
 #
-# What ships is what a consumer compiles and links against, and nothing else: the sources, the
-# static library of that platform, the licences and a consumer README. Not the vendored
-# submodule, not the build and audit scripts, not the test project.
+# What ships is what a consumer compiles, links and reads, and nothing else: the sources, the
+# static library of that platform, the licences, a consumer README and the consumer docs. Not the
+# vendored submodule, not the build and audit scripts, not the test project, not
+# docs/contributing/.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -61,6 +62,8 @@ pack_platform() {
     cp "$ROOT"/src/*.c3 "$ROOT"/src/*.c3i "$stage/src/"
     cp "$library" "$stage/linked-libs/$platform/"
     cp "$ROOT/LICENSE" "$ROOT/LICENSE.box3d.mit" "$ROOT/NOTICE" "$stage/"
+    cp -r "$ROOT/docs" "$stage/docs"
+    rm -rf "$stage/docs/contributing"
 
     sed -e "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" \
         -e "s/\"box3d-commit\": \"[^\"]*\"/\"box3d-commit\": \"$BOX3D_COMMIT\"/" \

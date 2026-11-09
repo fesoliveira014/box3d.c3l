@@ -5,7 +5,7 @@ description: Compile-check the b3 C3 binding bundle and build the test/ consumer
 
 # Verify the box3d bindings
 
-This package has no `project.json` and no standalone build, so verification is four steps: compile-check the binding package, build the consumer's `smoke` target, run the consumer's `unit` and `unit-checked` test targets, then check the ABI pins.
+This package has no `project.json` and no standalone build, so verification is five steps: compile-check the binding package, build the consumer's `smoke` target, run the consumer's `unit` and `unit-checked` test targets, check the ABI pins, then check the docs.
 
 ## 1. Compile-check the binding package
 
@@ -50,6 +50,15 @@ cd /home/fesol/source/repos/box3d.c3l
 
 This rebuilds box3d and compares every type (and pinned field, where listed) in `scripts/abi-types.txt` against `scripts/abi-sizes.txt`. A drift here means the `$assert` pins in `src/layout.c3` are wrong and calls will corrupt memory. Do not paper over it with `--update` unless the binding is being updated to match in the same change.
 
-## 5. Report honestly
+## 5. Check the docs
 
-State exactly which steps ran and which passed. Quote the shortest decisive compiler error line for any failure. If a step was skipped — no `test/`, empty `linked-libs/`, `c3c` not matching the 0.8.3 target this repo declares — say which step and why. Do not claim the bindings are verified when only step 1 ran.
+```sh
+cd /home/fesol/source/repos/box3d.c3l
+./scripts/check-docs.sh
+```
+
+Fails when a public symbol declared in `src/` is missing from the symbol map in `docs/api/index.md`, or when a relative link in `README.md` or `docs/` does not resolve. A new binding is not done until its owning page under `docs/api/` mentions it and the symbol map lists it.
+
+## 6. Report honestly
+
+State exactly which steps ran and which passed. Quote the shortest decisive compiler error line for any failure. If a step was skipped — no `test/`, empty `linked-libs/`, `c3c` not matching the 0.8.5_1 target this repo declares — say which step and why. Do not claim the bindings are verified when only step 1 ran.

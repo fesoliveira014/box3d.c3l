@@ -46,9 +46,9 @@ struct TreeNode {
  allocated, so a copy leaves two structs sharing one pool and only one may be destroyed. Pass it
  on as &tree; the pool moves every node as it grows, so nodes is not a pointer to hold on to.
 
- A compound's tree is neither the caller's to destroy nor to modify: destroy() frees into the
- middle of the compound, and its free list points at live geometry, so create_proxy() overwrites
- a child and hides it from every query with nothing reporting the loss.
+ A compound's tree is neither the caller's to destroy nor to modify: destroying it frees into
+ the middle of the compound, and its free list points at live geometry, so creating a proxy
+ overwrites a child and hides it from every query with nothing reporting the loss.
 *>
 struct DynamicTree {
     ulong version;
@@ -68,9 +68,9 @@ struct DynamicTree {
 <*
  Builds an empty tree and the node pool it inserts into.
 
- proxy_capacity is a starting size and never a ceiling: box3d raises anything below 16 — a
- negative argument included — to 16, so every argument from 16 down builds the same tree, and the
- pool grows past it as needed. The tree comes back by value and the caller owns it: destroy() it
+ proxy_capacity is a starting size and never a ceiling: box3d raises anything below 16 — a negative
+ argument included — to 16, so every argument from 16 down builds the same tree, and the pool grows
+ past it as needed. The tree comes back by value and the caller owns it: dynamic_tree_destroy() it
  exactly once, and see DynamicTree for what a copy means. The 80-byte struct is the caller's own
  storage; the node pool is on byte_count(), as a world or a mesh is.
 *>
@@ -82,8 +82,8 @@ extern fn DynamicTree dynamic_tree_create(int proxy_capacity) @cname("b3DynamicT
  DynamicTree, which also covers the tree a compound owns.
 
  The zero it leaves is not the empty-tree state — box3d marks an empty root with -1, so height(),
- area_ratio() and root_bounds() read a freed pool afterwards and crash. Everything else here is
- safe on it: the rest test the node count, which the zeroing sets to 0.
+ area_ratio() and root_bounds() read a freed pool afterwards and crash, and creating a proxy
+ writes through the null pool, its zeroed free list not being -1. The rest test the node count.
 *>
 extern fn void dynamic_tree_destroy(DynamicTree* tree) @cname("b3DynamicTree_Destroy");
 
@@ -237,8 +237,8 @@ alias TreeBoxCastFn = fn float(BoxCastInput* input, int proxy_id, ulong user_dat
 <*
  Reports the proxies whose box the ray crosses, calling fcn once for each. This is the broad phase
  alone — a proxy is offered because the ray met its box, and the exact cast against whatever that
- box holds is the callback's work. query() gives the mask flags and the traversal stack's limit,
- which apply here too, and TreeRayCastFn gives what fcn's return does.
+ box holds is the callback's work. dynamic_tree_query() gives the mask flags and the traversal
+ stack's limit, which apply here too, and TreeRayCastFn gives what fcn's return does.
 *>
 extern fn TreeStats dynamic_tree_ray_cast(DynamicTree* tree,
   RayCastInput* input,
@@ -250,8 +250,8 @@ extern fn TreeStats dynamic_tree_ray_cast(DynamicTree* tree,
 
 <*
  Sweeps the input's box along its translation and reports the proxies it reaches, on the terms
- ray_cast() states and with TreeBoxCastFn in place of TreeRayCastFn. See BoxCastInput for what
- box3d sweeps, which is not the box itself.
+ dynamic_tree_ray_cast() states and with TreeBoxCastFn in place of TreeRayCastFn. See BoxCastInput
+ for what box3d sweeps, which is not the box itself.
 *>
 extern fn TreeStats dynamic_tree_box_cast(DynamicTree* tree,
   BoxCastInput* input,

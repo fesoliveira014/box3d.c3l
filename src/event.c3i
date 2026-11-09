@@ -130,11 +130,11 @@ extern fn JointEvents joint_events_raw(WorldId world_id) @cname("b3World_GetJoin
 extern fn bool JointId.is_valid(self) @cname("b3Joint_IsValid");
 
 <*
- Called for each contact point between two shapes, at least one of which asked for pre-solve
- events, before the solver runs. Returning false discards the contact for that step, so the two
- shapes pass through each other. box3d may call this from a worker thread, and the world must not
- be modified from inside it. The context pointer is stored in the world and dereferenced on every
- call, so it must outlive the world.
+ Called once per contact update, with the first point of the first manifold, for shapes at least
+ one of which asked for pre-solve events, before the solver runs. Returning false discards the
+ contact for that step, so the shapes pass through each other. box3d may call this from a worker
+ thread, and the world must not be modified from inside it. The context pointer is stored in the
+ world and dereferenced on every call, so it must outlive the world.
 *>
 alias PreSolveFn = fn bool(ShapeId shape_id_a, ShapeId shape_id_b, Pos point, Vec3 normal, void* context);
 

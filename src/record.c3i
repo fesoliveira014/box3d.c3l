@@ -4,8 +4,8 @@ import b3::draw;
 
 <*
  A buffer of recorded world mutations: what a world writes between world_start_recording() and
- world_stop_recording(), and what create_player() and validate_replay() replay from. The caller
- owns it and must destroy() it exactly once; byte_count() carries it until then — 64 KiB at the
+ world_stop_recording(), and what create_player() and validate_replay() replay from. The caller owns
+ it and must destroy_recording() it exactly once; byte_count() carries it until then — 64 KiB at the
  default capacity — so a recording never destroyed shifts that count as a leaked world does.
 *>
 typedef Recording = void;
@@ -13,7 +13,8 @@ typedef Recording = void;
 <*
  Creates a recording buffer. box3d takes 64 KiB when byte_capacity is zero or below, and grows the
  buffer on demand from wherever it starts, so the capacity is a starting size and not a bound.
- Nothing here is fallible — box3d has no refusal path. The caller owns it, and must destroy() it.
+ Nothing here is fallible — box3d has no refusal path. The caller owns it, and must
+ destroy_recording() it.
 *>
 extern fn Recording* create_recording(int byte_capacity) @cname("b3CreateRecording");
 

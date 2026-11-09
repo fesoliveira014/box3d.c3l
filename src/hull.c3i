@@ -35,9 +35,9 @@ struct HullFace {
  offsets it carries, so a bare HullData must never be copied — only a BoxHull, which embeds
  one together with its storage, copies correctly.
 
- create_hull() and its siblings in src/hull.c3 allocate one the caller owns and must destroy()
+ create_hull() and its siblings in src/hull.c3 allocate one the caller owns and must destroy_hull()
  exactly once; byte_count() carries it until then. A BoxHull owns its storage instead, so calling
- destroy() on its base frees a pointer box3d never allocated.
+ destroy_hull() on its base frees a pointer box3d never allocated.
 *>
 struct HullData {
     ulong version;
@@ -134,6 +134,6 @@ extern fn MassData HullData.compute_mass_data(&self, float density) @cname("b3Co
  widens it by the absolute of the rotation matrix, which is exact only where the rotation carries
  the coordinate axes onto coordinate axes — a quarter turn about one of them, but a half turn
  about a face diagonal and a third turn about a body diagonal too. Anything else, an eighth turn
- included, answers wider. clone_and_transform() bakes the rotation in and its aabb is tight.
+ included, answers wider. clone_and_transform_hull() bakes the rotation in and its aabb is tight.
 *>
 extern fn Aabb HullData.compute_aabb(&self, Transform transform) @cname("b3ComputeHullAABB");

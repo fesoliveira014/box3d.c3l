@@ -98,9 +98,9 @@ fn Capsule? ShapeId.capsule(self) {
 
 <*
  The hull belongs to the world, which reference-counts a clone of whatever built the shape, and
- stays valid until the shape is destroyed or given other geometry. Calling destroy() on it takes
- the world's copy out from under every shape sharing it, and the next step or world teardown reads
- freed memory.
+ stays valid until the shape is destroyed or given other geometry. Calling destroy_hull() on it
+ takes the world's copy out from under every shape sharing it, and the next step or world teardown
+ reads freed memory.
 
  @return `the hull`
  @return? WRONG_SHAPE_TYPE : `this shape is not a hull`
@@ -112,7 +112,7 @@ fn HullData*? ShapeId.hull(self) {
 
 <*
  The mesh belongs to the caller rather than to the world: data is the very pointer
- create_mesh_shape(BodyId) or set_mesh() was handed, and it must still outlive this shape.
+ create_mesh_shape() or set_mesh() was handed, and it must still outlive this shape.
 
  @return `the mesh and the scale it is read through`
  @return? WRONG_SHAPE_TYPE : `this shape is not a mesh`
@@ -138,10 +138,10 @@ fn HeightFieldData*? ShapeId.height_field(self) {
  Gives this shape a mesh, replacing whatever geometry it had and making its type MESH — there is
  no type guard, unlike on mesh(), because changing the type is what the call is for.
 
- The shape borrows the new mesh as create_mesh_shape(BodyId) does, and box3d drops the old
- pointer without freeing it, so a caller replacing a mesh is left holding two and owes destroy()
- on both. The body's mass is not recomputed until body_apply_mass_from_shapes(BodyId), and a mesh
- contributes none. Silently does nothing while the world is locked, mid world_step.
+ The shape borrows the new mesh as create_mesh_shape() does, and box3d drops the old pointer without
+ freeing it, so a caller replacing a mesh is left holding two and owes destroy_mesh() on both. The
+ body's mass is not recomputed until body_apply_mass_from_shapes(BodyId), and a mesh contributes
+ none. Silently does nothing while the world is locked, mid world_step.
 
  @param mesh : `the mesh, which must outlive the shape`
  @param scale : `how far the mesh's vertices are stretched along each axis, non-uniform or

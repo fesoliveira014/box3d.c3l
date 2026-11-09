@@ -15,7 +15,7 @@ struct OverlapCollector @private {
 
  The ray runs from origin to origin + translation, so the returned fraction multiplies
  translation, not a normalised direction. Initial overlap is ignored: a ray starting inside a
- shape does not report that shape. body_cast_ray(WorldId) with a callback is the general form.
+ shape does not report that shape. world_cast_ray() with a callback is the general form.
 
  @param filter : `obtained from default_query_filter(); an unmodified filter considers every shape`
  @return `the closest hit`
@@ -81,7 +81,7 @@ fn BodyCastResult? body_cast_ray(BodyId body,
  points are borrowed for the duration of the call and its count must not exceed
  MAX_SHAPE_CAST_POINTS. The reported fraction carries the closing slop world_cast_shape derives
  from the two radii, so an exact geometric expectation will not match. A max_fraction above 1 is
- refused for the reason cast_ray gives.
+ refused for the reason body_cast_ray gives.
 
  @param can_encroach : `allows the cast to start touching; takes effect only past two and three
    quarter linear slops of radius between the proxy and the shape`
@@ -156,7 +156,7 @@ fn CastHit[] world_cast_ray_all(WorldId world,
 <*
  Sweeps a convex proxy through the world and collects every shape it reaches into the caller's
  buffer. The proxy's points are borrowed for the call and its count must not exceed
- MAX_SHAPE_CAST_POINTS. Buffer behaviour matches cast_ray_all; reported fractions carry the
+ MAX_SHAPE_CAST_POINTS. Buffer behaviour matches world_cast_ray_all; reported fractions carry the
  closing slop world_cast_shape derives from the two radii.
 
  @return `the prefix of buffer that was filled`
@@ -180,7 +180,7 @@ fn CastHit[] world_cast_shape_all(WorldId world,
 
 <*
  Collects the shapes whose broad-phase bounds overlap the given box. This is the broad-phase test,
- so a reported shape may not truly intersect the box. Buffer behaviour matches cast_ray_all.
+ so a reported shape may not truly intersect the box. Buffer behaviour matches world_cast_ray_all.
 
  @return `the prefix of buffer that was filled`
 *>
@@ -196,7 +196,7 @@ fn ShapeId[] world_overlap_aabb_all(WorldId world, Aabb aabb, QueryFilter filter
 <*
  Collects the shapes that overlap a convex proxy placed at origin. The proxy's points are borrowed
  for the call and its count must not exceed MAX_SHAPE_CAST_POINTS. Buffer behaviour matches
- cast_ray_all, and a distant compound-shaped body is missed as it is in overlap_shape.
+ world_cast_ray_all, and a distant compound-shaped body is missed as it is in world_overlap_shape.
 
  @return `the prefix of buffer that was filled`
 *>
@@ -218,7 +218,7 @@ fn ShapeId[] world_overlap_shape_all(WorldId world,
 <*
  The contact manifolds behind this contact.
 
- The slice borrows box3d's own memory: the next step() recomputes it and destroying the world
+ The slice borrows box3d's own memory: the next world_step() recomputes it and destroying the world
  frees it, so anything that must outlive either is copied out. The durable handle is the contact
  id, which fetches the geometry again through ContactId.data().
 *>

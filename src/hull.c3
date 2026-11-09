@@ -1,7 +1,7 @@
 module b3;
 
 <*
- Builds the convex hull of a point set. The caller owns it and must destroy() it — see HullData.
+ Builds the convex hull of a point set. The caller owns it and destroys it — see HullData.
 
  box3d silently clamps max_vertex_count to between 4 and MAX_HULL_VERTICES, and refuses both a
  point set spanning no volume and a hull needing more vertices, faces or half edges than its own
@@ -47,7 +47,7 @@ fn HullData*? create_cylinder(float height, float radius, float y_offset, int si
 
 <*
  Builds a tessellated cone on the y axis, radius1 at y 0 and radius2 at y height. The caller owns
- it and must destroy() it — see HullData.
+ it and must destroy_hull() it — see HullData.
 
  box3d asserts a positive height, both radii, and between four and 32 slices, and compiles every
  one out here: three slices builds, and one radius of zero builds a true apex which reaches 64
@@ -70,7 +70,7 @@ fn HullData*? create_cone(float height, float radius1, float radius2, int slices
 
 <*
  Builds a ten-point hull scattered over a sphere of the given radius. The caller owns it and must
- destroy() it — see HullData.
+ destroy_hull() it — see HullData.
 
  box3d asserts nothing here at all. A negative radius negates every lattice point, so it builds
  the point reflection of the positive one — the same count, volume and area, with mirrored bounds.
@@ -84,12 +84,11 @@ fn HullData*? create_rock(float radius) {
 }
 
 <*
- Copies the hull into a second allocation the caller owns and must destroy() separately. The
+ Copies the hull into a second allocation the caller owns and must destroy_hull() separately. The
  original is untouched and byte_count() carries both.
 
  @return `the copy`
- @return? DEGENERATE_GEOMETRY : `box3d returned a null pointer, which a safe build cannot reach:
-   C3 traps the null receiver first`
+ @return? DEGENERATE_GEOMETRY : `hull is null or not a valid hull`
 *>
 fn HullData*? clone_hull(HullData* hull) {
     return checked_geometry(clone_hull_raw(hull), DEGENERATE_GEOMETRY);
@@ -97,7 +96,7 @@ fn HullData*? clone_hull(HullData* hull) {
 
 <*
  Copies the hull with the transform and scale baked into its points, so the copy's own aabb,
- volume, centre and inertia are the transformed ones. Ownership works as it does for clone().
+ volume, centre and inertia are the transformed ones. Ownership works as it does for clone_hull().
 
  A scale component is pushed away from zero to a minimum magnitude keeping its sign rather than
  refused, so a zero scale yields a very small hull instead of nothing; a negative one mirrors the

@@ -3,11 +3,11 @@ module b3;
 <*
  Bakes the definition's children — spheres, capsules, hulls and meshes — into one compound shape.
 
- The caller owns the compound and must destroy() it, as with MeshData; nothing in the definition
- has to outlive the call, because box3d clones every child. An empty definition builds a childless
- compound, owned like any other. box3d itself refuses only a definition naming MAX_CHILD_SHAPES
- children or more, and refuses before allocating; every other guard below restores a check it does
- not make at all: a null array segfaults, and a negative count hangs the allocator.
+ The caller owns the compound and must destroy_compound() it, as with MeshData; nothing in the
+ definition has to outlive the call, because box3d clones every child. An empty definition builds a
+ childless compound, owned like any other. box3d itself refuses only a definition naming
+ MAX_CHILD_SHAPES children or more, and refuses before allocating; every other guard below restores
+ a check it does not make at all: a null array segfaults, and a negative count hangs the allocator.
 
  @param [&in] def : `the children to bake`
  @return `the compound`
@@ -152,8 +152,8 @@ fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
 
 <*
  The compound's own bytes, ready to be written out, with the one address it holds nulled so they
- carry none. They are neither a copy nor a second allocation — destroy() is what frees them — and
- the nulling is not cosmetic: every query, cast and overlap against this compound walks that
+ carry none. They are neither a copy nor a second allocation — destroy_compound() is what frees them
+ — and the nulling is not cosmetic: every query, cast and overlap against this compound walks that
  pointer without testing it, so each one crashes until compound_from_bytes() is called over these
  very bytes. Called over a copy it repairs the copy and leaves this compound broken.
 *>
@@ -163,9 +163,9 @@ fn char[] convert_compound_to_bytes(CompoundData* compound) {
 
 <*
  Points a compound's tree back into the caller's own bytes and hands them back read as one. It
- allocates nothing and takes nothing over: the bytes stay the caller's, so destroy() is right only
- for a compound box3d allocated. box3d reads the header through the pointer before it checks any
- length, which is what the first guard is for.
+ allocates nothing and takes nothing over: the bytes stay the caller's, so destroy_compound() is
+ right only for a compound box3d allocated. box3d reads the header through the pointer before it
+ checks any length, which is what the first guard is for.
 
  @return `the compound`
  @return? BUFFER_TOO_SMALL : `the slice is shorter than a compound header`

@@ -121,7 +121,7 @@ extern fn Transform JointId.local_frame_b(self) @cname("b3Joint_GetLocalFrameB")
  This flag, not the joint's type, suppresses the collision, and only while one of the bodies is
  dynamic. Turning it on has them colliding from the next step; turning it off ends the collision
  at once and drops their contacts, and each dropped contact whose shapes asked for contact events
- pushes an end-touch event into the batch the next step() fills, not the one
+ pushes an end-touch event into the batch the next world_step() fills, not the one
  contact_end_touch_events() returns beforehand. Silently does nothing while the world is locked.
 *>
 extern fn void JointId.set_collide_connected(self, bool should_collide) @cname("b3Joint_SetCollideConnected");

@@ -2,11 +2,11 @@ module b3;
 
 <*
  The collision data behind a triangle mesh shape. box3d allocates it and the caller owns it: call
- destroy() exactly once, and hold the pointer until every shape built on it is gone. byte_count()
- carries the allocation, so a mesh never destroyed shifts that count for the rest of the process
- exactly as a leaked world does. The triangles, vertices and hierarchy hang off the end of that
- one allocation at byte offsets from its own address, so the mesh is opaque here and could not be
- copied anyway. Build one with create_grid_mesh() and its siblings in src/mesh.c3.
+ destroy_mesh() exactly once, and hold the pointer until every shape built on it is gone.
+ byte_count() carries the allocation, so a mesh never destroyed shifts that count for the rest of
+ the process exactly as a leaked world does. The triangles, vertices and hierarchy hang off the end
+ of that one allocation at byte offsets from its own address, so the mesh is opaque here and could
+ not be copied anyway. Build one with create_grid_mesh() and its siblings in src/mesh.c3.
 *>
 typedef MeshData = void;
 

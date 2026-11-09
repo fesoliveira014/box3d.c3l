@@ -17,9 +17,10 @@ fn int? dynamic_tree_create_proxy(DynamicTree* tree, Aabb aabb, ulong category_b
 }
 
 <*
- Removes the proxy and returns its slot to the free list, from which the next create_proxy() may
- hand it straight back out. box3d asserts the id and this build compiles the assertion out, so a
- repeated destroy would take one slot twice and give one node to two proxies.
+ Removes the proxy and returns its slot to the free list, from which the next
+ dynamic_tree_create_proxy() may hand it straight back out. box3d asserts the id and this build
+ compiles the assertion out, so a repeated destroy would take one slot twice and give one node to
+ two proxies.
 
  @return? check_proxy!
 *>
@@ -29,8 +30,8 @@ fn void? dynamic_tree_destroy_proxy(DynamicTree* tree, int proxy_id) {
 }
 
 <*
- Removes the proxy and reinserts it under a new box. box3d asserts both the id and the box here
- and this build compiles both out; create_proxy() names which boxes are refused and why.
+ Removes the proxy and reinserts it under a new box. box3d asserts both the id and the box here and
+ this build compiles both out; dynamic_tree_create_proxy() names which boxes are refused and why.
 
  @return? check_proxy!
  @return? INVALID_DEFINITION : `the box is inverted or not finite`
@@ -42,11 +43,11 @@ fn void? dynamic_tree_move_proxy(DynamicTree* tree, int proxy_id, Aabb aabb) {
 }
 
 <*
- Widens the proxy's box and every ancestor box that does not already contain it, and takes the
- same guards move_proxy() does. It widens on a strict comparison, so a box the proxy already
+ Widens the proxy's box and every ancestor box that does not already contain it, and takes the same
+ guards dynamic_tree_move_proxy() does. It widens on a strict comparison, so a box the proxy already
  contains changes no ancestor — and neither does a NaN one, unlike through the other two calls,
- though a later rebuild still spreads it. Any call marks every ancestor enlarged even when it
- moved no box, so the next partial rebuild() sorts them all.
+ though a later rebuild still spreads it. Any call marks every ancestor enlarged even when it moved
+ no box, so the next partial dynamic_tree_rebuild() sorts them all.
 
  @return? check_proxy!
  @return? INVALID_DEFINITION : `the box is inverted or not finite`
@@ -107,10 +108,10 @@ fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
 }
 
 <*
- Offers fcn each proxy the search bound still admits. The order is not a ranking: the tree
- measures distance to node boxes only, to prune and to order siblings, so a nearer proxy is
- routinely offered after a farther one. See TreeClosestFn for what fcn's return does, and query()
- for the mask flags and for the traversal stack's limit, which applies here too.
+ Offers fcn each proxy the search bound still admits. The order is not a ranking: the tree measures
+ distance to node boxes only, to prune and to order siblings, so a nearer proxy is routinely offered
+ after a farther one. See TreeClosestFn for what fcn's return does, and dynamic_tree_query() for the
+ mask flags and for the traversal stack's limit, which applies here too.
 
  @param search_bound : `the squared distance to search within; a large one reaches every proxy,
    and 0 admits none of them and reports no error`
@@ -136,11 +137,11 @@ fn ClosestSearch dynamic_tree_query_closest(DynamicTree* tree,
 }
 
 <*
- Reads back a tree save() wrote, multiplying every node box by scale as it goes. The caller owns
- it and must destroy() it exactly once. box3d zeroes the struct for a path it cannot open, an
- unknown version and a node array that falls short, but not for a file cut inside the header,
+ Reads back a tree dynamic_tree_save() wrote, multiplying every node box by scale as it goes. The
+ caller owns it and destroys it exactly once. box3d zeroes the struct for a path it cannot open,
+ an unknown version and a node array that falls short, but not for a file cut inside the header,
  where the bytes that arrived stand over zeroes. It allocates the nodes only after reading that
- header whole and save() writes a null in their place, so every refusal arrives with none.
+ header whole and the save writes a null in their place, so every refusal arrives with none.
 
  @param scale : `what each node box's bounds are multiplied by, 1 reproducing the saved tree`
  @return `the tree`

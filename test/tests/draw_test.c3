@@ -334,9 +334,9 @@ fn void the_default_draw_definition_carries_every_callback_and_no_flag() @test {
         "box3d fills all nine with empty bodies of its own");
     assert(zeroed.draw_shape_fcn == null && zeroed.draw_string_fcn == null,
         "where a definition the caller merely zeroed crashes on the first flag it raises");
-    assert(taken.force_scale > 0.99 && taken.force_scale < 1.01
-        && taken.joint_scale > 0.99 && taken.joint_scale < 1.01,
-        "both scales start at one");
+    assert(taken.force_scale > 0.00099 && taken.force_scale < 0.00101,
+        "the force scale starts at a thousandth");
+    assert(taken.joint_scale > 0.99 && taken.joint_scale < 1.01, "and the joint scale at one");
     assert(taken.drawing_bounds.lower_bound.x < -99.0 * unit && taken.drawing_bounds.lower_bound.x > -101.0 * unit
         && taken.drawing_bounds.upper_bound.y > 99.0 * unit && taken.drawing_bounds.upper_bound.y < 101.0 * unit,
         "and the culling box reaches a hundred length units either side of the origin");

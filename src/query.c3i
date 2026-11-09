@@ -101,10 +101,10 @@ struct ManifoldPoint {
     Vec3 anchor_a;
     Vec3 anchor_b;
     float separation;
-    float base_separation;
     float normal_impulse;
     float total_normal_impulse;
     float normal_velocity;
+    float base_separation;
     uint feature_id;
     int triangle_index;
     bool persisted;
@@ -196,8 +196,7 @@ extern fn BodyCastResult body_cast_shape_raw(
 ) @cname("b3Body_CastShape") @private;
 
 <*
- True when any shape on this body overlaps the proxy placed at origin. A compound shape on a body
- far from origin is missed without a signal — see overlap_compound for why.
+ True when any shape on this body overlaps the proxy placed at origin.
 *>
 extern fn bool body_overlap_shape(BodyId body,
   Pos origin,
@@ -284,9 +283,6 @@ extern fn TreeStats world_overlap_aabb(WorldId world,
 <*
  Calls fcn once per shape overlapping a convex proxy placed at origin. The proxy's points are
  borrowed for the duration of the call and its count must not exceed MAX_SHAPE_CAST_POINTS.
-
- A compound-shaped body far from origin is missed without a signal: box3d culls the compound's
- own tree with a box it never carried into the compound's frame — see overlap_compound.
 *>
 extern fn TreeStats world_overlap_shape(WorldId world,
   Pos origin,

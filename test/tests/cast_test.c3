@@ -453,9 +453,9 @@ fn void a_valid_ray_can_still_be_one_no_cast_can_use() @test {
 }
 
 struct CastAllocation {
-    int baseline;
-    int before;
-    int after;
+    long baseline;
+    long before;
+    long after;
     bool cast_ran;
 }
 
@@ -463,7 +463,7 @@ struct CastAllocation {
 // all sit on the same count and a leak in any of them is indistinguishable from a leak in the
 // others. Every destroy sits on the line after its build for the same reason.
 fn CastAllocation the_byte_count_around_every_ray_cast() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* grid = b3::create_grid_mesh(
       x_count: 4,
@@ -499,7 +499,7 @@ fn CastAllocation the_byte_count_around_every_ray_cast() {
     b3::Mesh mesh = { .data = grid, .scale = { 1.0, 1.0, 1.0 } };
     b3::RayCastInput drop = a_ray_dropped_from_three_metres();
 
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     CastReading[7] every = {
       @the_reading_of(b3::ray_cast_sphere(&unit, drop)),
@@ -511,7 +511,7 @@ fn CastAllocation the_byte_count_around_every_ray_cast() {
       @the_reading_of(b3::ray_cast_compound(one_sphere, drop)),
     };
 
-    int after = b3::byte_count();
+    long after = b3::byte_count();
 
     bool all_hit = true;
     foreach (reading : every) {
@@ -840,7 +840,7 @@ fn MeshSweepReadings the_grid_mesh_a_probe_is_swept_at() {
     };
 }
 
-fn void a_swept_probe_reaches_a_mesh_triangle_from_either_side() @test {
+fn void a_swept_probe_reaches_a_mesh_triangle_from_its_wound_side_alone() @test {
     MeshSweepReadings grid = the_grid_mesh_a_probe_is_swept_at();
     float onto_a_triangle = (3.0f - 0.25f) / 6.0f;
     float window = 2.0f * a_linear_slop() / 6.0f;
@@ -850,9 +850,8 @@ fn void a_swept_probe_reaches_a_mesh_triangle_from_either_side() @test {
         grid.swept_from_above.fraction < onto_a_triangle + window, "a probe radius above the plane");
     assert(math::abs(grid.swept_from_above.normal.y - 1.0f) < 0.00001, "off the wound side of a triangle");
 
-    assert(grid.swept_from_below.hit, "and one raised from underneath touches it as well");
-    assert(math::abs(grid.swept_from_below.normal.y + 1.0f) < 0.00001, "off the other side of the same triangle");
-    assert(!grid.ray_from_below.hit, "where a ray sent along that second path reports nothing at all");
+    assert(!grid.swept_from_below.hit, "while one raised from underneath starts behind every triangle and is skipped");
+    assert(!grid.ray_from_below.hit, "as a ray sent along that second path is");
 
     assert(!grid.swept_past_the_edge.hit, "a probe dropped fifty metres out touches no triangle");
 }
@@ -880,7 +879,7 @@ fn FieldSweepReadings the_height_field_a_probe_is_swept_at() {
 
     b3::Vec3[1] above = { { 3.0, 3.0, 3.0 } };
     b3::Vec3[1] below = { { 3.0, -3.0, 3.0 } };
-    b3::Vec3[2] a_pair_below = { { 3.0, -3.0, 3.0 }, { 3.1, -3.0, 3.0 } };
+    b3::Vec3[2] a_pair_above = { { 3.0, 3.0, 3.0 }, { 3.1, 3.0, 3.0 } };
 
     b3::ShapeCastInput upward = a_probe_swept(
       points: below[..],
@@ -888,10 +887,10 @@ fn FieldSweepReadings the_height_field_a_probe_is_swept_at() {
       translation: (b3::Vec3){ 0.0, 6.0, 0.0 },
       max_fraction: 1.0,
     );
-    b3::ShapeCastInput upward_past_one = a_probe_swept(
-      points: below[..],
+    b3::ShapeCastInput downward_past_one = a_probe_swept(
+      points: above[..],
       radius: 0.25,
-      translation: (b3::Vec3){ 0.0, 6.0, 0.0 },
+      translation: (b3::Vec3){ 0.0, -6.0, 0.0 },
       max_fraction: 10.0,
     );
     b3::ShapeCastInput a_point_upward = a_probe_swept(
@@ -907,16 +906,16 @@ fn FieldSweepReadings the_height_field_a_probe_is_swept_at() {
       max_fraction: 10.0,
     );
     b3::ShapeCastInput a_pair_past_one = a_probe_swept(
-      points: a_pair_below[..],
+      points: a_pair_above[..],
       radius: 0.0,
-      translation: (b3::Vec3){ 0.0, 6.0, 0.0 },
+      translation: (b3::Vec3){ 0.0, -6.0, 0.0 },
       max_fraction: 10.0,
     );
 
     FieldSweepReadings readings = {
       .probe_from_above = @the_reading_of(b3::shape_cast_height_field(flat, a_probe_dropped_from_three_metres(above[..], 0.25))),
       .probe_from_below = @the_reading_of(b3::shape_cast_height_field(flat, upward)),
-      .probe_past_one = @the_reading_of(b3::shape_cast_height_field(flat, upward_past_one)),
+      .probe_past_one = @the_reading_of(b3::shape_cast_height_field(flat, downward_past_one)),
       .pair_of_points_past_one = @the_reading_of(b3::shape_cast_height_field(flat, a_pair_past_one)),
     };
     if (catch err = b3::shape_cast_height_field(flat, a_point_upward)) readings.point_at_one = err;
@@ -927,7 +926,7 @@ fn FieldSweepReadings the_height_field_a_probe_is_swept_at() {
 // The grid builder declares a global height range of plus or minus 256 and box3d stores heights as
 // sixteen-bit steps across it, truncating, so the surface sits under the plane by less than one
 // step and the band has to hold that as well as the slop.
-fn void a_swept_probe_reaches_a_height_field_from_either_side() @test {
+fn void a_swept_probe_reaches_a_height_field_from_above_alone() @test {
     FieldSweepReadings field = the_height_field_a_probe_is_swept_at();
     float one_step_of_the_compressed_range = 512.0f / 65535.0f;
     float onto_the_surface = (3.0f - 0.25f) / 6.0f;
@@ -941,8 +940,7 @@ fn void a_swept_probe_reaches_a_height_field_from_either_side() @test {
         "which sits under the plane the field was built on by less than one step of its range");
     assert(math::abs(field.probe_from_above.normal.y - 1.0f) < 0.00001, "off a surface facing up");
 
-    assert(field.probe_from_below.hit, "a probe raised from underneath touches it too");
-    assert(math::abs(field.probe_from_below.normal.y + 1.0f) < 0.00001, "off the underside of the same triangle");
+    assert(!field.probe_from_below.hit, "while a probe raised from underneath starts behind every triangle and is skipped");
 }
 
 // The refusal and the plain miss are told apart here rather than folded into one reading, because a
@@ -1056,16 +1054,16 @@ fn void a_shape_cast_refuses_a_proxy_box3d_would_answer_wrongly() @test {
 }
 
 struct SweepAllocation {
-    int baseline;
-    int before;
-    int after;
+    long baseline;
+    long before;
+    long after;
     bool cast_ran;
 }
 
 // One baseline for the three kinds that allocate, for the reason the ray casts share theirs. Every
 // destroy sits on the line after its build.
 fn SweepAllocation the_byte_count_around_every_shape_cast() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* grid = b3::create_grid_mesh(
       x_count: 4,
@@ -1104,7 +1102,7 @@ fn SweepAllocation the_byte_count_around_every_shape_cast() {
     b3::Vec3[1] over_the_field = { { 3.0, 3.0, 3.0 } };
     b3::ShapeCastInput dropped = a_probe_dropped_from_three_metres(tip[..], 0.25);
 
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     CastReading[6] every = {
       @the_reading_of(b3::shape_cast_sphere(&unit, dropped)),
@@ -1115,7 +1113,7 @@ fn SweepAllocation the_byte_count_around_every_shape_cast() {
       @the_reading_of(b3::shape_cast_height_field(flat, a_probe_dropped_from_three_metres(over_the_field[..], 0.25))),
     };
 
-    int after = b3::byte_count();
+    long after = b3::byte_count();
 
     bool all_hit = true;
     foreach (reading : every) {

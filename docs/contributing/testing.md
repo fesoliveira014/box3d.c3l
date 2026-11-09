@@ -65,7 +65,7 @@ failures is one leaked world, not several regressions.** Fix the first failure.
   been measured allocation-free; the usual instinct to exercise the failure path is inverted here.
 - In a safe build, `[&in]` panics on a null argument before the wrapper body runs, taking the
   test's world with it. The explicit null guard behind it is for release builds.
-- A test that changes a process-wide setting (allocator, stall threshold, length unit) restores it
+- A test that changes a process-wide setting (allocator, length unit) restores it
   before its assertions, not in a `defer`.
 - Allocation assertions compare against a baseline taken at the top of the test, never zero.
 

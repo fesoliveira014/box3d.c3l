@@ -58,7 +58,9 @@ struct HullData {
     int face_offset;
     int soa_vertex_offset;
     int soa_normal_offset;
+    int edge_cosine_offset;
     int byte_count;
+    int padding;
 }
 
 struct BoxHull {
@@ -75,6 +77,7 @@ struct BoxHull {
     float[8] nx;
     float[8] ny;
     float[8] nz;
+    float[12] edge_cosines;
 }
 
 extern fn BoxHull make_cube_hull(float half_width) @cname("b3MakeCubeHull");
@@ -101,14 +104,16 @@ extern fn void scale_box_raw(Vec3* half_widths, Transform* transform, Vec3 post_
 
 <*
  Raw hull constructors, whose null returns the wrappers in src/hull.c3 turn into faults; those
- wrappers are the only public way in. The cylinder, cone and rock end in b3CreateHull and answer
- null for a point set it will not close. The two clones do not: they allocate and copy, and answer
- null for an absent hull or, when transformed, for a volume the rebake underflows.
+ wrappers are the only public way in. The cylinder, cone, rock and complex hull end in
+ b3CreateHull and answer null for a point set it will not close. The two clones do not: they
+ allocate and copy, and answer null for an absent hull or, when transformed, for a volume the
+ rebake underflows.
 *>
 extern fn HullData* create_hull_raw(Vec3* points, int point_count, int max_vertex_count) @cname("b3CreateHull") @private;
 extern fn HullData* create_cylinder_raw(float height, float radius, float y_offset, int sides) @cname("b3CreateCylinder") @private;
 extern fn HullData* create_cone_raw(float height, float radius1, float radius2, int slices) @cname("b3CreateCone") @private;
 extern fn HullData* create_rock_raw(float radius) @cname("b3CreateRock") @private;
+extern fn HullData* create_complex_hull_raw(float radius) @cname("b3CreateComplexHull") @private;
 extern fn HullData* clone_hull_raw(HullData* hull) @cname("b3CloneHull") @private;
 extern fn HullData* clone_and_transform_hull_raw(HullData* hull, Transform transform, Vec3 scale) @cname("b3CloneAndTransformHull") @private;
 

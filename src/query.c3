@@ -196,7 +196,7 @@ fn ShapeId[] world_overlap_aabb_all(WorldId world, Aabb aabb, QueryFilter filter
 <*
  Collects the shapes that overlap a convex proxy placed at origin. The proxy's points are borrowed
  for the call and its count must not exceed MAX_SHAPE_CAST_POINTS. Buffer behaviour matches
- world_cast_ray_all, and a distant compound-shaped body is missed as it is in world_overlap_shape.
+ world_cast_ray_all.
 
  @return `the prefix of buffer that was filled`
 *>

@@ -135,6 +135,18 @@ fn HeightFieldData*? ShapeId.height_field(self) {
 }
 
 <*
+ The compound belongs to the caller rather than to the world, as the mesh does: data is the very
+ pointer create_baked_compound_shape() was handed, and it must outlive this shape.
+
+ @return `the compound`
+ @return? WRONG_SHAPE_TYPE : `this shape is not a compound`
+*>
+fn CompoundData*? ShapeId.compound(self) {
+    if (self.type() != ShapeType.COMPOUND) return WRONG_SHAPE_TYPE~;
+    return compound_raw(self);
+}
+
+<*
  Gives this shape a mesh, replacing whatever geometry it had and making its type MESH — there is
  no type guard, unlike on mesh(), because changing the type is what the call is for.
 
@@ -157,8 +169,7 @@ fn void? ShapeId.set_mesh(self, MeshData* mesh, Vec3 scale) {
  One of the surface materials this shape holds, by index. There is no type guard — what a shape
  holds here has nothing to do with the geometry it carries — but there is an index guard, because
  the bounds assertion box3d makes is compiled out here and an index outside the array reads
- whatever follows it in memory. A shape built from an empty compound holds no materials at all,
- and every index into it is refused.
+ whatever follows it in memory.
 
  @return `the material`
  @return? INDEX_OUT_OF_RANGE : `index is negative or not below mesh_material_count()`

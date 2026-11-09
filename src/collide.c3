@@ -34,9 +34,9 @@ fn bool triangle_has_area(Triangle* triangle) @private {
  The contact between this sphere and another placed by transform_b_to_a, in this sphere's frame,
  the normal pointing from this sphere towards the other.
 
- A point arrives while the two touch or overlap, so its separation is never positive — exactly
- zero where the surfaces meet, negative once they overlap. Coincident centres report minus the
- summed radii under a +y normal, box3d's fallback direction rather than a measured one.
+ A four-slop speculative window, so a point can arrive with a positive separation for two spheres
+ not yet touching. Coincident centres report minus the summed radii under a +y normal, box3d's
+ fallback direction rather than a measured one.
 *>
 fn CollisionManifold collide_spheres(Sphere* sphere, Sphere other, Transform transform_b_to_a) {
     return @manifold_from(; LocalManifold* m) {
@@ -54,8 +54,8 @@ fn CollisionManifold collide_spheres(Sphere* sphere, Sphere other, Transform tra
  The contact between this capsule and a sphere placed by transform_b_to_a, in the capsule's frame,
  the normal pointing from the capsule towards the sphere.
 
- A point arrives while the two touch or overlap, so its separation is never positive — zero where
- the surfaces meet. A capsule whose centres coincide is collided as the sphere they name, and a
+ A four-slop speculative window, so a point can arrive with a positive separation for two shapes
+ not yet touching. A capsule whose centres coincide is collided as the sphere they name, and a
  sphere on the capsule's axis reports a +y normal, box3d's fallback where there is none to measure.
 *>
 fn CollisionManifold collide_capsule_and_sphere(Capsule* capsule, Sphere sphere, Transform transform_b_to_a) {
@@ -256,4 +256,35 @@ fn CollisionManifoldView? collide_triangle_and_hull(Triangle* triangle,
 *>
 fn LocalManifoldPoint[] CollisionManifold.contact_points(&self) {
     return self.points[:self.point_count];
+}
+
+<*
+ The convex hull of points, counter-clockwise from the lowest leftmost point, with every point on
+ an edge dropped. points is sorted and welded in place: points within a quarter linear slop of
+ each other become one, keeping the lowest original_index. box3d builds the hull in place and
+ needs room for twice the points while it does.
+
+ @param points : `the candidate points, reordered by the call`
+ @param hull : `where the hull goes; it must not overlap points`
+ @return `the prefix of hull holding the hull`
+ @return? BUFFER_TOO_SMALL : `hull is shorter than twice points`
+*>
+fn Point2D[]? hull_2d(Point2D[] points, Point2D[] hull) {
+    if (hull.len < points.len * 2) return BUFFER_TOO_SMALL~;
+    int count = hull_2d_raw(points.ptr, (int)points.len, hull.ptr);
+    return hull[:count];
+}
+
+<*
+ Drops the vertices of a counter-clockwise hull that span the least area until at most target
+ remain, and past that any vertex whose triangle with its neighbours is under an eighth of a square
+ linear slop. It stops at three, and a hull of three or fewer comes back as it was. box3d asserts a
+ target of at least three and this build compiles that out, so a lower one acts as three.
+
+ @param hull : `a hull as hull_2d() answers it, rewritten in place`
+ @return `the prefix of hull holding the simplified hull`
+*>
+fn Point2D[] simplify_hull_2d(Point2D[] hull, int target) {
+    int count = simplify_hull_2d_raw(hull.ptr, (int)hull.len, target);
+    return hull[:count];
 }

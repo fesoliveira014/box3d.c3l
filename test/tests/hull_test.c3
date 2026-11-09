@@ -91,8 +91,8 @@ fn void every_hull_builder_produces_a_hull() @test {
 
 // The byte count is read while the hull is alive and again by the caller, after the helper's
 // defer has run. Taking the second reading here would need the destroy out of that defer.
-fn int[2] the_byte_count_around_a_live_hull() {
-    int baseline = b3::byte_count();
+fn long[2] the_byte_count_around_a_live_hull() {
+    long baseline = b3::byte_count();
 
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* hull = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
@@ -104,26 +104,26 @@ fn int[2] the_byte_count_around_a_live_hull() {
 // The baseline is taken inside the run rather than assumed to be zero: other tests in the same
 // process may still hold a world when this one runs.
 fn void a_destroyed_hull_gives_back_every_byte_it_took() @test {
-    int[2] around = the_byte_count_around_a_live_hull();
+    long[2] around = the_byte_count_around_a_live_hull();
 
     assert(around[1] > around[0], "a hull box3d allocates must show up in the byte count");
     assert(b3::byte_count() == around[0], "and destroying it must give every byte back");
 }
 
 struct CloneReadings {
-    int baseline;
-    int with_original;
-    int with_clone;
+    long baseline;
+    long with_original;
+    long with_clone;
     bool distinct_pointers;
 }
 
 fn CloneReadings the_byte_count_around_a_cloned_hull() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::Vec3[8] corners = the_corners_of_a_two_metre_box();
     b3::HullData* original = b3::create_hull(corners[..], b3::MAX_HULL_VERTICES)!!;
     defer b3::destroy_hull(original);
-    int with_original = b3::byte_count();
+    long with_original = b3::byte_count();
 
     b3::HullData* clone = b3::clone_hull(original)!!;
     defer b3::destroy_hull(clone);
@@ -366,14 +366,14 @@ fn void the_arguments_box3d_asserts_and_then_accepts() @test {
 
 struct HullRefusal {
     fault refusal;
-    int baseline;
-    int after;
+    long baseline;
+    long after;
 }
 
 // The builder arrives unevaluated so the baseline is taken before it runs, which is what makes
 // the byte count evidence rather than decoration.
 macro HullRefusal @the_refusal_of(#builder) {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::HullData*? hull = #builder;
     defer if (try hull) b3::destroy_hull(hull);
@@ -495,9 +495,11 @@ fn void a_rock_too_small_to_separate_its_points_is_refused() @test {
     assert(none.refusal == b3::DEGENERATE_GEOMETRY, "ten points at the origin are one point");
     assert(none.after == none.baseline);
 
-    HullRefusal tiny = @the_refusal_of(b3::create_rock(0.000001));
+    // box3d zeroes a face normal whose squared length falls under a thousand times the smallest
+    // normal float, which the faces of a rock a nanometre across reach.
+    HullRefusal tiny = @the_refusal_of(b3::create_rock(1.0e-9));
     assert(tiny.refusal == b3::DEGENERATE_GEOMETRY,
-        "and a radius inside box3d's build tolerance draws them back together");
+        "and a radius of a nanometre draws them back together");
     assert(tiny.after == tiny.baseline);
 }
 
@@ -505,7 +507,7 @@ fn void a_rock_too_small_to_separate_its_points_is_refused() @test {
 // count, charges the allocation and never gives it back, so the guard stands between the suite and
 // a permanently shifted baseline rather than merely between a caller and a null.
 fn void a_canned_mesh_of_fewer_than_one_cell_is_refused_before_box3d_allocates() @test {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
     fault none;
 
     fault grid = none;

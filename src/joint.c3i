@@ -10,6 +10,8 @@ enum JointType : int {
     SPHERICAL,
     WELD,
     WHEEL,
+    MOVER,
+    POGO,
 }
 
 <*
@@ -141,6 +143,12 @@ extern fn void* JointId.user_data(self) @cname("b3Joint_GetUserData");
  world is locked, mid world_step or inside a callback box3d runs during one.
 *>
 extern fn void joint_wake_bodies(JointId joint) @cname("b3Joint_WakeBodies");
+
+<*
+ Whether this joint is in the awake set, which means at least one of its bodies is awake. False
+ while both bodies sleep, while either is disabled, and for a joint linking no dynamic body.
+*>
+extern fn bool JointId.is_awake(self) @cname("b3Joint_IsAwake");
 
 <*
  The force this joint is applying to hold its constraint, in newtons. box3d branches on the

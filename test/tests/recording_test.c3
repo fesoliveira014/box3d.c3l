@@ -48,13 +48,13 @@ fn String a_temporary_recording_path(String name) {
 }
 
 struct FreshRecording {
-    int baseline;
-    int while_alive;
+    long baseline;
+    long while_alive;
     bool empty_over_live_storage;
 }
 
 fn FreshRecording the_readings_around_a_fresh_recording() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     record::Recording* recording = record::create_recording(0);
     defer record::destroy_recording(recording);
@@ -69,7 +69,7 @@ fn FreshRecording the_readings_around_a_fresh_recording() {
 
 fn void a_fresh_recording_is_empty_over_storage_box3d_has_already_taken() @test {
     FreshRecording around = the_readings_around_a_fresh_recording();
-    int taken = around.while_alive - around.baseline;
+    long taken = around.while_alive - around.baseline;
 
     assert(taken >= 65536 && taken < 66560, "the default capacity is 64 KiB and box3d takes it at creation");
     assert(around.empty_over_live_storage,
@@ -78,29 +78,29 @@ fn void a_fresh_recording_is_empty_over_storage_box3d_has_already_taken() @test 
         "and destroying the recording gives every byte back");
 }
 
-fn int[4] the_bytes_a_recording_takes_at_each_starting_capacity() {
-    int baseline = b3::byte_count();
+fn long[4] the_bytes_a_recording_takes_at_each_starting_capacity() {
+    long baseline = b3::byte_count();
 
     record::Recording* small = record::create_recording(128);
-    int at_128 = b3::byte_count();
+    long at_128 = b3::byte_count();
     record::destroy_recording(small);
 
     record::Recording* standard = record::create_recording(0);
-    int at_zero = b3::byte_count();
+    long at_zero = b3::byte_count();
     record::destroy_recording(standard);
 
     record::Recording* backwards = record::create_recording(-1);
-    int at_negative = b3::byte_count();
+    long at_negative = b3::byte_count();
     record::destroy_recording(backwards);
 
     return { baseline, at_128, at_zero, at_negative };
 }
 
 fn void a_starting_capacity_below_one_is_read_as_the_default() @test {
-    int[4] bytes = the_bytes_a_recording_takes_at_each_starting_capacity();
-    int at_128 = bytes[1] - bytes[0];
-    int at_zero = bytes[2] - bytes[0];
-    int at_negative = bytes[3] - bytes[0];
+    long[4] bytes = the_bytes_a_recording_takes_at_each_starting_capacity();
+    long at_128 = bytes[1] - bytes[0];
+    long at_zero = bytes[2] - bytes[0];
+    long at_negative = bytes[3] - bytes[0];
 
     assert(at_128 >= 128 && at_128 < 1024, "a starting capacity of 128 takes that buffer and the handle, and no 64 KiB");
     assert(at_zero >= 65536 && at_zero < 66560, "where a capacity of zero takes the 64 KiB default");
@@ -110,7 +110,7 @@ fn void a_starting_capacity_below_one_is_read_as_the_default() @test {
 }
 
 struct RecordedSession {
-    int baseline;
+    long baseline;
     int worlds_before;
     int at_start;
     int at_stop;
@@ -120,7 +120,7 @@ struct RecordedSession {
 }
 
 fn RecordedSession the_readings_from_a_recorded_drop() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
     int worlds_before = b3::world_count();
 
     record::Recording* recording = record::create_recording(0);
@@ -242,14 +242,14 @@ fn void an_unrecorded_recording_saves_and_will_not_load_back() @test {
 }
 
 struct SilentRefusals {
-    int baseline;
+    long baseline;
     int worlds_before;
     fault save_to_a_missing_directory;
     fault load_a_missing_path;
     bool junk_was_not_replayed;
     fault player_over_junk;
     bool nothing_was_replayed;
-    int after;
+    long after;
     int worlds_after;
 }
 
@@ -381,8 +381,8 @@ struct PlayerLifetime {
     int worlds_before;
     int worlds_with_a_player;
     int worlds_after;
-    int baseline;
-    int after;
+    long baseline;
+    long after;
     float unit_the_caller_had;
     float unit_before;
     float unit_with_a_player;

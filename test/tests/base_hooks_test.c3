@@ -6,17 +6,19 @@ import std::io;
 int allocation_count;
 int free_count;
 long allocated_bytes;
+long freed_bytes;
 char[512] last_log_message;
 int log_message_count;
 
-fn void* counting_alloc(int size, int alignment) {
+fn void* counting_alloc(usz size, int alignment) {
     allocation_count++;
-    allocated_bytes += size;
+    allocated_bytes += (long)size;
     return mem::malloc_aligned((sz)size, (sz)alignment);
 }
 
-fn void counting_free(void* memory) {
+fn void counting_free(void* memory, usz size) {
     free_count++;
+    freed_bytes += (long)size;
     mem::free_aligned(memory);
 }
 
@@ -49,10 +51,11 @@ fn int reporting_assert(ZString condition, ZString file_name, int line_number) {
  skips the rest of the function and would otherwise leave every later test allocating through it.
 *>
 fn void a_custom_allocator_serves_every_allocation_a_world_makes() @test {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
     allocation_count = 0;
     free_count = 0;
     allocated_bytes = 0;
+    freed_bytes = 0;
 
     b3::set_allocator(&counting_alloc, &counting_free);
 
@@ -80,11 +83,13 @@ fn void a_custom_allocator_serves_every_allocation_a_world_makes() @test {
     int allocations = allocation_count;
     int frees = free_count;
     long bytes = allocated_bytes;
+    long freed = freed_bytes;
 
     assert(simulated, "the world, body and shape must all be built through the custom allocator");
     assert(allocations > 0, "box3d must route its allocations through an installed allocator");
     assert(frees == allocations, "a destroyed world must return every block it took");
     assert(bytes > 0);
+    assert(freed == bytes, "each free hands back the size its block was allocated with");
     assert(b3::byte_count() == baseline, "box3d counts bytes for a custom allocator too");
 }
 
@@ -93,7 +98,7 @@ fn void a_custom_allocator_serves_every_allocation_a_world_makes() @test {
  proves a log handler is really called with a message box3d formatted.
 *>
 fn void an_installed_log_handler_receives_the_diagnostics_box3d_emits() @test {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId[b3::MAX_WORLDS] worlds;
 
@@ -159,20 +164,9 @@ fn void the_resetting_timer_moves_the_stamp_it_measured_from() @test {
 }
 
 <*
- Both settings are process-wide and the length unit scales box3d's slop and margins, so each is
- restored before the assertions run.
+ The setting is process-wide and scales box3d's slop and margins, so it is restored before the
+ assertions run.
 *>
-fn void the_stall_threshold_round_trips() @test {
-    float original = b3::stall_threshold();
-    b3::set_stall_threshold(0.25);
-    float updated = b3::stall_threshold();
-    b3::set_stall_threshold(original);
-    float restored = b3::stall_threshold();
-
-    assert(updated == 0.25);
-    assert(restored == original);
-}
-
 fn void the_length_unit_scale_round_trips() @test {
     float original = b3::length_units_per_meter();
     b3::set_length_units_per_meter(2.0);

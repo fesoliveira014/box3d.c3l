@@ -45,11 +45,12 @@ struct SpherePairReadings {
     ManifoldReading overlapping;
     ManifoldReading apart;
     ManifoldReading just_clear;
+    ManifoldReading past_the_window;
 }
 
-// The contact is read first and the two misses after it, which is the order that would surface a
-// manifold carrying an earlier call's answer. "Just clear" leaves a hundredth of a metre, half of
-// box3d's speculative distance, so a pair that had a speculative window would still report there.
+// Each miss is read after a contact, which is the order that would surface a manifold carrying an
+// earlier call's answer. "Just clear" leaves a hundredth of a metre, half of box3d's speculative
+// distance, and "past the window" three hundredths, half again beyond it.
 fn SpherePairReadings the_readings_of_two_half_metre_spheres() {
     b3::Sphere a = a_half_metre_sphere();
     b3::Sphere b = a_half_metre_sphere();
@@ -58,6 +59,7 @@ fn SpherePairReadings the_readings_of_two_half_metre_spheres() {
       .overlapping = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 0.75, 0.0, 0.0 }))),
       .apart = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 3.0, 0.0, 0.0 }))),
       .just_clear = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 1.01, 0.0, 0.0 }))),
+      .past_the_window = the_reading_of(b3::collide_spheres(&a, b, a_placement_at({ 1.03, 0.0, 0.0 }))),
     };
 }
 
@@ -93,14 +95,27 @@ fn void a_sphere_pair_reports_nothing_once_the_two_are_clear() @test {
     assert(the_length_of(spheres.apart.normal) < 0.00001,
         "a miss read after a contact carries no normal, where box3d would have left the last one standing");
 
-    assert(spheres.just_clear.point_count == 0,
-        "and a hundredth of a metre of daylight is a miss too: this pair has no speculative window");
-    assert(spheres.just_clear.slice_len == 0);
+    assert(spheres.past_the_window.point_count == 0,
+        "and so do two spheres further apart than box3d's four-slop speculative window");
+    assert(spheres.past_the_window.slice_len == 0);
+    assert(the_length_of(spheres.past_the_window.normal) < 0.00001);
+}
+
+fn void a_sphere_pair_reports_a_speculative_point_inside_the_window() @test {
+    SpherePairReadings spheres = the_readings_of_two_half_metre_spheres();
+    b3::LocalManifoldPoint contact = spheres.just_clear.points[0];
+
+    assert(spheres.just_clear.point_count == 1, "a hundredth of a metre of daylight is inside the window");
+    assert(0.0099 < contact.separation && contact.separation < 0.0101,
+        "and the point carries the gap as a positive separation");
+    assert(math::abs(contact.point.x - 0.505f) < 0.00001, "half way between the two surfaces");
+    assert(0.9999 < spheres.just_clear.normal.x && spheres.just_clear.normal.x < 1.0001);
 }
 
 struct CapsuleAndSphereReadings {
     ManifoldReading overlapping;
     ManifoldReading just_clear;
+    ManifoldReading past_the_window;
     ManifoldReading centres_coincident;
 }
 
@@ -115,6 +130,7 @@ fn CapsuleAndSphereReadings the_readings_of_a_capsule_under_a_sphere() {
     return {
       .overlapping = the_reading_of(b3::collide_capsule_and_sphere(&capsule, sphere, a_placement_at({ 0.0, 0.6, 0.0 }))),
       .just_clear = the_reading_of(b3::collide_capsule_and_sphere(&capsule, sphere, a_placement_at({ 0.0, 0.76, 0.0 }))),
+      .past_the_window = the_reading_of(b3::collide_capsule_and_sphere(&capsule, sphere, a_placement_at({ 0.0, 0.78, 0.0 }))),
       .centres_coincident = the_reading_of(b3::collide_capsule_and_sphere(&collapsed, sphere, a_placement_at({ 0.0, 0.6, 0.0 }))),
     };
 }
@@ -140,8 +156,11 @@ fn void a_capsule_and_a_sphere_report_the_point_between_them() @test {
         "the normal runs from the capsule towards the sphere");
     assert(math::abs(the_length_of(pair.overlapping.normal) - 1.0f) < 0.00001);
 
-    assert(pair.just_clear.point_count == 0,
-        "a hundredth of a metre of daylight is a miss: this pair has no speculative window either");
+    assert(pair.just_clear.point_count == 1,
+        "a hundredth of a metre of daylight is inside the four-slop speculative window");
+    assert(0.0099 < pair.just_clear.points[0].separation && pair.just_clear.points[0].separation < 0.0101,
+        "reported as a positive separation");
+    assert(pair.past_the_window.point_count == 0, "while three hundredths is past it");
 }
 
 fn void a_capsule_with_coincident_centres_is_collided_as_the_sphere_it_names() @test {
@@ -306,7 +325,7 @@ fn void two_capsules_whose_axes_exactly_cross_report_nothing() @test {
 }
 
 fn void collide_calls_allocate_nothing() @test {
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     the_readings_of_two_half_metre_spheres();
     the_readings_of_a_capsule_under_a_sphere();

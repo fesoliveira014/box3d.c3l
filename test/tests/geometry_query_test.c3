@@ -634,43 +634,15 @@ fn void a_compound_query_ends_when_its_callback_says_so() @test {
     assert(arrived.stopped_early == 1, "and a callback answering false on its first call ends it there");
 }
 
-// The empty answer is put beside a one-child compound taking the same box through the same
-// callback, because a count of nothing is also what a query that never ran would report.
-fn void a_compound_with_no_children_reports_none() @test {
-    b3::CompoundDef nothing_in_it;
-    b3::CompoundData* empty = b3::create_compound(&nothing_in_it)!!;
-    defer b3::destroy_compound(empty);
-
-    b3::CompoundSphereDef sphere = {
-      .sphere = { .center = { 0.0, 0.0, 0.0 }, .radius = 0.5 },
-      .material = b3::default_surface_material(),
-    };
-    b3::CompoundDef one_in_it;
-    one_in_it.spheres = &sphere;
-    one_in_it.sphere_count = 1;
-    b3::CompoundData* single = b3::create_compound(&one_in_it)!!;
-    defer b3::destroy_compound(single);
-
-    QueryLog from_the_empty;
-    b3::query_compound(empty, a_box_around_everything(), &log_child, &from_the_empty);
-
-    QueryLog from_the_single;
-    b3::query_compound(single, a_box_around_everything(), &log_child, &from_the_single);
-
-    assert(from_the_single.count == 1, "the box reaches the one child a compound of one holds");
-    assert(from_the_empty.count == 0,
-        "and a childless compound answers it without reaching for the tree root it has not got");
-}
-
 struct QueryAllocation {
-    int baseline;
-    int before;
-    int after;
+    long baseline;
+    long before;
+    long after;
     bool every_query_answered;
 }
 
 fn QueryAllocation the_byte_count_around_every_query() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* grid = a_four_by_four_grid()!!;
     defer b3::destroy_mesh(grid);
@@ -689,7 +661,7 @@ fn QueryAllocation the_byte_count_around_every_query() {
     b3::CompoundData* one = b3::create_compound(&def)!!;
     defer b3::destroy_compound(one);
 
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     QueryLog triangles;
     b3::query_mesh(&mesh, a_box_around_everything(), &log_triangle, &triangles);
@@ -698,7 +670,7 @@ fn QueryAllocation the_byte_count_around_every_query() {
     QueryLog children;
     b3::query_compound(one, a_box_around_everything(), &log_child, &children);
 
-    int after = b3::byte_count();
+    long after = b3::byte_count();
 
     return {
       .baseline = baseline,

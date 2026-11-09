@@ -63,10 +63,9 @@ int count = contact.point_count;
 
 Per-pair behaviour:
 
-- The sphere-sphere and capsule-sphere pairs report a point only on touch or overlap. The hull pairs, the
-  triangle pairs (triangle-hull only with `enable_speculative`) and the one-point branch of
-  capsule-capsule report speculative points out to
-  four linear slops.
+- The sphere-sphere, capsule-sphere and hull pairs, the triangle pairs (triangle-hull only with
+  `enable_speculative`) and the one-point branch of capsule-capsule report speculative points out
+  to four linear slops.
 - Coincident sphere centres, or a sphere on a capsule's axis, report a +y normal: box3d's
   fallback where no direction can be measured.
 - `collide_capsules` reports nothing when either capsule is shorter than a linear slop, or when
@@ -108,6 +107,37 @@ buffer instead of reducing it, so a count equal to the buffer length may have dr
 buffer shorter than `MAX_MANIFOLD_POINTS` returns `BUFFER_TOO_SMALL`; a null hull
 `INVALID_DEFINITION`. `enable_speculative` controls the four-slop speculative points.
 
+### 2D hulls
+
+```c3
+b3::Point2D[6] points = {
+    { .p = { 0, 0 }, .original_index = 0 },
+    { .p = { 2, 0 }, .original_index = 1 },
+    { .p = { 2, 2 }, .original_index = 2 },
+    { .p = { 0, 2 }, .original_index = 3 },
+    { .p = { 1, 1 }, .original_index = 4 },
+    { .p = { 1, -0.1f }, .original_index = 5 },
+};
+b3::Point2D[12] buffer;
+
+b3::Point2D[] hull = b3::hull_2d(points[..], buffer[..])!;
+b3::Point2D[] square = b3::simplify_hull_2d(hull, 4);
+```
+
+These are the two steps box3d uses to reduce a contact manifold, exposed for testing. A `Point2D`
+carries a 2D point, its contact's `separation` and its `original_index`.
+
+`b3::hull_2d` writes the convex hull of `points` into `buffer` and returns the filled prefix:
+counter-clockwise from the lowest leftmost point, with points on an edge dropped. It sorts and
+welds `points` in place; points within a quarter linear slop become one, keeping the lowest
+`original_index`. box3d needs room for twice the points while it builds the hull, so a `buffer`
+shorter than that returns `BUFFER_TOO_SMALL`. The two slices must not overlap.
+
+`b3::simplify_hull_2d` rewrites a counter-clockwise hull in place and returns its prefix. It drops
+the vertex spanning the least area until at most `target` remain, and drops a vertex flatter than
+an eighth of a square linear slop even below `target`. It stops at three; a `target` under three
+acts as three, and a hull of three or fewer comes back unchanged.
+
 ## Distance
 
 ```c3
@@ -134,7 +164,7 @@ points `point_a` and `point_b`, `normal` from A to B, and `distance` clamped at 
 - `normal` is exactly zero when the cores overlap. Test for the zero normal, not for
   `distance == 0`: when only the radii drove the distance to zero the normal is real and the two
   witness points have crossed.
-- Every call starts cold. `simplex_count` is always 0, and `iterations` reads 0 on any overlap.
+- Every call starts cold. `simplex_count` is always 0; `iterations` counts on overlap too.
 - Each proxy must name a non-null array of 1 to `MAX_SHAPE_CAST_POINTS` points, or the call
   returns `INVALID_DEFINITION`. The points are read during the call only.
 
@@ -167,9 +197,10 @@ slop. The stop is short of the geometric touch below a total radius of one slop,
 slop, and past it above; from two slops up it is a full slop past. Allow that band in any
 comparison.
 
-A pair that starts overlapped returns fraction 0 with a zero `normal`. With `can_encroach` set and
-more than about 2.75 slops of total radius, box3d instead lets the pair close a further slop and
-reports a real fraction and normal. `child_index` and `material_index` read 0.
+A pair whose cores start overlapped returns fraction 0 with a zero `normal`. `can_encroach` acts
+only when the cores start apart but inside the stop distance: more than two slops apart, the pair
+closes a further slop; nearer, it advances to half a slop apart, or misses if it is not closing.
+Either reports a real fraction and normal. `child_index` and `material_index` read 0.
 
 ## Time of impact
 
@@ -202,7 +233,7 @@ interval. The rotation is a normalised lerp, not a slerp. A `t` outside 0 to 1 r
 | `ToiState` | Meaning | `fraction`, `point`, `normal` |
 |---|---|---|
 | `HIT` | the shapes touch inside the interval | the touch; measured point and normal |
-| `OVERLAPPED` | the cores overlap at the start | 0; zero point and normal |
+| `OVERLAPPED` | the cores overlap at the start | 0; midway witness point, zero normal |
 | `SEPARATED` | no touch up to `max_fraction` | `max_fraction`; last witness pair |
 | `FAILED` | the solver gave up | the last time it reached |
 | `UNKNOWN` | never returned | |
@@ -220,6 +251,7 @@ inside its own continuous solver. `distance_iterations`, `push_back_iterations` 
 - `collide_triangle_and_hull` needs a buffer of at least `MAX_MANIFOLD_POINTS` and may truncate
   silently at the buffer's length.
 - Triangle pairs refuse a zero-area triangle with `DEGENERATE_GEOMETRY`.
+- `hull_2d` reorders its input and needs an output buffer of twice the input's length.
 - Proxies must hold 1 to `MAX_SHAPE_CAST_POINTS` points through a non-null array; the points are
   borrowed for the call.
 - A zero `DistanceOutput.normal` means the cores overlap. Normalising it gives NaN.

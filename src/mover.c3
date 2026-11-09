@@ -53,6 +53,38 @@ fn BodyPlaneResult[] body_collide_mover(BodyId body,
 }
 
 <*
+ Sweeps a capsule mover through this body alone while the body moves from body_transform1 to
+ body_transform2. The mover is relative to origin; the hit point is in world space. Only spheres,
+ capsules and hulls are considered, and a shape the mover overlaps at the start is passed over.
+
+ @param [&in] mover : `the capsule, relative to origin`
+ @return `the earliest hit, its normal pointing from the body towards the mover`
+ @return? NO_HIT : `the sweep reached no shape it started clear of, or the world is locked`
+ @return? INVALID_DEFINITION : `mover is null`
+*>
+fn BodyToiResult? body_time_of_impact_mover(BodyId body,
+  Pos origin,
+  Capsule* mover,
+  Vec3 mover_translation,
+  QueryFilter filter,
+  WorldTransform body_transform1,
+  WorldTransform body_transform2,
+) {
+    if (mover == null) return INVALID_DEFINITION~;
+    BodyToiResult result = body_time_of_impact_mover_raw(
+      body_id: body,
+      origin: origin,
+      mover: mover,
+      mover_translation: mover_translation,
+      filter: filter,
+      body_transform1: body_transform1,
+      body_transform2: body_transform2,
+    );
+    if (result.shape_id.is_null()) return NO_HIT~;
+    return result;
+}
+
+<*
  Applies the definition's radial impulse to every dynamic body with a shape in reach; static and
  kinematic never move, and a locked world does nothing. A mesh shape on a dynamic body is worse
  than passed over: box3d builds it a proxy of no points and reads the first anyway before culling

@@ -185,9 +185,9 @@ struct CompoundPlacements {
     bool left_where_it_was_built;
 }
 
-// The child sits a metre out along x so that a quarter turn takes it off the probe while its box,
-// which is the box the search reads, still covers it. That separates what a placement does here:
-// the turn reaches the child, and the fifty metres answers no without ever having reached it.
+// The child sits a metre out along x so that a quarter turn takes it off the probe. box3d carries the
+// probe into the compound's frame before searching, so a probe that follows the compound fifty
+// metres out finds the child as one held at it does.
 fn CompoundPlacements the_placements_a_compound_is_given() {
     b3::CompoundSphereDef sphere = {
       .sphere = { .center = { 1.0, 0.0, 0.0 }, .radius = 0.2 },
@@ -216,7 +216,7 @@ fn CompoundPlacements the_placements_a_compound_is_given() {
     };
 }
 
-fn void a_compound_loses_a_probe_its_placement_carries_it_away_from() @test {
+fn void a_compound_finds_a_probe_that_follows_its_placement() @test {
     CompoundPlacements placed = the_placements_a_compound_is_given();
 
     assert(placed.square_to_the_probe, "a compound answers yes for a probe held at its child");
@@ -224,8 +224,8 @@ fn void a_compound_loses_a_probe_its_placement_carries_it_away_from() @test {
         "and no once a quarter turn takes that child off the probe, so the placement does reach the child");
 
     assert(placed.left_where_it_was_built, "the same compound still answers where it was built");
-    assert(!placed.carried_away_from_the_probe,
-        "yet not for a probe fifty metres out that follows it, the search reading the probe in the wrong frame");
+    assert(placed.carried_away_from_the_probe,
+        "and so does a compound carried fifty metres out for a probe that follows it");
 }
 
 struct HoleReadings {
@@ -364,14 +364,14 @@ fn void an_overlap_refuses_a_proxy_that_carries_no_points() @test {
 }
 
 struct OverlapAllocation {
-    int baseline;
-    int before;
-    int after;
+    long baseline;
+    long before;
+    long after;
     bool every_predicate_answered;
 }
 
 fn OverlapAllocation the_byte_count_around_every_overlap() {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* grid = b3::create_grid_mesh(
       x_count: 4,
@@ -412,7 +412,7 @@ fn OverlapAllocation the_byte_count_around_every_overlap() {
     b3::Transform here = an_unmoved_placement();
     b3::ShapeProxy at_the_origin = a_probe_over(origin[..], 0.25);
 
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     bool[6] every = {
       @the_answer_to(b3::overlap_sphere(&unit, here, at_the_origin)),
@@ -423,7 +423,7 @@ fn OverlapAllocation the_byte_count_around_every_overlap() {
       @the_answer_to(b3::overlap_height_field(flat, here, a_probe_over(over_the_field[..], 0.25))),
     };
 
-    int after = b3::byte_count();
+    long after = b3::byte_count();
 
     bool all_answered = true;
     foreach (answer : every) {

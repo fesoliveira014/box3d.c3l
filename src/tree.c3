@@ -19,8 +19,8 @@ fn int? dynamic_tree_create_proxy(DynamicTree* tree, Aabb aabb, ulong category_b
 <*
  Removes the proxy and returns its slot to the free list, from which the next
  dynamic_tree_create_proxy() may hand it straight back out. box3d asserts the id and this build
- compiles the assertion out, so a repeated destroy would take one slot twice and give one node to
- two proxies.
+ compiles the assertion out, so a repeated destroy would remove node -1 and put one slot on the
+ free list twice, giving it to two proxies.
 
  @return? check_proxy!
 *>
@@ -43,11 +43,11 @@ fn void? dynamic_tree_move_proxy(DynamicTree* tree, int proxy_id, Aabb aabb) {
 }
 
 <*
- Widens the proxy's box and every ancestor box that does not already contain it, and takes the same
- guards dynamic_tree_move_proxy() does. It widens on a strict comparison, so a box the proxy already
- contains changes no ancestor — and neither does a NaN one, unlike through the other two calls,
- though a later rebuild still spreads it. Any call marks every ancestor enlarged even when it moved
- no box, so the next partial dynamic_tree_rebuild() sorts them all.
+ Replaces the proxy's box and widens every ancestor box that does not already contain the new one,
+ under the guards dynamic_tree_move_proxy() takes. It widens on a strict comparison, so a box the
+ proxy already contains changes no ancestor — nor does a NaN one, unlike through the other two
+ calls, though a later rebuild still spreads it. Any call marks every ancestor moved even when it
+ moved no box, so the next partial dynamic_tree_rebuild() sorts them all.
 
  @return? check_proxy!
  @return? INVALID_DEFINITION : `the box is inverted or not finite`
@@ -59,9 +59,8 @@ fn void? dynamic_tree_enlarge_proxy(DynamicTree* tree, int proxy_id, Aabb aabb) 
 }
 
 <*
- Sets the proxy's side of a query mask and recomputes it up the ancestors. box3d never range
- checks this id at all and asserts only the leaf, compiled out here; an internal node's bits are
- the union of its children, so setting the root's to 0 takes every proxy out of every query.
+ Sets the proxy's side of a query mask. Queries test it at the proxy alone, so it takes effect on
+ the next query with no rebuild. box3d's range assertion on the id is compiled out here.
 
  @return? check_proxy!
 *>
@@ -71,9 +70,8 @@ fn void? DynamicTree.set_category_bits(&self, int proxy_id, ulong category_bits)
 }
 
 <*
- The proxy's side of a query mask. box3d checks only the id's range here, and an internal node
- reports the union of its children while a freed slot reports the bits of the proxy that left it,
- so this one is guarded as user_data() is.
+ The proxy's side of a query mask. box3d's range assertion on the id is compiled out here, and a
+ freed slot reports the bits of the proxy that left it, so this one is guarded as user_data() is.
 
  @return `the category bits`
  @return? check_proxy!
@@ -92,7 +90,7 @@ fn ulong? DynamicTree.category_bits(&self, int proxy_id) {
 *>
 fn ulong? DynamicTree.user_data(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
-    return self.nodes[proxy_id].user_data;
+    return self.proxies[proxy_id].user_data;
 }
 
 <*
@@ -104,7 +102,7 @@ fn ulong? DynamicTree.user_data(&self, int proxy_id) {
 *>
 fn Aabb? DynamicTree.aabb(&self, int proxy_id) {
     check_proxy(self, proxy_id)!;
-    return self.nodes[proxy_id].aabb;
+    return self.nodes[self.proxies[proxy_id].node].aabb;
 }
 
 <*
@@ -138,10 +136,9 @@ fn ClosestSearch dynamic_tree_query_closest(DynamicTree* tree,
 
 <*
  Reads back a tree dynamic_tree_save() wrote, multiplying every node box by scale as it goes. The
- caller owns it and destroys it exactly once. box3d zeroes the struct for a path it cannot open,
- an unknown version and a node array that falls short, but not for a file cut inside the header,
- where the bytes that arrived stand over zeroes. It allocates the nodes only after reading that
- header whole and the save writes a null in their place, so every refusal arrives with none.
+ caller owns it and destroys it exactly once. box3d answers every refusal with a zeroed struct — a
+ path it cannot open, a short or foreign header, inconsistent counts, arrays that fall short — and
+ frees whatever it allocated first, so a refusal leaves byte_count() where it was.
 
  @param scale : `what each node box's bounds are multiplied by, 1 reproducing the saved tree`
  @return `the tree`

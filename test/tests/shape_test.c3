@@ -11,8 +11,8 @@ fn void the_shape_types_match_the_c_layout() @test {
     assert(b3::ShapeDef::alignment == 8);
     assert(b3::Sphere::size == 16);
     assert(b3::Capsule::size == 28);
-    assert(b3::HullData::size == 144);
-    assert(b3::BoxHull::size == 640);
+    assert(b3::HullData::size == 152);
+    assert(b3::BoxHull::size == 696);
 }
 
 fn void the_shape_type_values_are_contiguous_from_zero() @test {
@@ -218,7 +218,7 @@ fn void destroying_a_shape_takes_its_mass_with_it() @test {
 }
 
 fn void a_world_with_shapes_releases_everything_it_allocated() @test {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;

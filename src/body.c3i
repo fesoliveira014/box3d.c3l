@@ -34,6 +34,7 @@ struct BodyDef {
     float angular_damping;
     float gravity_scale;
     float sleep_threshold;
+    float safety_factor;
     ZString name;
     void* user_data;
     MotionLocks motion_locks;
@@ -100,6 +101,33 @@ extern fn float BodyId.angular_damping(self) @cname("b3Body_GetAngularDamping");
 extern fn void BodyId.set_gravity_scale(self, float gravity_scale) @cname("b3Body_SetGravityScale");
 extern fn float BodyId.gravity_scale(self) @cname("b3Body_GetGravityScale");
 extern fn Aabb BodyId.compute_aabb(self) @cname("b3Body_ComputeAABB");
+
+<*
+ The thinnest of the body's shapes: a sphere's or capsule's radius, a hull's inner radius. A
+ static body, or one with no shapes, answers 1e5 length units instead.
+*>
+extern fn float BodyId.min_extent(self) @cname("b3Body_GetMinExtent");
+
+<*
+ Per axis, the farthest any of the body's shapes reaches from its centre of mass, or from its
+ origin for a kinematic body. Zero for a static body or one with no shapes.
+*>
+extern fn Vec3 BodyId.max_extent(self) @cname("b3Body_GetMaxExtent");
+
+<*
+ max_extent() widened by the centre of mass's offset from the origin on each axis, so it bounds
+ the reach from the body origin rather than measuring it.
+*>
+extern fn Vec3 BodyId.max_extent_origin(self) @cname("b3Body_GetMaxExtentOrigin");
+
+<*
+ A dynamic body moving further in one step than this times min_extent() is swept by continuous
+ collision. box3d asserts a finite, non-negative factor and this build compiles that out: a
+ negative one sweeps every step the body is not settling into sleep, a NaN none. A locked world
+ keeps the factor it has.
+*>
+extern fn void BodyId.set_safety_factor(self, float safety_factor) @cname("b3Body_SetSafetyFactor");
+extern fn float BodyId.safety_factor(self) @cname("b3Body_GetSafetyFactor");
 
 extern fn void BodyId.set_name(self, ZString name) @cname("b3Body_SetName");
 extern fn ZString BodyId.name(self) @cname("b3Body_GetName");

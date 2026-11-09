@@ -74,13 +74,25 @@ fn HullData*? create_cone(float height, float radius1, float radius2, int slices
 
  box3d asserts nothing here at all. A negative radius negates every lattice point, so it builds
  the point reflection of the positive one — the same count, volume and area, with mirrored bounds.
- Only a radius small enough to draw the ten points inside box3d's build tolerance is refused.
+ Only a radius near zero, about a nanometre or less, collapses the ten points and is refused.
 
  @return `the hull`
  @return? DEGENERATE_GEOMETRY : `the radius collapses the ten points`
 *>
 fn HullData*? create_rock(float radius) {
     return checked_geometry(create_rock_raw(radius), DEGENERATE_GEOMETRY);
+}
+
+<*
+ Builds the hull of 32 points box3d scatters over a sphere of the given radius from a fixed seed,
+ so every call with one radius builds the same hull. The caller owns it and must destroy_hull()
+ it — see HullData.
+
+ @return `the hull`
+ @return? DEGENERATE_GEOMETRY : `the radius collapses the 32 points`
+*>
+fn HullData*? create_complex_hull(float radius) {
+    return checked_geometry(create_complex_hull_raw(radius), DEGENERATE_GEOMETRY);
 }
 
 <*

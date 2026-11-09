@@ -212,9 +212,7 @@ fn void aabb_example(b3::WorldId world) {
 }
 ```
 
-`world_overlap_shape` and `world_overlap_shape_all` test the proxy against shape geometry. Both can
-miss a compound shape whose body origin lies away from the query origin, with no signal. The cause
-is the compound tree lookup described under [`overlap_compound`](#geometry-casts).
+`world_overlap_shape` and `world_overlap_shape_all` test the proxy against shape geometry.
 
 ## Body and shape queries
 
@@ -308,22 +306,19 @@ Per-function contracts:
 
 - **Starting inside.** A ray starting inside a solid sphere, capsule, hull or compound child reports
   fraction 0 with a zero normal. Normalising that normal yields NaN. A shape cast starting in
-  contact reports the same unless `can_encroach` is set and the total radius is large enough.
+  contact reports the same unless `can_encroach` is set and the cores start apart.
 - **`ray_cast_hollow_sphere`** tests the surface only. Its fraction is a distance in the sphere's
   units, not a fraction of `translation`, and `max_fraction` bounds that distance. A unit-length
   `translation` makes the two agree.
 - **`max_fraction > 1`** returns `INVALID_DEFINITION` from `ray_cast_compound`, `ray_cast_mesh`,
   `ray_cast_height_field`, and from `shape_cast_height_field` with a one-point, zero-radius proxy.
   box3d's triangle solver reports a miss as a hit at 1.
-- **Meshes.** A mesh ray cast hits a triangle only from its wound side. Mesh shape casts and
-  overlaps are two-sided.
+- **Meshes.** Mesh ray casts and shape casts reach a triangle only from its wound side; a shape
+  cast skips a triangle whose plane has the proxy's centre behind it. Overlaps are two-sided.
 - **Height fields.** Nothing is reported from underneath or over a hole cell. The surface sits up
   to one 16-bit quantisation step below the source heights.
 - **Overlaps** treat a gap under a tenth of a linear slop as touching. The proxy is read in the
   frame `transform` places the geometry into.
-- **`overlap_compound`** applies `transform` to each child test but looks children up with the
-  proxy's own box in the compound's frame. A `transform` that moves the compound away from that
-  box answers `false` while the two touch.
 - **`CastOutput`** reports `child_index` and `material_index` for compounds. A single-shape cast
   leaves `material_index` at -1 where the shape has no material.
 

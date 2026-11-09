@@ -211,8 +211,8 @@ fn void a_distance_query_asks_box3d_for_no_diagnostic_simplexes() @test {
         "a pair GJK has to walk towards counts the support points it added past the first");
     assert(points.surfaces.iterations == 0,
         "where a pair of single points is answered by that first simplex alone");
-    assert(boxes.overlapping.iterations == 0,
-        "and a core overlap reports none at all, box3d returning before the count is written");
+    assert(boxes.overlapping.iterations > 0,
+        "and a core overlap counts the ones it added before enclosing the origin");
 }
 
 fn void a_distance_query_is_unmoved_by_the_pairs_measured_before_it() @test {
@@ -565,7 +565,7 @@ fn void both_proxy_pair_queries_refuse_a_proxy_box3d_would_answer_wrongly() @tes
 }
 
 fn void the_proxy_pair_queries_allocate_nothing() @test {
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     PointPairDistances points = the_distances_between_two_points_three_apart();
     ClosingDistances closing = the_distances_as_two_metre_points_close();
@@ -977,7 +977,7 @@ fn void the_time_of_impact_refuses_what_box3d_would_answer_out_of_its_own_interv
 }
 
 fn void the_sweep_and_the_time_of_impact_allocate_nothing() @test {
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     SweptPoses poses = the_poses_along_a_turning_sweep();
     SweptImpacts impacts = the_impacts_of_a_pair_swept_six_metres();

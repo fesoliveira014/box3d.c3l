@@ -11,15 +11,23 @@ module b3;
 typedef MeshData = void;
 
 <*
- The geometry create_mesh() builds a mesh from. box3d copies everything it reads, so none of
- these arrays has to outlive the call. There is no default_mesh_def() upstream and no cookie,
- so a definition carries no mark of being well formed and is written field by field.
+ The most mesh or height field triangles one shape's contact collides with in a step. Mirrors
+ B3_MAX_MESH_CONTACT_TRIANGLES in constants.h, which the C API does not expose as a function. The
+ triangles past it are dropped, and box3d logs a warning the first time that happens.
+*>
+const int MAX_MESH_CONTACT_TRIANGLES = 512;
 
- vertices must hold vertex_count points and indices 3 * triangle_count indices, wound
- counter-clockwise. material_indices is optional and holds one index per triangle.
+<*
+ The geometry create_mesh() builds a mesh from. box3d copies everything it reads, so none of
+ these arrays has to outlive the call. There is no default_mesh_def() upstream and no cookie.
+
+ vertices must hold vertex_count points, stride bytes apart or packed when stride is 0, and indices
+ 3 * triangle_count indices, wound counter-clockwise unless clock_wise_winding is set.
+ material_indices is optional and holds one index per triangle.
 *>
 struct MeshDef {
     Vec3* vertices;
+    usz stride;
     int* indices;
     char* material_indices;
     float weld_tolerance;
@@ -28,6 +36,7 @@ struct MeshDef {
     bool weld_vertices;
     bool use_median_split;
     bool identify_edges;
+    bool clock_wise_winding;
 }
 
 <*

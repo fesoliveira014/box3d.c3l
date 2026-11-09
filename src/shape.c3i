@@ -159,10 +159,7 @@ extern fn void ShapeId.set_surface_material(self, SurfaceMaterial surface_materi
 
 <*
  The shape's surface material, and the two of its fields that have accessors of their own; all
- three read the shape's first material. A shape whose mesh_material_count() is 0 has none to read
- and answers with an inline one box3d never assigned — in a recycled slot, the previous shape's
- material, not the definition's base_material. Only a shape built from an empty compound reports
- 0, and mesh_surface_material() refuses every index on it instead.
+ three read the shape's first material.
 *>
 extern fn float ShapeId.friction(self) @cname("b3Shape_GetFriction");
 extern fn float ShapeId.restitution(self) @cname("b3Shape_GetRestitution");
@@ -171,11 +168,10 @@ extern fn SurfaceMaterial ShapeId.surface_material(self) @cname("b3Shape_GetSurf
 <*
  How many surface materials this shape holds — not a mesh-only count despite the name. A
  definition naming fewer than two keeps one inline and reports 1 whatever the type; a shape built
- from a compound answers from the compound's distinct child materials, so an empty compound gives
- 0.
+ from a compound answers from the compound's distinct child materials.
 
- The count is fixed at creation, so such a shape still reports 0 once set_sphere() has made it a
- sphere. It says nothing about the geometry the shape holds now.
+ The count is fixed at creation, so a compound shape keeps its count once set_sphere() has made it
+ a sphere. It says nothing about the geometry the shape holds now.
 *>
 extern fn int ShapeId.mesh_material_count(self) @cname("b3Shape_GetMeshMaterialCount");
 
@@ -206,6 +202,7 @@ extern fn Capsule capsule_raw(ShapeId shape_id) @cname("b3Shape_GetCapsule") @pr
 extern fn HullData* hull_raw(ShapeId shape_id) @cname("b3Shape_GetHull") @private;
 extern fn Mesh mesh_raw(ShapeId shape_id) @cname("b3Shape_GetMesh") @private;
 extern fn HeightFieldData* height_field_raw(ShapeId shape_id) @cname("b3Shape_GetHeightField") @private;
+extern fn CompoundData* compound_raw(ShapeId shape_id) @cname("b3Shape_GetCompound") @private;
 
 <*
  Sets the shape's geometry and, with it, its type — a capsule handed a sphere becomes a sphere.

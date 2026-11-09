@@ -5,7 +5,7 @@ import std::io;
 import std::io::path;
 
 fn void the_geometry_definition_types_match_the_c_layout() @test {
-    assert(b3::MeshDef::size == 40);
+    assert(b3::MeshDef::size == 48);
     assert(b3::MeshDef::alignment == 8);
     assert(b3::HeightFieldDef::size == 48);
     assert(b3::HeightFieldDef::alignment == 8);
@@ -161,8 +161,8 @@ fn void every_height_field_builder_produces_a_field() @test {
 
 // The byte count is read while the mesh is alive and again by the caller, after the helper's
 // defer has run. Taking the second reading here would need the destroy out of that defer.
-fn int[2] the_byte_count_around_a_live_grid_mesh() {
-    int baseline = b3::byte_count();
+fn long[2] the_byte_count_around_a_live_grid_mesh() {
+    long baseline = b3::byte_count();
 
     b3::MeshData* mesh = b3::create_grid_mesh(
       x_count: 4,
@@ -176,8 +176,8 @@ fn int[2] the_byte_count_around_a_live_grid_mesh() {
     return { baseline, b3::byte_count() };
 }
 
-fn int[2] the_byte_count_around_a_live_height_field() {
-    int baseline = b3::byte_count();
+fn long[2] the_byte_count_around_a_live_height_field() {
+    long baseline = b3::byte_count();
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 16,
@@ -193,14 +193,14 @@ fn int[2] the_byte_count_around_a_live_height_field() {
 // The baseline is taken inside the run rather than assumed to be zero: other tests in the same
 // process may still hold a world when this one runs.
 fn void a_destroyed_mesh_gives_back_every_byte_it_took() @test {
-    int[2] around = the_byte_count_around_a_live_grid_mesh();
+    long[2] around = the_byte_count_around_a_live_grid_mesh();
 
     assert(around[1] > around[0], "a mesh box3d allocates must show up in the byte count");
     assert(b3::byte_count() == around[0], "and destroying it must give every byte back");
 }
 
 fn void a_destroyed_height_field_gives_back_every_byte_it_took() @test {
-    int[2] around = the_byte_count_around_a_live_height_field();
+    long[2] around = the_byte_count_around_a_live_height_field();
 
     assert(around[1] > around[0], "a height field box3d allocates must show up in the byte count");
     assert(b3::byte_count() == around[0], "and destroying it must give every byte back");
@@ -208,12 +208,12 @@ fn void a_destroyed_height_field_gives_back_every_byte_it_took() @test {
 
 struct Refusal {
     fault refusal;
-    int baseline;
-    int after;
+    long baseline;
+    long after;
 }
 
 fn Refusal the_refusal_of_a_mesh_definition(b3::MeshDef* def) {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData*? mesh = b3::create_mesh(def);
     defer if (try mesh) b3::destroy_mesh(mesh);
@@ -249,6 +249,91 @@ fn void a_mesh_definition_naming_fewer_than_three_vertices_is_refused() @test {
 
     assert(refused.refusal == b3::DEGENERATE_GEOMETRY, "a triangle needs three vertices");
     assert(refused.after == refused.baseline);
+}
+
+fn Refusal the_refusal_of_a_single_triangle_with_stride(usz stride) {
+    float[32] packed;
+    b3::MeshDef def;
+    def.vertices = (b3::Vec3*)&packed[0];
+    def.stride = stride;
+    int[3] indices = { 0, 1, 2 };
+    def.indices = &indices[0];
+    def.vertex_count = 3;
+    def.triangle_count = 1;
+    return the_refusal_of_a_mesh_definition(&def);
+}
+
+// box3d refuses these strides itself, before allocating, by answering null; the guard is what
+// names them as a malformed definition rather than as degenerate geometry.
+fn void a_mesh_stride_box3d_cannot_read_vertices_with_is_refused() @test {
+    Refusal under_a_vertex = the_refusal_of_a_single_triangle_with_stride(8);
+    Refusal unaligned = the_refusal_of_a_single_triangle_with_stride(14);
+    Refusal past_the_ceiling = the_refusal_of_a_single_triangle_with_stride(4100);
+
+    assert(under_a_vertex.refusal == b3::INVALID_DEFINITION, "a stride shorter than a vertex overlaps them");
+    assert(under_a_vertex.after == under_a_vertex.baseline, "and is turned away before allocating");
+    assert(unaligned.refusal == b3::INVALID_DEFINITION, "a stride that is not a multiple of 4 misaligns them");
+    assert(past_the_ceiling.refusal == b3::INVALID_DEFINITION, "and one past 4096 bytes reads as uninitialised");
+}
+
+struct TriangleWindingReadings {
+    bool packed_hit_from_above;
+    bool clockwise_hit_from_above;
+    float clockwise_normal_y;
+    bool strided_hit_from_above;
+    float strided_point_x;
+}
+
+fn bool? the_hit_from_above(b3::MeshDef* def, float* normal_y, float* point_x) {
+    b3::MeshData* data = b3::create_mesh(def)!;
+    defer b3::destroy_mesh(data);
+    b3::Mesh mesh = { .data = data, .scale = { 1.0, 1.0, 1.0 } };
+    b3::RayCastInput down = { .origin = { 0.25, 3.0, 0.25 }, .translation = { 0.0, -6.0, 0.0 }, .max_fraction = 1.0 };
+    b3::CastOutput? hit = b3::ray_cast_mesh(&mesh, down);
+    if (catch hit) return false;
+    *normal_y = hit.normal.y;
+    *point_x = hit.point.x;
+    return true;
+}
+
+// The single triangle winds counter-clockwise seen from below, so a ray from above meets its back
+// and a mesh ray cast reports nothing. Marking the indices clockwise turns it to face up, and the
+// strided copy holds each vertex sixteen bytes apart with a float between them.
+fn TriangleWindingReadings the_hits_on_one_triangle_wound_and_spaced_three_ways() {
+    b3::Vec3[3] vertices = { { 0.0, 0.0, 0.0 }, { 1.0, 0.0, 0.0 }, { 0.0, 0.0, 1.0 } };
+    float[12] spaced = { 0.0, 0.0, 0.0, 9.0, 1.0, 0.0, 0.0, 9.0, 0.0, 0.0, 1.0, 9.0 };
+    int[3] indices = { 0, 1, 2 };
+
+    b3::MeshDef packed;
+    packed.vertices = &vertices[0];
+    packed.indices = &indices[0];
+    packed.vertex_count = 3;
+    packed.triangle_count = 1;
+
+    b3::MeshDef clockwise = packed;
+    clockwise.clock_wise_winding = true;
+
+    b3::MeshDef strided = clockwise;
+    strided.vertices = (b3::Vec3*)&spaced[0];
+    strided.stride = 16;
+
+    TriangleWindingReadings read;
+    float unused_normal;
+    float unused_x;
+    read.packed_hit_from_above = the_hit_from_above(&packed, &unused_normal, &unused_x) ?? false;
+    read.clockwise_hit_from_above = the_hit_from_above(&clockwise, &read.clockwise_normal_y, &unused_x) ?? false;
+    read.strided_hit_from_above = the_hit_from_above(&strided, &unused_normal, &read.strided_point_x) ?? false;
+    return read;
+}
+
+fn void a_mesh_definition_reads_the_winding_and_the_stride_it_is_given() @test {
+    TriangleWindingReadings read = the_hits_on_one_triangle_wound_and_spaced_three_ways();
+
+    assert(!read.packed_hit_from_above, "counter-clockwise from below, the triangle shows a ray from above its back");
+    assert(read.clockwise_hit_from_above, "marked clockwise, the same indices face up");
+    assert(read.clockwise_normal_y > 0.9999 && read.clockwise_normal_y < 1.0001, "with a normal along +y");
+    assert(read.strided_hit_from_above, "and vertices sixteen bytes apart build the same triangle");
+    assert(read.strided_point_x > 0.2499 && read.strided_point_x < 0.2501, "met where the ray comes down");
 }
 
 // box3d asserts that a grid holds at least four points and that its global range runs upwards,
@@ -567,9 +652,9 @@ fn void a_geometry_shape_built_on_nothing_is_refused() @test {
 
 // Five readings around one mesh shape. The world is destroyed here rather than in a defer so the
 // count after it is gone can be read while the mesh is still alive.
-fn int[5] the_byte_counts_around_a_mesh_shape() {
+fn long[5] the_byte_counts_around_a_mesh_shape() {
     b3::Vec3 unit = { 1.0, 1.0, 1.0 };
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* mesh = b3::create_grid_mesh(
       x_count: 4,
@@ -579,24 +664,24 @@ fn int[5] the_byte_counts_around_a_mesh_shape() {
       identify_edges: true,
     )!!;
     defer b3::destroy_mesh(mesh);
-    int with_mesh = b3::byte_count();
+    long with_mesh = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
     b3::BodyId ground = b3::create_body(world, &ground_def)!!;
-    int with_world = b3::byte_count();
+    long with_world = b3::byte_count();
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::create_mesh_shape(ground, &shape_def, mesh, unit)!!;
-    int with_shape = b3::byte_count();
+    long with_shape = b3::byte_count();
 
     b3::destroy_world(world);
     return { baseline, with_mesh, with_world, with_shape, b3::byte_count() };
 }
 
-fn int[5] the_byte_counts_around_a_height_field_shape() {
-    int baseline = b3::byte_count();
+fn long[5] the_byte_counts_around_a_height_field_shape() {
+    long baseline = b3::byte_count();
 
     b3::HeightFieldData* field = b3::create_height_field_grid(
       row_count: 16,
@@ -605,44 +690,44 @@ fn int[5] the_byte_counts_around_a_height_field_shape() {
       make_holes: false,
     )!!;
     defer b3::destroy_height_field(field);
-    int with_field = b3::byte_count();
+    long with_field = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
     b3::BodyId ground = b3::create_body(world, &ground_def)!!;
-    int with_world = b3::byte_count();
+    long with_world = b3::byte_count();
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::create_height_field_shape(ground, &shape_def, field)!!;
-    int with_shape = b3::byte_count();
+    long with_shape = b3::byte_count();
 
     b3::destroy_world(world);
     return { baseline, with_field, with_world, with_shape, b3::byte_count() };
 }
 
 // A copy would cost at least what the mesh itself costs, and the world would carry it away. The
-// shape costs a fraction of that and the mesh survives the world, which is the whole lifetime
-// contract: the shape borrows the pointer, and destroying the mesh first would leave it reading
+// shape costs less than that, nothing at all once box3d has reserved its first shapes with the
+// world, and the mesh survives the world, which is the whole lifetime contract: the shape borrows the pointer, and destroying the mesh first would leave it reading
 // freed memory. That last half cannot be pinned by a test without a use-after-free in the suite,
 // so it lives in create_mesh_shape's docstring.
 fn void a_mesh_shape_borrows_the_mesh_rather_than_copying_it() @test {
-    int[5] around = the_byte_counts_around_a_mesh_shape();
-    int mesh_bytes = around[1] - around[0];
-    int shape_bytes = around[3] - around[2];
+    long[5] around = the_byte_counts_around_a_mesh_shape();
+    long mesh_bytes = around[1] - around[0];
+    long shape_bytes = around[3] - around[2];
 
     assert(mesh_bytes > 0, "the mesh box3d allocates shows up in the byte count");
-    assert(shape_bytes > 0 && shape_bytes < mesh_bytes, "attaching it costs a shape, not a second mesh");
+    assert(shape_bytes >= 0 && shape_bytes < mesh_bytes, "attaching it costs a shape, not a second mesh");
     assert(around[4] == around[1], "and the mesh outlives the world that was reading it");
 }
 
 fn void a_height_field_shape_borrows_the_field_rather_than_copying_it() @test {
-    int[5] around = the_byte_counts_around_a_height_field_shape();
-    int field_bytes = around[1] - around[0];
-    int shape_bytes = around[3] - around[2];
+    long[5] around = the_byte_counts_around_a_height_field_shape();
+    long field_bytes = around[1] - around[0];
+    long shape_bytes = around[3] - around[2];
 
     assert(field_bytes > 0, "the field box3d allocates shows up in the byte count");
-    assert(shape_bytes > 0 && shape_bytes < field_bytes, "attaching it costs a shape, not a second field");
+    assert(shape_bytes >= 0 && shape_bytes < field_bytes, "attaching it costs a shape, not a second field");
     assert(around[4] == around[1], "and the field outlives the world that was reading it");
 }
 
@@ -970,9 +1055,9 @@ fn void a_replaced_geometry_carries_the_shape_type_and_leaves_the_mass_alone() @
 // The world is destroyed here rather than in a defer so the count with both meshes still alive
 // can be read after it is gone. Both meshes are destroyed by the defers, which is the reading
 // the caller takes: the replaced one was still there to destroy.
-fn int[5] the_byte_counts_around_a_replaced_mesh() {
+fn long[5] the_byte_counts_around_a_replaced_mesh() {
     b3::Vec3 unit = { 1.0, 1.0, 1.0 };
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* first = b3::create_grid_mesh(
       x_count: 4,
@@ -991,7 +1076,7 @@ fn int[5] the_byte_counts_around_a_replaced_mesh() {
       identify_edges: true,
     )!!;
     defer b3::destroy_mesh(second);
-    int with_both = b3::byte_count();
+    long with_both = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
@@ -1000,10 +1085,10 @@ fn int[5] the_byte_counts_around_a_replaced_mesh() {
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::ShapeId shape = b3::create_mesh_shape(ground, &shape_def, first, unit)!!;
-    int with_shape = b3::byte_count();
+    long with_shape = b3::byte_count();
 
     shape.set_mesh(second, unit)!!;
-    int after_replacing = b3::byte_count();
+    long after_replacing = b3::byte_count();
 
     b3::destroy_world(world);
     return { baseline, with_both, with_shape, after_replacing, b3::byte_count() };
@@ -1012,7 +1097,7 @@ fn int[5] the_byte_counts_around_a_replaced_mesh() {
 // Replacing the geometry frees nothing: box3d drops the pointer it was holding and takes the new
 // one, so a caller that replaces a mesh is left owning both and owes destroy() on each.
 fn void a_replaced_mesh_is_still_the_callers_to_destroy() @test {
-    int[5] around = the_byte_counts_around_a_replaced_mesh();
+    long[5] around = the_byte_counts_around_a_replaced_mesh();
 
     assert(around[1] > around[0], "the two meshes box3d allocates show up in the byte count");
     assert(around[3] == around[2], "and replacing one with the other gives nothing back");
@@ -1062,7 +1147,7 @@ fn void the_compound_definition_types_match_the_c_layout() @test {
 // Same shape as the mesh helpers above: the count is read while the compound is alive, the
 // caller reads it again once the defer has run, and nothing here asserts, because a panic would
 // strand the compound on byte_count() for the rest of the process.
-fn int[2] the_byte_count_around_a_live_two_sphere_compound() {
+fn long[2] the_byte_count_around_a_live_two_sphere_compound() {
     b3::CompoundSphereDef[2] spheres = {
       {
         .sphere = { .center = { -0.5, 0.0, 0.0 }, .radius = 0.5 },
@@ -1078,7 +1163,7 @@ fn int[2] the_byte_count_around_a_live_two_sphere_compound() {
     def.spheres = &spheres[0];
     def.sphere_count = 2;
 
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::CompoundData* compound = b3::create_compound(&def)!!;
     defer b3::destroy_compound(compound);
@@ -1087,7 +1172,7 @@ fn int[2] the_byte_count_around_a_live_two_sphere_compound() {
 }
 
 fn void a_destroyed_compound_gives_back_every_byte_it_took() @test {
-    int[2] around = the_byte_count_around_a_live_two_sphere_compound();
+    long[2] around = the_byte_count_around_a_live_two_sphere_compound();
 
     assert(around[1] > around[0], "a compound box3d bakes must show up in the byte count");
     assert(b3::byte_count() == around[0], "and destroying it must give every byte back");
@@ -1095,34 +1180,8 @@ fn void a_destroyed_compound_gives_back_every_byte_it_took() @test {
 
 struct BuiltCompound {
     bool built;
-    int baseline;
-    int live;
-}
-
-fn BuiltCompound the_compound_an_empty_definition_builds() {
-    b3::CompoundDef empty;
-
-    int baseline = b3::byte_count();
-
-    b3::CompoundData*? compound = b3::create_compound(&empty);
-    defer if (try compound) b3::destroy_compound(compound);
-
-    return {
-      .built = @ok(compound),
-      .baseline = baseline,
-      .live = b3::byte_count(),
-    };
-}
-
-// A definition naming no children is a request box3d honours, not one it turns away — which is
-// the opposite of what create_mesh() does with a definition naming no triangles. The compound
-// that comes back is empty and is owned like any other.
-fn void an_empty_compound_definition_is_accepted() @test {
-    BuiltCompound empty = the_compound_an_empty_definition_builds();
-
-    assert(empty.built, "a compound with no children is still a compound");
-    assert(empty.live > empty.baseline, "which box3d allocates for like any other");
-    assert(b3::byte_count() == empty.baseline, "and which the caller still owes destroy() on");
+    long baseline;
+    long live;
 }
 
 // The mesh outlives the compound here only because the defers unwind in reverse: box3d clones
@@ -1131,7 +1190,7 @@ fn BuiltCompound the_compound_every_child_kind_builds() {
     b3::SurfaceMaterial material = b3::default_surface_material();
     b3::BoxHull cube = b3::make_cube_hull(0.5);
 
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::MeshData* mesh = b3::create_grid_mesh(
       x_count: 4,
@@ -1202,7 +1261,7 @@ fn void a_compound_takes_a_child_of_every_kind() @test {
 }
 
 fn Refusal the_refusal_of_a_compound_definition(b3::CompoundDef* def) {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::CompoundData*? compound = b3::create_compound(def);
     defer if (try compound) b3::destroy_compound(compound);
@@ -1315,13 +1374,13 @@ fn Refusal the_refusal_of_a_mesh_child_carrying(int material_count) {
     b3::SurfaceMaterial[8] materials;
     for (int i = 0; i < 8; i++) materials[i] = b3::default_surface_material();
 
-    // The mesh carries MAX_COMPOUND_MESH_MATERIALS of its own, so the accepted count is one box3d
+    // The mesh carries as many materials as the child names, so an accepted count is one box3d
     // agrees with rather than one it asserts against.
     b3::MeshData* mesh = b3::create_grid_mesh(
       x_count: 4,
       z_count: 4,
       cell_width: 1.0,
-      material_count: b3::MAX_COMPOUND_MESH_MATERIALS,
+      material_count: material_count > 0 ? material_count : 1,
       identify_edges: true,
     )!!;
     defer b3::destroy_mesh(mesh);
@@ -1343,21 +1402,19 @@ fn Refusal the_refusal_of_a_mesh_child_carrying(int material_count) {
     return the_refusal_of_a_compound_definition(&def);
 }
 
-// box3d writes one index per material into a fixed array of MAX_COMPOUND_MESH_MATERIALS and
-// keeps writing past the end of it for a larger count, so this refusal stands in for a heap it
-// would otherwise corrupt. A count of zero is refused too: box3d asserts against it, and the
-// assertion is compiled out of this build.
-fn void a_compound_mesh_child_carrying_the_wrong_number_of_materials_is_refused() @test {
+// box3d asserts a mesh child names at least one material, and the assertion is compiled out of
+// this build. There is no upper bound: the compound keeps one slot per material the mesh has.
+fn void a_compound_mesh_child_naming_no_materials_is_refused() @test {
     fault none;
 
-    Refusal too_many = the_refusal_of_a_mesh_child_carrying(b3::MAX_COMPOUND_MESH_MATERIALS + 1);
     Refusal no_materials = the_refusal_of_a_mesh_child_carrying(0);
-    Refusal allowed = the_refusal_of_a_mesh_child_carrying(b3::MAX_COMPOUND_MESH_MATERIALS);
+    Refusal one = the_refusal_of_a_mesh_child_carrying(1);
+    Refusal eight = the_refusal_of_a_mesh_child_carrying(8);
 
-    assert(too_many.refusal == b3::INVALID_DEFINITION, "a mesh child has room for four materials");
-    assert(too_many.after == too_many.baseline, "and is turned away before allocating");
-    assert(no_materials.refusal == b3::INVALID_DEFINITION, "and needs at least one");
-    assert(allowed.refusal == none, "while a count between the two bounds builds");
+    assert(no_materials.refusal == b3::INVALID_DEFINITION, "a mesh child needs at least one material");
+    assert(no_materials.after == no_materials.baseline, "and is turned away before allocating");
+    assert(one.refusal == none, "one builds");
+    assert(eight.refusal == none, "and so do eight");
 }
 
 // The one definition box3d itself refuses, and it refuses on the counts alone: the arrays are
@@ -1575,31 +1632,31 @@ fn void a_baked_compound_shape_without_a_definition_or_a_compound_is_refused() @
     assert(refusals[1] == b3::INVALID_DEFINITION, "and a compound shape needs a compound");
 }
 
-fn int[5] the_byte_counts_around_a_compound_shape() {
-    int baseline = b3::byte_count();
+fn long[5] the_byte_counts_around_a_compound_shape() {
+    long baseline = b3::byte_count();
 
     b3::CompoundData* compound = a_compound_of_two_unlike_spheres()!!;
     defer b3::destroy_compound(compound);
-    int with_compound = b3::byte_count();
+    long with_compound = b3::byte_count();
 
     b3::WorldDef world_def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&world_def)!!;
     b3::BodyDef ground_def = b3::default_body_def();
     b3::BodyId ground = b3::create_body(world, &ground_def)!!;
-    int with_world = b3::byte_count();
+    long with_world = b3::byte_count();
 
     b3::ShapeDef shape_def = b3::default_shape_def();
     b3::create_baked_compound_shape(ground, &shape_def, compound)!!;
-    int with_shape = b3::byte_count();
+    long with_shape = b3::byte_count();
 
     b3::destroy_world(world);
     return { baseline, with_compound, with_world, with_shape, b3::byte_count() };
 }
 
 fn void a_compound_shape_borrows_the_compound_rather_than_copying_it() @test {
-    int[5] around = the_byte_counts_around_a_compound_shape();
-    int compound_bytes = around[1] - around[0];
-    int shape_bytes = around[3] - around[2];
+    long[5] around = the_byte_counts_around_a_compound_shape();
+    long compound_bytes = around[1] - around[0];
+    long shape_bytes = around[3] - around[2];
 
     assert(compound_bytes > 0, "the compound box3d bakes shows up in the byte count");
     assert(shape_bytes > 0 && shape_bytes < compound_bytes, "attaching it costs a shape, not a second compound");
@@ -1789,7 +1846,8 @@ fn b3::CompoundData*? a_compound_of_one_child_of_every_kind() {
 struct FlatChild {
     b3::ShapeType type;
     float transform_x;
-    int[b3::MAX_COMPOUND_MESH_MATERIALS] material_indices;
+    int slot_count;
+    int[4] slots;
 }
 
 struct FlatChildren {
@@ -1817,11 +1875,14 @@ fn FlatChildren the_children_a_compound_reports_in_order() {
 
     for (int i = 0; i < read.child_count && i < read.children.len; i++) {
         if (try child = compound.child(i)) {
+            ushort[] slots = child.material_slots();
             read.children[i] = {
               .type = child.type,
               .transform_x = child.transform.p.x,
-              .material_indices = child.material_indices,
+              .slot_count = (int)slots.len,
+              .slots = { -1, -1, -1, -1 },
             };
+            for (int j = 0; j < slots.len && j < 4; j++) read.children[i].slots[j] = slots[j];
         }
     }
 
@@ -1861,20 +1922,20 @@ fn void the_flat_child_index_runs_in_the_order_box3d_baked() @test {
         "the sphere's centre being the placement its identity transform does not carry");
 }
 
-// A mesh child fills every slot it has and the ones it never uses read 0, which is a real
-// material index rather than a marker, so the child cannot say how many of them mean anything.
-// The other three kinds name one material and leave the rest of the array at that same 0.
-fn void a_mesh_child_carries_a_material_index_per_slot() @test {
+// A mesh child carries one slot per material its mesh has, so the slice length is the number of
+// slots that mean anything. The other three kinds carry exactly one.
+fn void a_mesh_child_carries_one_material_slot_per_mesh_material() @test {
     FlatChildren read = the_children_a_compound_reports_in_order();
 
     assert(read.children[2].type == b3::ShapeType.MESH);
-    assert(read.children[2].material_indices[0] == 0, "the mesh names its first material");
-    assert(read.children[2].material_indices[1] == 2, "and its second, which the second sphere shares");
-    assert(read.children[2].material_indices[2] == 0, "while the two slots it does not use read as index 0");
-    assert(read.children[2].material_indices[3] == 0);
+    assert(read.children[2].slot_count == 2, "the mesh has two materials and two slots");
+    assert(read.children[2].slots[0] == 0, "the mesh names its first material");
+    assert(read.children[2].slots[1] == 2, "and its second, which the second sphere shares");
 
-    assert(read.children[1].material_indices[0] == 1, "a hull child names one material in slot 0");
-    assert(read.children[1].material_indices[1] == 0, "and leaves the rest at the same unusable 0");
+    assert(read.children[1].slot_count == 1, "a hull child carries one slot");
+    assert(read.children[1].slots[0] == 1, "naming the material it shares with the first sphere");
+    assert(read.children[0].slot_count == 1 && read.children[0].slots[0] == 0, "and so does a capsule");
+    assert(read.children[4].slot_count == 1 && read.children[4].slots[0] == 2, "and a sphere");
 }
 
 struct PerKindChildren {
@@ -1889,7 +1950,8 @@ struct PerKindChildren {
     float mesh_transform_x;
     float mesh_scale_x;
     float mesh_scale_z;
-    int[b3::MAX_COMPOUND_MESH_MATERIALS] mesh_material_indices;
+    int mesh_slot_count;
+    int[4] mesh_material_slots;
     float[2] sphere_center_x;
     float[2] sphere_radius;
     int[2] sphere_material_index;
@@ -1904,7 +1966,7 @@ fn PerKindChildren the_children_the_per_kind_accessors_report() {
     PerKindChildren read;
     read.capsule_material_index = -1;
     read.hull_material_index = -1;
-    read.mesh_material_indices = { -1, -1, -1, -1 };
+    read.mesh_material_slots = { -1, -1, -1, -1 };
     read.sphere_material_index = { -1, -1 };
 
     if (try capsule = compound.capsule(0)) {
@@ -1923,7 +1985,9 @@ fn PerKindChildren the_children_the_per_kind_accessors_report() {
         read.mesh_transform_x = mesh.transform.p.x;
         read.mesh_scale_x = mesh.scale.x;
         read.mesh_scale_z = mesh.scale.z;
-        read.mesh_material_indices = mesh.material_indices;
+        ushort[] slots = mesh.material_slots();
+        read.mesh_slot_count = (int)slots.len;
+        for (int j = 0; j < slots.len && j < 4; j++) read.mesh_material_slots[j] = slots[j];
     }
     for (int i = 0; i < compound.sphere_count && i < read.sphere_radius.len; i++) {
         if (try sphere = compound.sphere(i)) {
@@ -1957,7 +2021,8 @@ fn void every_per_kind_accessor_reports_the_child_the_definition_gave_it() @test
     assert(read.mesh_scale_x > 1.99 && read.mesh_scale_x < 2.01);
     assert(read.mesh_scale_z > 2.99 && read.mesh_scale_z < 3.01,
         "a non-uniform scale, so a mesh child reporting one axis for another would show");
-    assert(read.mesh_material_indices[0] == 0 && read.mesh_material_indices[1] == 2);
+    assert(read.mesh_slot_count == 2);
+    assert(read.mesh_material_slots[0] == 0 && read.mesh_material_slots[1] == 2);
 
     assert(read.sphere_center_x[0] > -3.01 && read.sphere_center_x[0] < -2.99);
     assert(read.sphere_radius[0] > 0.49 && read.sphere_radius[0] < 0.51);
@@ -2040,43 +2105,21 @@ fn void an_index_outside_a_compound_is_refused_at_both_ends() @test {
     assert(refusals[9] == b3::INDEX_OUT_OF_RANGE);
 }
 
-struct EmptyCompoundRead {
-    int child_count;
-    int material_count;
-    int materials_length;
-    fault first_child;
-}
-
-fn EmptyCompoundRead the_readings_of_an_empty_compound() {
+// box3d asserts a compound holds at least one child and one material, and both assertions are
+// compiled out of this build, so a definition naming nothing is refused before anything is read.
+fn void a_compound_definition_naming_no_children_is_refused() @test {
     b3::CompoundDef empty;
-    b3::CompoundData* compound = b3::create_compound(&empty)!!;
-    defer b3::destroy_compound(compound);
 
-    EmptyCompoundRead read = {
-      .child_count = compound.child_count(),
-      .material_count = compound.material_count,
-      .materials_length = compound.materials().len,
-    };
-    if (catch err = compound.child(0)) read.first_child = err;
-    return read;
-}
+    Refusal refused = the_refusal_of_a_compound_definition(&empty);
 
-// box3d hands back a non-null material pointer for a compound with no children at all, one that
-// addresses the first byte past the allocation, so the count is the only thing that reports the
-// emptiness and the slice is what carries it to a caller.
-fn void an_empty_compound_reports_no_children_and_no_materials() @test {
-    EmptyCompoundRead read = the_readings_of_an_empty_compound();
-
-    assert(read.child_count == 0);
-    assert(read.material_count == 0, "a compound with no children has no materials either");
-    assert(read.materials_length == 0, "which the slice reports as a length, never as a pointer");
-    assert(read.first_child == b3::INDEX_OUT_OF_RANGE, "and it has no child 0 to read");
+    assert(refused.refusal == b3::INVALID_DEFINITION, "a compound needs at least one child");
+    assert(refused.after == refused.baseline, "and the definition is turned away before allocating");
 }
 
 fn void the_compound_child_types_match_the_c_layout() @test {
-    assert(b3::CompoundData::size == 144);
+    assert(b3::CompoundData::size == 96);
     assert(b3::CompoundData::alignment == 8);
-    assert(b3::DynamicTree::size == 80);
+    assert(b3::DynamicTree::size == 112);
     assert(b3::ChildShape::size == 80);
     assert(b3::ChildShape::alignment == 8);
     assert(b3::CompoundCapsule::size == 32);
@@ -2088,19 +2131,18 @@ fn void the_compound_child_types_match_the_c_layout() @test {
 const int A_COMPOUND_SPHERE_COUNT = 2;
 
 struct CompoundThroughBytes {
-    int baseline;
-    int bytes_with_the_compound;
-    int bytes_at_the_end;
+    long baseline;
+    long bytes_with_the_compound;
+    long bytes_at_the_end;
     int byte_length;
-    bool the_tree_was_live_before;
-    bool the_tree_was_nulled_by_the_conversion;
-    bool the_tree_came_back_in_the_copy;
     bool the_copy_is_a_different_address;
-    bool the_original_was_repaired_in_place;
+    bool the_copy_is_read_in_place;
+    bool the_original_reads_as_itself;
     int children_in_the_copy;
     b3::Aabb bounds_written;
     b3::Aabb bounds_read;
     float[A_COMPOUND_SPHERE_COUNT] radii_read;
+    fault an_empty_slice;
     fault a_slice_too_short_for_a_header;
     fault a_slice_of_the_wrong_length;
     fault bytes_of_another_version;
@@ -2132,36 +2174,33 @@ fn CompoundThroughBytes the_readings_from_a_compound_through_its_bytes() {
     defer b3::destroy_compound(built);
     trip.bytes_with_the_compound = b3::byte_count();
 
-    trip.the_tree_was_live_before = built.tree.nodes != null;
-    if (try bounds = built.compute_aabb(CHILD_TRANSFORM)) trip.bounds_written = bounds;
+    trip.bounds_written = built.compute_aabb(CHILD_TRANSFORM);
 
-    char[] bytes = b3::convert_compound_to_bytes(built);
+    char[] bytes = ((char*)built)[:built.byte_count];
     trip.byte_length = (int)bytes.len;
-    trip.the_tree_was_nulled_by_the_conversion = built.tree.nodes == null;
 
     long[512] storage;
     if (bytes.len > storage.len * (usz)long::size) return trip;
     char[] copy = ((char*)&storage)[:bytes.len];
     copy[..] = bytes[..];
 
-    b3::CompoundData*? restored = b3::compound_from_bytes(copy);
+    b3::CompoundData*? restored = b3::validate_compound(copy);
     if (catch restored) return trip;
     trip.the_copy_is_a_different_address = restored != built;
-    trip.the_tree_came_back_in_the_copy = restored.tree.nodes != null;
+    trip.the_copy_is_read_in_place = (char*)restored == copy.ptr;
     trip.children_in_the_copy = restored.child_count();
-    if (try bounds = restored.compute_aabb(CHILD_TRANSFORM)) trip.bounds_read = bounds;
+    trip.bounds_read = restored.compute_aabb(CHILD_TRANSFORM);
     for (int i = 0; i < A_COMPOUND_SPHERE_COUNT; i++) {
         if (try child = restored.sphere(i)) trip.radii_read[i] = child.sphere.radius;
     }
 
-    if (catch err = b3::compound_from_bytes(copy[:8])) trip.a_slice_too_short_for_a_header = err;
-    if (catch err = b3::compound_from_bytes(copy[:copy.len - 1])) trip.a_slice_of_the_wrong_length = err;
+    if (catch err = b3::validate_compound(copy[:0])) trip.an_empty_slice = err;
+    if (catch err = b3::validate_compound(copy[:8])) trip.a_slice_too_short_for_a_header = err;
+    if (catch err = b3::validate_compound(copy[:copy.len - 1])) trip.a_slice_of_the_wrong_length = err;
     copy[0] = copy[0] ^ 0xFF;
-    if (catch err = b3::compound_from_bytes(copy)) trip.bytes_of_another_version = err;
+    if (catch err = b3::validate_compound(copy)) trip.bytes_of_another_version = err;
 
-    if (try repaired = b3::compound_from_bytes(bytes)) {
-        trip.the_original_was_repaired_in_place = repaired == built && built.tree.nodes != null;
-    }
+    if (try original = b3::validate_compound(bytes)) trip.the_original_reads_as_itself = original == built;
     trip.bytes_at_the_end = b3::byte_count();
     return trip;
 }
@@ -2178,37 +2217,38 @@ fn void a_compound_read_back_from_its_bytes_holds_the_children_it_was_baked_with
     for (int axis = 0; axis < 3; axis++) {
         float lower_slip = trip.bounds_read.lower_bound[axis] - trip.bounds_written.lower_bound[axis];
         float upper_slip = trip.bounds_read.upper_bound[axis] - trip.bounds_written.upper_bound[axis];
-        assert(lower_slip > -1.0e-5 && lower_slip < 1.0e-5, "and the tree it walks reporting the bounds it reported before");
+        assert(lower_slip > -1.0e-5 && lower_slip < 1.0e-5, "and reporting the bounds it reported before");
         assert(upper_slip > -1.0e-5 && upper_slip < 1.0e-5);
     }
     assert(trip.bounds_written.upper_bound.x > 1.49 && trip.bounds_written.upper_bound.x < 1.51,
         "which reach the far side of the smaller sphere rather than the origin");
 }
 
-fn void the_bytes_are_the_compound_itself_and_the_conversion_takes_its_tree_out() @test {
+// The compound holds offsets rather than pointers, so its own bytes are its serialized form and
+// reading them back is a check over the caller's buffer, not a conversion.
+fn void the_bytes_are_the_compound_itself_and_reading_them_allocates_nothing() @test {
     CompoundThroughBytes trip = the_readings_from_a_compound_through_its_bytes();
 
     assert(trip.byte_length >= (int)b3::CompoundData::size && trip.byte_length < 4096,
-        "the slice spans the whole baked compound, header and tree and children together");
-    assert(trip.the_tree_was_live_before && trip.the_tree_was_nulled_by_the_conversion,
-        "converting nulls the one address the compound holds, so every query through it stops working");
-    assert(trip.the_tree_came_back_in_the_copy && trip.the_original_was_repaired_in_place,
-        "and reading bytes back points that address into whichever buffer holds them");
+        "the compound's byte_count spans header, tree and children together");
+    assert(trip.the_copy_is_read_in_place, "the compound read back is the caller's buffer itself");
+    assert(trip.the_original_reads_as_itself, "and the original's own bytes read as the original");
     assert(trip.bytes_with_the_compound > trip.baseline
         && trip.bytes_at_the_end == trip.bytes_with_the_compound,
-        "neither direction allocates: the whole round trip moves the byte count by nothing");
+        "reading bytes back moves the byte count by nothing");
 }
 
-fn void bytes_that_are_no_compound_are_refused_before_they_are_read_as_one() @test {
+fn void bytes_that_are_no_compound_are_refused() @test {
     CompoundThroughBytes trip = the_readings_from_a_compound_through_its_bytes();
 
     assert(trip.children_in_the_copy == A_COMPOUND_SPHERE_COUNT,
-        "the same fixture read a compound back, so the three refusals below are refusals");
-    assert(trip.a_slice_too_short_for_a_header == b3::BUFFER_TOO_SMALL,
-        "a slice shorter than the header is refused by the binding, box3d reading the version before any length");
+        "the same fixture read a compound back, so the refusals below are refusals");
+    assert(trip.an_empty_slice == b3::NOT_A_COMPOUND, "an empty slice holds no compound");
+    assert(trip.a_slice_too_short_for_a_header == b3::NOT_A_COMPOUND,
+        "nor does a slice shorter than the header, which box3d measures before reading it");
     assert(trip.a_slice_of_the_wrong_length == b3::NOT_A_COMPOUND,
-        "a slice one byte short of the length the header names is refused by box3d");
-    assert(trip.bytes_of_another_version == b3::NOT_A_COMPOUND, "and so are bytes whose version it does not know");
+        "nor a slice one byte short of the length the header names");
+    assert(trip.bytes_of_another_version == b3::NOT_A_COMPOUND, "nor bytes whose version box3d does not know");
 }
 
 const int A_FIELD_COUNT_X = 4;
@@ -2223,9 +2263,9 @@ fn String a_temporary_height_field_path(String name) {
 }
 
 struct HeightFieldThroughAFile {
-    int baseline;
-    int bytes_with_both;
-    int bytes_at_the_end;
+    long baseline;
+    long bytes_with_both;
+    long bytes_at_the_end;
     b3::Aabb bounds_written;
     b3::Aabb bounds_read;
     float struck_the_written_at;

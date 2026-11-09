@@ -132,7 +132,7 @@ b3::joint_wake_bodies(joint);
 ```
 
 `JointType` values: `PARALLEL`, `DISTANCE`, `FILTER`, `MOTOR`, `PRISMATIC`, `REVOLUTE`,
-`SPHERICAL`, `WELD`, `WHEEL`.
+`SPHERICAL`, `WELD`, `WHEEL`, `MOVER`, `POGO`. No constructor for the last two is bound.
 
 ### Collision between the linked bodies
 

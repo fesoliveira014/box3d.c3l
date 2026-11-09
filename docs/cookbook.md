@@ -151,7 +151,6 @@ io::printfn("%d shapes within 0.75 of (0, 1, 0)", touching.len);
 - A proxy is a point cloud plus a radius: one point is a sphere, two a capsule. The points are read
   during the call only, and `count` must be between 1 and `MAX_SHAPE_CAST_POINTS`.
 - The result is a prefix of `buffer`. A result as long as the buffer may have been cut short.
-- A compound-shaped body far from the probe's origin can be missed without a signal.
 
 API: [queries and casts](api/queries_and_casts.md).
 
@@ -309,8 +308,8 @@ fn void? mesh_floor(b3::WorldId world) {
 
 - The shape borrows the mesh. The mesh must outlive every shape on it, and destroying the world
   does not free it. Defers run in reverse, so here the shape goes first.
-- Wind triangles counter-clockwise, as `MeshDef` requires. `create_mesh` copies the arrays, so they
-  need not outlive the call.
+- Wind triangles counter-clockwise, or set `clock_wise_winding`. `create_mesh` copies the arrays,
+  so they need not outlive the call.
 - Triangles with no area are skipped; a mesh with none left is refused with `DEGENERATE_GEOMETRY`.
   A refused build can leak part of its allocation, so validate geometry before building.
 - A mesh shape contributes no mass. On a dynamic body, give the body other shapes for mass.
@@ -578,11 +577,11 @@ API: [recording and replay](api/recording.md).
 Route box3d's allocations and log messages through the application. Install at startup:
 
 ```c3
-fn void* aligned_alloc_hook(int size, int alignment) {
+fn void* aligned_alloc_hook(usz size, int alignment) {
     return mem::malloc_aligned((sz)size, (sz)alignment);
 }
 
-fn void aligned_free_hook(void* memory) {
+fn void aligned_free_hook(void* memory, usz size) {
     mem::free_aligned(memory);
 }
 

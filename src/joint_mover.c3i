@@ -1,0 +1,11 @@
+module b3;
+
+<*
+ A mover joint definition: drives a dynamic character body towards linear_velocity with at most
+ max_force newtons, applied only in the xz plane of local frame B. It does not affect rotation.
+*>
+struct MoverJointDef {
+    inline JointDef base;
+    Vec3 linear_velocity;
+    float max_force;
+}

@@ -4,10 +4,10 @@ import b3;
 
 fn void the_world_types_match_the_c_layout() @test {
     assert(b3::Capacity::size == 20);
-    assert(b3::WorldDef::size == 144);
+    assert(b3::WorldDef::size == 152);
     assert(b3::WorldDef::alignment == 8);
     assert(b3::Profile::size == 92);
-    assert(b3::Counters::size == 200);
+    assert(b3::Counters::size == 208);
 }
 
 fn void the_default_definition_carries_the_values_the_c_side_sets() @test {
@@ -17,11 +17,14 @@ fn void the_default_definition_carries_the_values_the_c_side_sets() @test {
     assert(def.gravity.y == -10.0);
     assert(def.gravity.z == 0.0);
     assert(def.restitution_threshold == 1.0);
+    assert(def.restitution_iterations == 2);
+    assert(!def.enable_restitution_propagation);
     assert(def.hit_event_threshold == 1.0);
     assert(def.contact_hertz == 30.0);
     assert(def.contact_damping_ratio == 10.0);
     assert(def.contact_speed == 3.0);
     assert(def.maximum_linear_speed == 400.0);
+    assert(def.isotropic_inertia_tolerance == (float)0.2);
     assert(def.enable_sleep);
     assert(def.enable_continuous);
 }
@@ -57,7 +60,7 @@ fn void a_definition_without_the_cookie_is_refused() @test {
 }
 
 fn void a_world_releases_everything_it_allocated() @test {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
 
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
@@ -68,7 +71,7 @@ fn void a_world_releases_everything_it_allocated() @test {
 }
 
 fn void the_world_limit_becomes_a_fault() @test {
-    int baseline = b3::byte_count();
+    long baseline = b3::byte_count();
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId[b3::MAX_WORLDS] worlds;
 
@@ -219,13 +222,12 @@ fn void a_stepped_world_reports_a_nonzero_profile() @test {
     assert(profile.step > 0.0);
 }
 
-fn void speculative_and_static_tree_rebuild_leave_the_world_valid() @test {
-    int baseline = b3::byte_count();
+fn void enabling_speculative_contact_leaves_the_world_valid() @test {
+    long baseline = b3::byte_count();
     b3::WorldDef def = b3::default_world_def();
     b3::WorldId world = b3::create_world(&def)!!;
 
     world.enable_speculative(true);
-    b3::world_rebuild_static_tree(world);
     b3::world_step(world, 1.0f / 60.0f, 4);
     assert(world.is_valid());
 

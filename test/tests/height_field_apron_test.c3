@@ -384,13 +384,13 @@ fn Window a_unit_window(char apron_sides) => {
     .poisoned = false,
 };
 
-fn int[2] the_bytes_of_a_window_with_and_without_an_apron() {
-    int baseline = b3::byte_count();
+fn long[2] the_bytes_of_a_window_with_and_without_an_apron() {
+    long baseline = b3::byte_count();
     b3::HeightFieldData* bare = a_window(a_unit_window(0))!!;
     defer b3::destroy_height_field(bare);
-    int bare_bytes = b3::byte_count() - baseline;
+    long bare_bytes = b3::byte_count() - baseline;
 
-    int before_apron = b3::byte_count();
+    long before_apron = b3::byte_count();
     char all_sides = b3::HEIGHT_FIELD_APRON_NEGATIVE_X | b3::HEIGHT_FIELD_APRON_POSITIVE_X
       | b3::HEIGHT_FIELD_APRON_NEGATIVE_Z | b3::HEIGHT_FIELD_APRON_POSITIVE_Z;
     b3::HeightFieldData* aproned = a_window(a_unit_window(all_sides))!!;
@@ -400,7 +400,7 @@ fn int[2] the_bytes_of_a_window_with_and_without_an_apron() {
 }
 
 fn void an_apron_is_not_stored_with_the_field() @test {
-    int[2] bytes = the_bytes_of_a_window_with_and_without_an_apron();
+    long[2] bytes = the_bytes_of_a_window_with_and_without_an_apron();
 
     assert(bytes[0] > 0, "a field box3d allocates shows up in the byte count");
     assert(bytes[1] == bytes[0], "and the apron around its samples adds nothing to it");

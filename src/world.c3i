@@ -44,6 +44,12 @@ const int MAX_WORLDS = 128;
 *>
 const int MAX_WORKERS = 32;
 
+<*
+ The most restitution iterations a world runs per step. Mirrors B3_MAX_RESTITUTION_ITERATIONS in
+ constants.h, which the C API does not expose as a function.
+*>
+const int MAX_RESTITUTION_ITERATIONS = 63;
+
 struct Capacity {
     int static_shape_count;
     int dynamic_shape_count;
@@ -52,14 +58,22 @@ struct Capacity {
     int contact_count;
 }
 
+<*
+ A world definition. Must come from default_world_def() — see create_world. box3d clamps
+ restitution_iterations into 0 to MAX_RESTITUTION_ITERATIONS and isotropic_inertia_tolerance into
+ 0 to 1 when it builds the world, rather than refusing a value outside them.
+*>
 struct WorldDef {
     Vec3 gravity;
     float restitution_threshold;
+    int restitution_iterations;
+    bool enable_restitution_propagation;
     float hit_event_threshold;
     float contact_hertz;
     float contact_damping_ratio;
     float contact_speed;
     float maximum_linear_speed;
+    float isotropic_inertia_tolerance;
     FrictionFn friction_callback;
     RestitutionFn restitution_callback;
     bool enable_sleep;
@@ -89,7 +103,7 @@ struct Profile {
     float solve_impulses;
     float integrate_positions;
     float relax_impulses;
-    float apply_restitution;
+    float restitution;
     float store_impulses;
     float split_islands;
     float transforms;
@@ -103,6 +117,7 @@ struct Profile {
 }
 
 struct Counters {
+    long byte_count;
     int body_count;
     int shape_count;
     int contact_count;
@@ -114,7 +129,6 @@ struct Counters {
     int tree_height;
     int sat_call_count;
     int sat_cache_hit_count;
-    int byte_count;
     int task_count;
     int[24] color_counts;
     int[8] manifold_counts;
@@ -194,4 +208,3 @@ extern fn void WorldId.set_friction_callback(self, FrictionFn fcn) @cname("b3Wor
 *>
 extern fn void WorldId.set_restitution_callback(self, RestitutionFn fcn) @cname("b3World_SetRestitutionCallback");
 
-extern fn void world_rebuild_static_tree(WorldId world) @cname("b3World_RebuildStaticTree");

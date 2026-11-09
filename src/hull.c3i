@@ -58,7 +58,9 @@ struct HullData {
     int face_offset;
     int soa_vertex_offset;
     int soa_normal_offset;
+    int edge_cosine_offset;
     int byte_count;
+    int padding;
 }
 
 struct BoxHull {
@@ -75,6 +77,7 @@ struct BoxHull {
     float[8] nx;
     float[8] ny;
     float[8] nz;
+    float[12] edge_cosines;
 }
 
 extern fn BoxHull make_cube_hull(float half_width) @cname("b3MakeCubeHull");

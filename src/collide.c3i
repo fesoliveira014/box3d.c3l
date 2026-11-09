@@ -66,6 +66,16 @@ struct FeaturePair {
 }
 
 <*
+ One candidate point of the 2D hull box3d builds to simplify a contact manifold: the point, its
+ contact's separation and that contact's index before the hull reordered them.
+*>
+struct Point2D {
+    Vec2 p;
+    float separation;
+    int original_index;
+}
+
+<*
  One contact point of a manifold, in shape A's frame. A separation is zero where the surfaces
  exactly meet, negative for an overlap, and positive for a point the two have not reached — which
  only some pairs report at all.

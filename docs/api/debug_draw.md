@@ -40,8 +40,8 @@ draw::world_draw(world, &debug, ulong::max);
 ```
 
 `default_debug_draw` returns a table with every flag false, callbacks that do nothing (not null),
-drawing bounds of 100 length units either side of the origin, and `force_scale` and `joint_scale`
-of 1. Raise the flags you want and replace the matching callbacks.
+drawing bounds of 100 length units either side of the origin, a `force_scale` of 0.001 and a
+`joint_scale` of 1. Raise the flags you want and replace the matching callbacks.
 
 `world_draw(world, &debug, mask_bits)` draws everything inside `drawing_bounds` whose shape filter
 categories overlap `mask_bits`. A mask of 0 draws nothing; `ulong::max` draws everything.

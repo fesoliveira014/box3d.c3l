@@ -5,8 +5,7 @@ module b3;
 
  Every call starts GJK cold: box3d's warm-start cache belongs to one pair alone, so the wrapper
  keeps its own and zeroes it, and the diagnostic simplex array is never asked for — simplex_count
- comes back zero, and iterations counts the support points added past the first only where the
- cores stay apart, reading zero on any overlap whatever work the search did.
+ comes back zero, and iterations counts the support points added past the first, overlap or not.
 
  @return `the closest points`
  @return? check_shape_proxy!

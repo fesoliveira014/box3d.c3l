@@ -484,8 +484,8 @@ fn CompoundBounds the_bounds_of_a_two_sphere_compound() {
     defer b3::destroy_compound(compound);
 
     return {
-      .at_rest = compound.compute_aabb(an_untouched_placement())!!,
-      .carried = compound.compute_aabb({ .p = { 1.0, 2.0, 3.0 }, .q = { 0.0, 0.0, 0.0, 1.0 } })!!,
+      .at_rest = compound.compute_aabb(an_untouched_placement()),
+      .carried = compound.compute_aabb({ .p = { 1.0, 2.0, 3.0 }, .q = { 0.0, 0.0, 0.0, 1.0 } }),
     };
 }
 
@@ -500,37 +500,6 @@ fn void a_compound_bounds_every_child_it_holds() @test {
     assert(math::abs(compound.carried.lower_bound.x + 1.5) < 0.001, "and the whole box moves with the transform");
     assert(math::abs(compound.carried.upper_bound.y - 3.25) < 0.001);
     assert(math::abs(compound.carried.lower_bound.z - 2.5) < 0.001);
-}
-
-struct EmptyCompoundBounds {
-    fault refusal;
-    int baseline;
-    int after;
-}
-
-fn EmptyCompoundBounds the_bounds_a_childless_compound_reports() {
-    b3::CompoundDef childless;
-
-    int baseline = b3::byte_count();
-
-    b3::CompoundData* compound = b3::create_compound(&childless)!!;
-    defer b3::destroy_compound(compound);
-
-    fault refusal;
-    if (catch err = compound.compute_aabb(an_untouched_placement())) refusal = err;
-
-    return { .refusal = refusal, .baseline = baseline, .after = b3::byte_count() };
-}
-
-// box3d indexes the compound's node array at the tree root, and a compound with no children
-// carries the root minus one. The read lands back inside the compound's own header and answers a
-// zero-extent box at the transform's position, which is what an empty box would look like too.
-fn void a_compound_with_no_children_bounds_nothing() @test {
-    EmptyCompoundBounds childless = the_bounds_a_childless_compound_reports();
-
-    assert(childless.refusal == b3::DEGENERATE_GEOMETRY, "a compound holding nothing has no bounds to report");
-    assert(childless.after > childless.baseline, "and the compound it was asked of was a real one, alive at the time");
-    assert(b3::byte_count() == childless.baseline, "which gave every byte back when it was destroyed");
 }
 
 fn float[2] the_x_reach_of_a_grid_mesh_flat_and_turned() {

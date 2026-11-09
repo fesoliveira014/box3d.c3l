@@ -157,8 +157,7 @@ fn void? ShapeId.set_mesh(self, MeshData* mesh, Vec3 scale) {
  One of the surface materials this shape holds, by index. There is no type guard — what a shape
  holds here has nothing to do with the geometry it carries — but there is an index guard, because
  the bounds assertion box3d makes is compiled out here and an index outside the array reads
- whatever follows it in memory. A shape built from an empty compound holds no materials at all,
- and every index into it is refused.
+ whatever follows it in memory.
 
  @return `the material`
  @return? INDEX_OUT_OF_RANGE : `index is negative or not below mesh_material_count()`

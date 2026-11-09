@@ -251,7 +251,7 @@ fn void a_velocity_clip_passes_over_every_plane_no_solve_leaned_on() @test {
 }
 
 fn void the_plane_solver_and_the_velocity_clip_allocate_nothing() @test {
-    int before = b3::byte_count();
+    long before = b3::byte_count();
 
     GroundSolves solves = the_solves_against_a_ground_plane();
     GroundClips clips = the_clips_against_a_ground_plane();
@@ -791,7 +791,7 @@ fn MoverQueryReadings the_readings_of_every_mover_query() {
 }
 
 fn void the_mover_queries_allocate_nothing() @test {
-    int before = b3::byte_count();
+    long before = b3::byte_count();
     MoverQueryReadings readings = the_readings_of_every_mover_query();
 
     assert(readings.planes_from_the_world == 1 && readings.planes_from_the_body == 3,
@@ -1172,7 +1172,7 @@ fn void an_explosion_definition_box3d_would_assert_against_is_refused() @test {
 
 fn void an_explosion_allocates_nothing() @test {
     int worlds_before = b3::world_count();
-    int bytes_before = b3::byte_count();
+    long bytes_before = b3::byte_count();
 
     RingVelocities ring = the_ring_under(AN_IMPULSE_PER_AREA);
     assert(ring.the_blast_was_accepted && thrown_along(ring.east, { 1.0, 0.0, 0.0 }),

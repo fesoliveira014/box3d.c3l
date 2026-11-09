@@ -10,6 +10,8 @@ enum JointType : int {
     SPHERICAL,
     WELD,
     WHEEL,
+    MOVER,
+    POGO,
 }
 
 <*

@@ -117,10 +117,14 @@ resting one linear slop inside the floor.
 `QueryFilter` and calls a `PlaneResultFn` once per shape. The callback is required.
 
 - A sphere, capsule or hull gives one plane. A mesh, height field or compound gives up to 64; any
-  more are dropped without a report.
+  more are dropped without a report. A mesh or height-field triangle gives a plane only when the
+  mover's centre is on its wound side.
 - `PlaneResult.plane` has its normal pointing out of the shape towards the mover; its offset is
   how far the mover's surface reaches past the shape's. `PlaneResult.point` lies on the shape's
   core (sphere centre, capsule segment, hull face), not its surface.
+- `PlaneResult.triangle_index` names the mesh or height-field triangle and `child_index` the
+  compound child; each is 0 for any other shape. `material_index` is the triangle's material
+  index, or for a compound the index into its materials; 0 for a convex shape.
 - When the mover's core comes within a linear slop of a shape's core, the normal is an arbitrary
   perpendicular of the mover's axis. A hull or triangle stops reporting once the mover's core
   reaches its surface, so a mover sunk deeper than its radius has nothing to solve against.

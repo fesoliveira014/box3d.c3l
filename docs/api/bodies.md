@@ -37,9 +37,11 @@ callback the step runs).
 `default_body_def` gives a `STATIC` body at the origin with identity rotation, gravity scale 1,
 sleeping allowed, awake, enabled, contact recycling on, and a sleep threshold of 0.05 m/s scaled
 by the [length unit](library_and_math.md#length-units). Other `BodyDef` fields set the initial
-velocities, damping, `motion_locks`, `is_bullet` and `allow_fast_rotation`. The wrapper checks
-only the definition marker: a zero quaternion, a non-finite position or negative damping is
-passed to box3d unchecked.
+velocities, damping, `motion_locks`, `is_bullet` and `allow_fast_rotation`. `safety_factor`
+(default 0.5) sets when continuous collision treats the body as fast: when one step moves it more
+than that share of its smallest extent. The wrapper checks only the definition marker: a zero
+quaternion, a non-finite position, negative damping or a negative safety factor is passed to box3d
+unchecked.
 
 | `BodyType` | Mass | Moved by |
 |---|---|---|

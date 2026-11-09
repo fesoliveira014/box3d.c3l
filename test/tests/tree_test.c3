@@ -5,19 +5,19 @@ import std::io;
 import std::io::path;
 
 fn void the_tree_types_match_the_c_layout() @test {
-    assert(b3::TreeNodeChildren::size == 8);
-    assert(b3::TreeNodeChildren::alignment == 4);
-    assert(b3::TreeNode::size == 48);
-    assert(b3::TreeNode::alignment == 8);
-    assert(b3::DynamicTree::size == 80);
+    assert(b3::TreeNode::size == 32);
+    assert(b3::TreeNode::alignment == 4);
+    assert(b3::TreeProxy::size == 24);
+    assert(b3::TreeProxy::alignment == 8);
+    assert(b3::DynamicTree::size == 112);
     assert(b3::DynamicTree::alignment == 8);
 }
 
 // The byte count is read while the tree is alive and again by the caller, after the helper's
 // defer has run. Nothing here asserts: C3 skips defer on a panicking assertion, and a stranded
 // node pool sits on byte_count() for the rest of the run exactly as a stranded world does.
-fn int[2] the_byte_count_around_a_live_tree() {
-    int baseline = b3::byte_count();
+fn long[2] the_byte_count_around_a_live_tree() {
+    long baseline = b3::byte_count();
 
     b3::DynamicTree tree = b3::dynamic_tree_create(16);
     defer b3::dynamic_tree_destroy(&tree);
@@ -26,19 +26,19 @@ fn int[2] the_byte_count_around_a_live_tree() {
 }
 
 fn void a_destroyed_tree_gives_back_every_byte_it_took() @test {
-    int[2] around = the_byte_count_around_a_live_tree();
+    long[2] around = the_byte_count_around_a_live_tree();
 
     assert(around[1] > around[0], "the node pool box3d allocates for a tree must show in the count");
     assert(b3::byte_count() == around[0], "and destroying the tree must give every byte back");
 }
 
-fn int[4] the_byte_count_around_a_tree_destroyed_twice() {
-    int baseline = b3::byte_count();
+fn long[4] the_byte_count_around_a_tree_destroyed_twice() {
+    long baseline = b3::byte_count();
 
     b3::DynamicTree tree = b3::dynamic_tree_create(16);
-    int while_alive = b3::byte_count();
+    long while_alive = b3::byte_count();
     b3::dynamic_tree_destroy(&tree);
-    int after_one = b3::byte_count();
+    long after_one = b3::byte_count();
     b3::dynamic_tree_destroy(&tree);
 
     return { baseline, while_alive, after_one, b3::byte_count() };
@@ -48,7 +48,7 @@ fn int[4] the_byte_count_around_a_tree_destroyed_twice() {
 // That makes a repeated destroy harmless on one struct and says nothing about a copy of it,
 // which owns the same pool and frees it a second time for real.
 fn void destroying_a_tree_a_second_time_frees_nothing() @test {
-    int[4] around = the_byte_count_around_a_tree_destroyed_twice();
+    long[4] around = the_byte_count_around_a_tree_destroyed_twice();
 
     assert(around[1] > around[0], "the tree took a pool while it was alive");
     assert(around[2] == around[0], "the first destroy gives every byte of it back");
@@ -60,6 +60,7 @@ struct TreeCapacities {
     int under_the_floor;
     int at_the_floor;
     int over_the_floor;
+    int nodes_at_the_floor;
 }
 
 fn TreeCapacities the_node_capacities_of_four_trees() {
@@ -76,24 +77,26 @@ fn TreeCapacities the_node_capacities_of_four_trees() {
     defer b3::dynamic_tree_destroy(&large);
 
     return {
-        .negative = nonsense.node_capacity,
-        .under_the_floor = small.node_capacity,
-        .at_the_floor = floored.node_capacity,
-        .over_the_floor = large.node_capacity,
+        .negative = nonsense.proxy_capacity,
+        .under_the_floor = small.proxy_capacity,
+        .at_the_floor = floored.proxy_capacity,
+        .over_the_floor = large.proxy_capacity,
+        .nodes_at_the_floor = floored.node_capacity,
     };
 }
 
-// box3d raises any capacity below 16 to 16 and sizes the pool at twice it less one, so a
-// contrast between capacities has to be drawn above the floor: 8 and 16 are the same request.
-// The pool sizes are exact arithmetic on the argument, not measurements, so they are compared
-// exactly.
+// box3d raises any capacity below 16 to 16, sizes the proxy array at that and the node array at
+// twice it, so a contrast between capacities has to be drawn above the floor: 8 and 16 are the
+// same request. The sizes are exact arithmetic on the argument, not measurements, so they are
+// compared exactly.
 fn void a_capacity_under_the_floor_builds_the_floor_s_pool() @test {
     TreeCapacities capacities = the_node_capacities_of_four_trees();
 
-    assert(capacities.under_the_floor == 31, "sixteen leaves and the fifteen nodes joining them");
+    assert(capacities.under_the_floor == 16, "sixteen proxies");
     assert(capacities.at_the_floor == capacities.under_the_floor, "which is what a request for 8 asks for");
     assert(capacities.negative == capacities.under_the_floor, "and what a negative request asks for too");
-    assert(capacities.over_the_floor == 127, "while a request above the floor is sized as itself");
+    assert(capacities.over_the_floor == 64, "while a request above the floor is sized as itself");
+    assert(capacities.nodes_at_the_floor == 32, "with two nodes per proxy: leaves, joints and the root's empty pair");
 }
 
 struct ProxyReadings {
@@ -176,24 +179,24 @@ fn IdGuards the_guards_on_a_proxy_id() {
 
     IdGuards guards;
     if (catch err = tree.user_data(-1)) guards.user_data_negative = err;
-    if (catch err = tree.user_data(tree.node_capacity)) guards.user_data_past_the_end = err;
+    if (catch err = tree.user_data(tree.proxy_capacity)) guards.user_data_past_the_end = err;
     if (catch err = tree.aabb(-1)) guards.aabb_negative = err;
-    if (catch err = tree.aabb(tree.node_capacity)) guards.aabb_past_the_end = err;
-    if (catch err = tree.user_data(tree.node_capacity - 1)) guards.last_slot = err;
-    if (catch err = tree.aabb(tree.node_capacity - 1)) guards.aabb_last_slot = err;
+    if (catch err = tree.aabb(tree.proxy_capacity)) guards.aabb_past_the_end = err;
+    if (catch err = tree.user_data(tree.proxy_capacity - 1)) guards.last_slot = err;
+    if (catch err = tree.aabb(tree.proxy_capacity - 1)) guards.aabb_last_slot = err;
     if (catch err = tree.user_data(live)) guards.live_proxy = err;
 
     return guards;
 }
 
 // box3d's own readers are inline in the header and bound the id with nothing at all, so both ends
-// run off the node array there — the negative end into memory before it. The last slot is in range
-// and holds no proxy, which is the case the leaf bit separates from a live one.
-fn void a_proxy_id_outside_the_node_array_is_refused_at_both_ends() @test {
+// run off the proxy array there — the negative end into memory before it. The last slot is in
+// range and free, which is the case its missing node separates from a live one.
+fn void a_proxy_id_outside_the_proxy_array_is_refused_at_both_ends() @test {
     IdGuards guards = the_guards_on_a_proxy_id();
     fault none;
 
-    assert(guards.user_data_negative == b3::INDEX_OUT_OF_RANGE, "a negative id names no node");
+    assert(guards.user_data_negative == b3::INDEX_OUT_OF_RANGE, "a negative id names no proxy");
     assert(guards.user_data_past_the_end == b3::INDEX_OUT_OF_RANGE, "and neither does the one past the last");
     assert(guards.aabb_negative == b3::INDEX_OUT_OF_RANGE);
     assert(guards.aabb_past_the_end == b3::INDEX_OUT_OF_RANGE);
@@ -465,10 +468,10 @@ fn void the_root_bounds_hold_every_proxy_and_an_empty_tree_reports_zero() @test 
 }
 
 struct RebuildCounts {
-    int baseline;
-    int live;
-    int after_an_empty_rebuild;
-    int after_a_rebuild;
+    long baseline;
+    long live;
+    long after_an_empty_rebuild;
+    long after_a_rebuild;
     int tree_bytes;
     int[3] sorted;
     int[2] height;
@@ -559,7 +562,7 @@ fn ProxyIdGuards the_guards_on_every_call_that_names_a_proxy() {
     ProxyIdGuards guards;
     if (catch err = b3::dynamic_tree_destroy_proxy(&tree, freed)) guards.destroy_of_a_live_proxy = err;
 
-    int[3] bad = { -1, tree.node_capacity, freed };
+    int[3] bad = { -1, tree.proxy_capacity, freed };
     for (int i = 0; i < 3; i++) {
         if (catch err = b3::dynamic_tree_destroy_proxy(&tree, bad[i])) guards.destroyed[i] = err;
         if (catch err = b3::dynamic_tree_move_proxy(&tree, bad[i], unit)) guards.moved[i] = err;
@@ -572,10 +575,10 @@ fn ProxyIdGuards the_guards_on_every_call_that_names_a_proxy() {
     return guards;
 }
 
-// Every one of these indexes the node array on the caller's id under an assertion this build
-// compiles out, and none of them is harmless without it: a mutator given an id in range but not
-// a proxy rewrites the tree's own bookkeeping, and the two ids outside the array reach memory
-// the tree does not own at all.
+// Every one of these indexes the proxy array on the caller's id under an assertion this build
+// compiles out, and none of them is harmless without it: a mutator given a free slot follows its
+// node -1 into the tree's own bookkeeping, and the two ids outside the array reach memory the
+// tree does not own at all.
 fn void an_id_that_names_no_live_proxy_is_refused_by_every_call_that_takes_one() @test {
     ProxyIdGuards guards = the_guards_on_every_call_that_names_a_proxy();
     fault none;
@@ -583,7 +586,7 @@ fn void an_id_that_names_no_live_proxy_is_refused_by_every_call_that_takes_one()
     assert(guards.destroy_of_a_live_proxy == none, "a live proxy is destroyed, not refused");
     assert(guards.read_of_a_live_proxy == none, "and a live proxy's bits are read, not refused");
 
-    assert(guards.destroyed[0] == b3::INDEX_OUT_OF_RANGE, "a negative id names no node");
+    assert(guards.destroyed[0] == b3::INDEX_OUT_OF_RANGE, "a negative id names no proxy");
     assert(guards.moved[0] == b3::INDEX_OUT_OF_RANGE);
     assert(guards.enlarged[0] == b3::INDEX_OUT_OF_RANGE);
     assert(guards.set_category[0] == b3::INDEX_OUT_OF_RANGE);
@@ -1244,7 +1247,7 @@ fn void a_ray_cast_reports_every_proxy_whose_box_it_crosses() @test {
     assert(casts_carry_exactly(read.diagonal, (ulong[]){ 0x11, 0x22, 0x33 }),
         "each carrying the user data its own proxy was created with");
     assert(read.diagonal_stats.leaf_visits == 3, "which box3d counts as three leaf visits");
-    assert(read.diagonal_stats.node_visits == 5, "over the five nodes joining them");
+    assert(read.diagonal_stats.node_visits == 2, "under the two internal nodes joining them");
 
     assert(read.along_x.count == 1, "while a ray along x alone crosses one box of the three");
     assert(casts_carry_exactly(read.along_x, (ulong[]){ 0x11 }), "the one on the line it runs along");
@@ -1269,26 +1272,22 @@ fn void a_ray_cast_mask_narrows_three_proxies_to_one_and_then_to_none() @test {
     assert(casts_carry_exactly(read.masked, (ulong[]){ 0x11 }), "and it is the one created with that bit");
     assert(read.diagonal.count == 3, "where the same ray unmasked reaches all three");
     assert(read.strict.count == 0, "and none of them carries both bits of a two-bit mask");
-    assert(read.strict_stats.node_visits > 0
-        && read.strict_stats.node_visits <= read.diagonal_stats.node_visits,
-        "the traversal having run and walked no further than the unmasked one over the same tree");
-    assert(read.strict_stats.leaf_visits == 0,
-        "reaching no leaf, so the mask turned it back above them rather than at each proxy");
+    assert(read.strict_stats.node_visits == read.diagonal_stats.node_visits,
+        "the traversal walking every node the unmasked one walks, the mask being tested at each proxy");
+    assert(read.strict_stats.leaf_visits == 0, "and calling back for none of them");
 }
 
-// Proxy ids are node indices, and internal nodes take slots from the same pool, so the ids a
-// traversal reports are not a numbering of the proxies: three proxies do not give 0, 1, 2.
-fn void the_proxy_ids_a_cast_reports_are_node_indices() @test {
+// Proxy ids index the proxy array, whose free list a fresh tree hands out in order, so three
+// proxies take ids 0, 1 and 2 however the nodes holding them are arranged.
+fn void the_proxy_ids_a_cast_reports_are_proxy_slots() @test {
     RayCastReadings read = the_ray_cast_readings_of_three_proxies();
 
     assert(read.diagonal.count == 3, "all three proxies were reported");
     int[3] ids = { read.diagonal.proxy_id[0], read.diagonal.proxy_id[1], read.diagonal.proxy_id[2] };
-    assert(ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2], "each naming a different node");
-    int highest = ids[0];
+    assert(ids[0] != ids[1] && ids[1] != ids[2] && ids[0] != ids[2], "each naming a different proxy");
     foreach (id : ids) {
-        if (id > highest) highest = id;
+        assert(id >= 0 && id < 3, "and every id among the first three slots");
     }
-    assert(highest >= 3, "and the highest is past the last slot three contiguous ids would occupy");
 }
 
 struct CastAnswerReadings {
@@ -1312,10 +1311,10 @@ fn CastAnswerReadings the_readings_of_five_callback_answers() {
     b3::BoxCastInput box = the_diagonal_box_cast(1.0f);
 
     CastAnswerReadings read;
-    read.ray_clipped.clip_to = 0.3f;
+    read.ray_clipped.clip_to = 0.2f;
     read.ray_stopped.stop = true;
     read.ray_negative.clip_to = -1.0f;
-    read.box_clipped.clip_to = 0.3f;
+    read.box_clipped.clip_to = 0.2f;
     read.box_stopped.stop = true;
 
     b3::dynamic_tree_ray_cast(&tree, input: &diagonal,
@@ -1357,9 +1356,9 @@ fn CastAnswerReadings the_readings_of_five_callback_answers() {
     return read;
 }
 
-// The same tree and the same ray answer all four, so the only difference is what the callback
-// returned. The bound offered to the second call is what shows the clip took: a count alone would
-// pass for a traversal that reached two proxies for its own reasons.
+// The same tree and ray answer all four, so only the callback's answer differs, and the bound
+// offered to the second call shows the clip took. The first proxy offered need not be the nearest,
+// so 0.2 sits between the entries of the nearest two.
 fn void a_cast_callback_clips_the_traversal_or_ends_it() @test {
     CastAnswerReadings read = the_readings_of_five_callback_answers();
 
@@ -1367,13 +1366,13 @@ fn void a_cast_callback_clips_the_traversal_or_ends_it() @test {
     assert(read.ray_unclipped.bound_seen[0] == 1.0f, "so every call is offered the ray's own fraction");
     assert(read.ray_unclipped.bound_seen[2] == 1.0f);
 
-    assert(read.ray_clipped.count == 2, "answering 0.3 puts the third proxy past the end of the ray");
+    assert(read.ray_clipped.count == 2, "answering 0.2 puts the middle proxy past the end of the ray");
     assert(read.ray_clipped.bound_seen[0] == 1.0f, "the first call is still offered the ray's own fraction");
-    assert(read.ray_clipped.bound_seen[1] == 0.3f, "and the next is offered the one the callback set");
+    assert(read.ray_clipped.bound_seen[1] == 0.2f, "and the next is offered the one the callback set");
 
     assert(read.ray_stopped.count == 1, "answering 0 ends the traversal there");
     assert(read.ray_stopped_stats.leaf_visits == 1, "which box3d counts as the one leaf it reached");
-    assert(read.ray_stopped_stats.node_visits == 2, "over the two nodes it descended through");
+    assert(read.ray_stopped_stats.node_visits == 1, "in the first sibling pair it opened");
 
     assert(read.ray_negative.count == 3, "a negative answer neither clips nor ends anything");
     assert(read.ray_negative.bound_seen[2] == 1.0f, "leaving the last call the ray's own fraction");
@@ -1388,8 +1387,8 @@ fn void a_cast_offers_the_callback_the_fraction_its_input_carried() @test {
     assert(read.ray_bounded.bound_seen[0] == 0.5f, "and each call is offered the input's fraction, not 1");
     assert(read.ray_bounded.bound_seen[2] == 0.5f);
 
-    assert(read.box_clipped.count == 2, "a swept box clips on 0.3 as the ray does");
-    assert(read.box_clipped.bound_seen[1] == 0.3f, "offering the next call the bound the callback set");
+    assert(read.box_clipped.count == 2, "a swept box clips on 0.2 as the ray does");
+    assert(read.box_clipped.bound_seen[1] == 0.2f, "offering the next call the bound the callback set");
     assert(read.box_stopped.count == 1, "and ends on 0 as the ray does");
 }
 
@@ -1524,7 +1523,7 @@ fn String a_temporary_tree_path(String name) {
 }
 
 struct TreeThroughAFile {
-    int baseline;
+    long baseline;
     int proxies_written;
     int proxies_read;
     int height_written;
@@ -1535,9 +1534,9 @@ struct TreeThroughAFile {
     b3::Aabb[A_SAVED_PROXY_COUNT] boxes_written;
     b3::Aabb[A_SAVED_PROXY_COUNT] boxes_read;
     ulong[A_SAVED_PROXY_COUNT] payloads_read;
-    int bytes_with_the_saved_tree;
-    int bytes_while_both_were_live;
-    int bytes_after;
+    long bytes_with_the_saved_tree;
+    long bytes_while_both_were_live;
+    long bytes_after;
     fault a_path_that_holds_nothing;
     fault a_file_shorter_than_a_tree;
     fault a_file_of_the_wrong_kind;

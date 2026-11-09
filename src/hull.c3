@@ -74,7 +74,7 @@ fn HullData*? create_cone(float height, float radius1, float radius2, int slices
 
  box3d asserts nothing here at all. A negative radius negates every lattice point, so it builds
  the point reflection of the positive one — the same count, volume and area, with mirrored bounds.
- Only a radius small enough to draw the ten points inside box3d's build tolerance is refused.
+ Only a radius near zero, about a nanometre or less, collapses the ten points and is refused.
 
  @return `the hull`
  @return? DEGENERATE_GEOMETRY : `the radius collapses the ten points`

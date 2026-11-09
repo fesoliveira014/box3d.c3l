@@ -3,7 +3,7 @@
 [Documentation](../index.md) › [Public API](index.md) › Dynamic tree
 
 A standalone bounding volume hierarchy over axis-aligned boxes, the structure box3d's broad phase
-and compounds are built on. It needs no world. Use it to index your own objects for box queries,
+is built on. It needs no world. Use it to index your own objects for box queries,
 nearest-object searches and ray or box sweeps. Source: `src/tree.c3i` and its wrapper.
 
 ```mermaid
@@ -25,19 +25,16 @@ b3::DynamicTree tree = b3::dynamic_tree_create(64);
 defer b3::dynamic_tree_destroy(&tree);
 ```
 
-`b3::dynamic_tree_create` returns a `DynamicTree` by value: an 80-byte struct pointing at a node
-pool box3d allocates. The argument is a starting size, never a ceiling; anything below 16 becomes
-16, and the pool grows as needed. The pool counts toward `b3::byte_count()` until
-`b3::dynamic_tree_destroy`.
+`b3::dynamic_tree_create` returns a `DynamicTree` by value: a 112-byte struct pointing at node
+and proxy arrays box3d allocates. The argument is a starting proxy count, never a ceiling;
+anything below 16 becomes 16, and the arrays grow as needed. They count toward `b3::byte_count()`
+until `b3::dynamic_tree_destroy`.
 
-- Pass the tree as `&tree`. A copy of the struct shares the same pool, so only one copy may be
-  destroyed, and a copy goes stale as soon as the pool grows.
-- `dynamic_tree_destroy` frees the pool and zeroes the struct; a second call frees nothing. After
-  destroy, `height()`, `area_ratio()` and `root_bounds()` read freed memory and crash, and
-  `dynamic_tree_create_proxy` writes through the null pool. Do not reuse a destroyed tree; create
-  a new one.
-- A compound's `tree` field belongs to the compound. Never destroy it or create proxies in it; see
-  [Shapes](shapes.md#compounds).
+- Pass the tree as `&tree`. A copy of the struct shares the same arrays, so only one copy may be
+  destroyed, and a copy goes stale as soon as an array grows.
+- `dynamic_tree_destroy` frees the arrays and zeroes the struct; a second call frees nothing.
+  After destroy, `height()`, every query and `dynamic_tree_create_proxy` read through a null array
+  and crash. Do not reuse a destroyed tree; create a new one.
 
 ## Proxies
 
@@ -76,12 +73,12 @@ next partial rebuild, even when no box changed.
 
 ### Proxy id validity
 
-Every call that takes an id checks it before box3d indexes the node array:
+Every call that takes an id checks it before box3d indexes the proxy array:
 
 | Id | Result |
 |---|---|
-| negative, or at or past `node_capacity` | `INDEX_OUT_OF_RANGE` |
-| in range, but an internal node or a free slot | `NOT_A_PROXY` |
+| negative, or at or past `proxy_capacity` | `INDEX_OUT_OF_RANGE` |
+| in range, but a free slot | `NOT_A_PROXY` |
 | a destroyed id whose slot a newer proxy now holds | passes, and names the newer proxy |
 
 Proxy ids carry no generation. `create_proxy` reuses a freed id immediately, so an id held past
@@ -116,9 +113,10 @@ the callback returns false. It returns `TreeStats` (`node_visits`, `leaf_visits`
 
 Masks: with `require_all_bits` false a proxy passes when its category shares any bit with
 `mask_bits`; with it true the proxy must carry every bit of the mask. The two agree only for a
-single-bit mask. A zero mask passes nothing loosely and everything strictly.
+single-bit mask. A zero mask passes nothing loosely and everything strictly. The mask is tested at
+each proxy, so it narrows the callbacks, not the nodes visited.
 
-The traversal uses a fixed stack of 1024 entries. A degenerate tree of about a thousand nested
+The traversal uses a fixed stack of 512 entries. A degenerate tree of about five hundred nested
 boxes overflows it, and the overflowing subtree is skipped without any report. Ordinary trees stay
 far below that depth.
 
@@ -186,6 +184,10 @@ controls the traversal:
 | the current bound (`input.max_fraction`) | continue unclipped |
 | negative | ignore this proxy |
 
+Proxies are not offered in order along the ray: a leaf beside a subtree is offered first, so a
+clip can arrive after a farther proxy has already been offered. Keep the nearest answer in
+`context`.
+
 `b3::dynamic_tree_box_cast` does the same for a `BoxCastInput`, an axis-aligned box swept along
 `translation`, with a `TreeBoxCastFn` callback. The box never rotates: box3d grows each node box by
 the input box's half extents and sweeps the input box's centre.
@@ -201,36 +203,38 @@ traversal holds node indices across the call. No traversal allocates.
 ## Rebuild, statistics and fields
 
 `b3::dynamic_tree_rebuild(&tree, full_build)` rebalances the tree and returns how many boxes it
-sorted. A partial build keeps subtrees not marked by `enlarge_proxy`. Both forms allocate rebuild
-arrays on first use; `dynamic_tree_destroy` frees them.
+sorted. A partial build keeps subtrees not marked by `enlarge_proxy`. Both forms allocate a spare
+node array and rebuild arrays on first use; `dynamic_tree_destroy` frees them.
 
 | Reading | Meaning |
 |---|---|
 | `tree.height()` | levels below the root; 0 for empty and single-proxy trees |
-| `tree.area_ratio()` | summed internal-node perimeter over the root's; 0 at two proxies or fewer, NaN when the root box has no volume |
+| `tree.area_ratio()` | summed internal-node perimeter over the root's; 0 at two proxies or fewer, and when the root box has no perimeter |
 | `tree.root_bounds()` | the box around every proxy; an empty tree reports a zero box at the origin |
-| `tree.byte_count()` | an estimate that includes the 80-byte struct and unallocated rebuild arrays; `b3::byte_count()` is the allocator's figure |
+| `tree.byte_count()` | an estimate that includes the 112-byte struct and unallocated rebuild arrays; `b3::byte_count()` is the allocator's figure |
 
-Read these fields directly; they have no accessor methods: `proxy_count`, `node_count`,
-`node_capacity` and `root` (-1 when empty). `nodes` points at the pool and moves when the pool
-grows. A `TreeNode` holds a box, category bits, either `children` (a `TreeNodeChildren` pair, -1
-for none) or a leaf's `user_data`, a parent index and `flags`. `TREE_NODE_LEAF` in `flags` marks a
-live proxy; `TREE_NODE_ALLOCATED` and `TREE_NODE_ENLARGED` are box3d's bookkeeping.
+Read these fields directly; they have no accessor methods: `proxy_count`, `proxy_capacity`,
+`node_end` and `node_capacity`. A proxy id indexes `proxies`, an array of `TreeProxy` (user data,
+category bits, and the `node` holding its box, -1 for a free slot). `nodes` holds `TreeNode`s:
+siblings sit in pairs at even indices, the root is node 0 and node 1 is always empty. Bit 31 of
+`flag_index` marks a leaf, bit 30 a node marked moved, and the low 30 bits hold a leaf's proxy id
+or an internal node's sibling pair. Both arrays move when they grow.
 
 ## Saving and loading
 
-`b3::dynamic_tree_save(&tree, path)` writes the tree to a file. A path box3d cannot open is
-silently ignored. `b3::load_tree(path, scale)` reads one back, multiplying every box by `scale`, and
-returns a tree the caller destroys with `dynamic_tree_destroy`. It returns `FILE_UNAVAILABLE` when
-the file cannot be read or holds no tree this build recognises.
+`b3::dynamic_tree_save(&tree, path)` writes the tree to a file. A path box3d cannot open, or a
+destroyed tree, is silently ignored. `b3::load_tree(path, scale)` reads one back, multiplying
+every box by `scale`, and returns a tree the caller destroys with `dynamic_tree_destroy`. It
+returns `FILE_UNAVAILABLE` when the file cannot be read or holds no tree this build recognises;
+a refusal allocates nothing.
 
 ## Contracts
 
 - The caller owns a created or loaded tree and destroys it exactly once. Never destroy a copy as
-  well, and never destroy or modify a compound's tree.
-- After `dynamic_tree_destroy`, do not call `height()`, `area_ratio()` or `root_bounds()`.
+  well.
+- After `dynamic_tree_destroy`, do not query the tree, call `height()` or create proxies.
 - Proxy ids are reused immediately. A stale id that a new proxy now holds passes every check.
 - Proxy boxes must be finite and not inverted; query boxes are not checked.
 - Callbacks must not modify the tree they are traversing.
 - `dynamic_tree_query_closest` measures only node boxes; the callback supplies every real distance.
-- A traversal deeper than 1024 entries drops subtrees silently.
+- A traversal deeper than 512 entries drops subtrees silently.

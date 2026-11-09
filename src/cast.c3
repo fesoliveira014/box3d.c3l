@@ -164,9 +164,8 @@ fn CastOutput? shape_cast_capsule(Capsule* capsule, ShapeCastInput input) {
  Sweeps the input's proxy at this hull in the hull's own frame, reporting the fraction of the
  translation at which the two first touch.
 
- A hull lends no radius of its own, so the sum box3d closes on is the proxy's alone and a proxy of
- radius zero never reaches can_encroach's window: such a proxy starting inside reports fraction 0
- with a zero normal whatever that flag says.
+ A hull lends no radius of its own, so the sum box3d closes on is the proxy's alone, and a proxy of
+ radius zero starting inside reports fraction 0 with a zero normal whatever can_encroach says.
 
  @return `where the proxy first touches the hull`
  @return? NO_HIT : `it never does`
@@ -202,9 +201,9 @@ fn CastOutput? shape_cast_compound(CompoundData* compound, ShapeCastInput input)
  Sweeps the input's proxy at this mesh's triangles, scaled by the mesh's own scale, reporting the
  triangle struck and the fraction at which the proxy first touches it.
 
- A triangle is reached from either side here, where ray_cast_mesh reaches it from the wound side
- alone: box3d measures a distance between the proxy and the triangle rather than solving a ray
- against its plane. That is also why a max_fraction above 1 needs no refusal on this one.
+ A triangle is reached only by a proxy whose centre starts on its wound side; box3d skips one whose
+ plane has that centre behind it. box3d measures a distance between the proxy and the triangle
+ rather than solving a ray against its plane, which is why a max_fraction above 1 needs no refusal.
 
  @return `where the proxy first touches a triangle`
  @return? NO_HIT : `it touches none`
@@ -223,7 +222,7 @@ fn CastOutput? shape_cast_mesh(Mesh* mesh, ShapeCastInput input) {
 
  A proxy of one point carrying no radius is cast with box3d's ray solver instead, which reads the
  field from above alone and reports a miss by returning 1 — so a max_fraction above 1 is refused
- for such a proxy, exactly as ray_cast_height_field refuses it. Any other proxy is two-sided.
+ for such a proxy, as ray_cast_height_field refuses it. Any other proxy reaches it from above.
 
  @return `where the proxy first touches the field`
  @return? NO_HIT : `it never does`
@@ -282,11 +281,9 @@ fn bool? overlap_hull(HullData* hull, Transform transform, ShapeProxy proxy) {
 }
 
 <*
- Whether the proxy touches this compound placed by transform.
-
- The placement reaches the per-child test but not the search that picks which children to run it
- on: box3d looks the proxy's own box up in a tree built in the compound's frame, so a transform
- carrying the compound out from under that box answers no while the two plainly touch.
+ Whether the proxy touches this compound placed by transform. The proxy's points are read in the
+ frame that transform places the compound into: box3d carries them into the compound's own frame
+ before it searches the children.
 
  @return `whether the two touch`
  @return? check_shape_proxy!

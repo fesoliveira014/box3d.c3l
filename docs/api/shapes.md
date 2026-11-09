@@ -210,7 +210,7 @@ and four are conservative:
 | `HullData.compute_aabb` | rotates the hull's cached box; wider than the points unless the rotation maps coordinate axes onto coordinate axes |
 | `MeshData.compute_aabb(transform, scale)` | scales the cached box in mesh space, then rotates it like a hull |
 | `HeightFieldData.compute_aabb(transform)` | the build scale is already in the cached box; rotates it like a hull |
-| `CompoundData.compute_aabb(transform)` | the tree root's box, rotated like a hull; `DEGENERATE_GEOMETRY` for a childless compound |
+| `CompoundData.compute_aabb(transform)` | `CompoundData.bounds`, rotated like a hull |
 
 For a hull that needs tight bounds under a fixed rotation, bake the rotation with
 `clone_and_transform_hull` and read the copy's `aabb` field. For a live shape's bounds see
@@ -260,11 +260,13 @@ defer b3::destroy_mesh(quad);
 ```
 
 `indices` holds three per triangle, wound counter-clockwise seen from the side the triangle
-faces. `material_indices` is optional, one per triangle. `identify_edges` computes the
-shared-edge adjacency that suppresses collisions against inner edges. box3d copies every array,
-so none needs to outlive the call. Triangles below box3d's area tolerance are skipped; the mesh
-is refused with `DEGENERATE_GEOMETRY` only when none remain, or when the definition names fewer
-than three vertices or no triangles. A null definition returns `INVALID_DEFINITION`.
+faces, or clockwise with `clock_wise_winding` set. `stride` is the byte distance between
+vertices, 0 for a packed `Vec3` array; otherwise a multiple of 4 from 12 to 4096. `material_indices`
+is optional, one per triangle. `identify_edges` computes the shared-edge adjacency that suppresses
+collisions against inner edges. box3d copies every array, so none needs to outlive the call.
+Triangles below box3d's area tolerance are skipped; the mesh is refused with `DEGENERATE_GEOMETRY`
+only when none remain, or when the definition names fewer than three vertices, no triangles or a
+missing array. A null definition or a bad `stride` returns `INVALID_DEFINITION`.
 
 The canned builders all go through the same path: `b3::create_grid_mesh`,
 `b3::create_wave_mesh`, `b3::create_torus_mesh`, `b3::create_box_mesh` (closed, wound outwards),
@@ -440,18 +442,20 @@ defer b3::destroy_shape(shape, false);
 
 `b3::create_compound` bakes spheres, capsules, hulls and meshes into one `CompoundData` with its
 own tree. The definition types are `CompoundDef`, `CompoundSphereDef`, `CompoundCapsuleDef`,
-`CompoundHullDef` and `CompoundMeshDef`. There is no default definition; an all-zero `CompoundDef`
-is a valid request for an empty compound.
+`CompoundHullDef` and `CompoundMeshDef`. There is no default definition; a compound needs at
+least one child.
 
 - box3d clones every child, hull and mesh data included, so nothing in the definition has to
   outlive the call. Children naming the same hull or mesh share one stored copy.
 - Spheres and capsules carry their own placement; hulls and meshes take a `transform`. A mesh
   child's `scale` is stored as given, zero components included.
-- A mesh child's `material_count` must equal the mesh's own material count and lie in 1 to
-  `MAX_COMPOUND_MESH_MATERIALS` (4). Naming fewer folds the higher triangle materials onto entry 0.
-- `create_compound` returns `INVALID_DEFINITION` for a null definition, a negative count, a
-  positive count over a null array, a hull or mesh child with no data, or a mesh child's material
-  count out of range. It returns `CHILD_LIMIT_REACHED` when the four counts together reach
+- A mesh child's `material_count` must equal the mesh's own material count. Naming fewer lets a
+  triangle's material index read past the child's slots: the material it reports is not one you
+  named. box3d's check is compiled out, and the wrapper cannot see the mesh's count.
+- At most 65535 distinct materials across a compound; past that, material indices wrap silently.
+- `create_compound` returns `INVALID_DEFINITION` for a null definition, no children, a negative
+  count, a positive count over a null array, a hull or mesh child with no data, or a mesh child
+  naming no materials. It returns `CHILD_LIMIT_REACHED` when the four counts together reach
   `MAX_CHILD_SHAPES`.
 
 The caller owns the compound and destroys it with `b3::destroy_compound` exactly once.
@@ -490,30 +494,32 @@ struct's `capsule_count`, `hull_count`, `mesh_count` and `sphere_count` fields, 
 them.
 
 `CompoundData.materials()` lists one entry per distinct child material (compared byte for byte) in
-bake order; each child's `material_index` names an entry. A mesh child's `material_indices` maps
-its triangle materials onto that list; unused slots read 0, which is a real index. The slice
-borrows the compound.
+bake order; each child's `material_index` names an entry. `CompoundMesh.material_slots()` and
+`ChildShape.material_slots()` map a triangle's material index onto that list, one slot per mesh
+material (a convex child has one). The slices borrow the compound.
 
 The hull and mesh pointers a child reports point inside the compound's allocation. They live and
 die with the compound; passing one to `b3::destroy_hull` or `b3::destroy_mesh` aborts the process.
 
 `b3::query_compound` calls a `CompoundQueryFn` for each child whose box meets an AABB in the
 compound's own frame. It tests child boxes, not geometry, and reports in tree order.
+`CompoundData.bounds` is the union of the child boxes in that frame.
 
 ### Saving a compound
 
 ```c3
-char[] bytes = b3::convert_compound_to_bytes(rocks);
-b3::CompoundData* restored = b3::compound_from_bytes(bytes)!;
+char[] bytes = ((char*)rocks)[:rocks.byte_count];   // write these out as they are
+// later, over the bytes read back into memory that outlives every use:
+b3::CompoundData* restored = b3::validate_compound(bytes)!;
 ```
 
-`b3::convert_compound_to_bytes` returns the compound's own memory, not a copy, after nulling the
-one pointer it holds. Every query, cast and overlap against that compound crashes until
-`b3::compound_from_bytes` is called over the same bytes, or over bytes read back from a file.
-`compound_from_bytes` allocates nothing: it repairs the pointer in place and returns
-`BUFFER_TOO_SMALL` for a slice shorter than a `CompoundData` header or `NOT_A_COMPOUND` for bytes
-of another version or length. Call `b3::destroy_compound` only on a compound box3d allocated, never
-on bytes you loaded yourself.
+A compound holds offsets, not pointers, so its `byte_count` bytes are its serialized form; write
+them as they are. `b3::validate_compound` reads bytes back as a compound in place: the result is
+the slice's own address, nothing is allocated or copied, and the bytes must outlive every use.
+It returns `NOT_A_COMPOUND` for a slice too short for a header, of another version or length, or
+without a node array that fits. box3d checks nothing past the node array, so load only bytes this
+build wrote. Treat the result as read-only, and call `b3::destroy_compound` only on a compound box3d
+allocated, never on bytes you loaded yourself.
 
 ## Working with a shape
 
@@ -546,7 +552,7 @@ Per-index materials: `shape.mesh_material_count()`, `shape.mesh_surface_material
 `shape.set_mesh_material(material, index)` work on any shape, not only meshes. Both indexed calls
 return `INDEX_OUT_OF_RANGE` outside 0 to `mesh_material_count() - 1`. Index 0 is the material the
 plain getters read. A shape whose definition named fewer than two materials holds one; a compound
-shape holds the compound's distinct materials, so an empty compound holds none. The count is
+shape holds the compound's distinct materials. The count is
 fixed at creation and does not follow later geometry changes.
 
 Geometry getters: `shape.sphere()`, `shape.capsule()`, `shape.hull()`, `shape.mesh()` and
@@ -635,5 +641,4 @@ casts](queries_and_casts.md)) and the world's sensor events ([Worlds and events]
   `body_apply_mass_from_shapes`.
 - Shape constructors return `INVALID_HANDLE` and geometry setters do nothing while the world is
   locked.
-- `convert_compound_to_bytes` disables the compound until `compound_from_bytes` repairs it.
 - Sensor events need `enable_sensor_events` on both the sensor and the visitor.

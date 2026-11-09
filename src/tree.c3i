@@ -1,96 +1,83 @@
 module b3;
 
 <*
- The two children of an internal tree node, as indices into the tree's own node array. box3d
- writes -1 in either of them where there is no child.
-*>
-struct TreeNodeChildren {
-    int child1;
-    int child2;
-}
-
-<*
- A tree node's flags. box3d sets LEAF with ALLOCATED when a proxy is created and clears the word
- when the slot is freed; nothing else in the tree writes either bit, so LEAF is an exact test for
- whether a node index names a live proxy. ENLARGED is box3d's own rebuild bookkeeping.
-*>
-const ushort TREE_NODE_ALLOCATED = 0x0001;
-const ushort TREE_NODE_ENLARGED = 0x0002;
-const ushort TREE_NODE_LEAF = 0x0004;
-
-<*
- One node of a dynamic tree, declared because the tree's two proxy accessors are inline in box3d's
- header rather than exported, so src/tree.c3 reimplements them over these fields.
-
- A node is a leaf, an internal node or a free slot: the shared eight bytes are a proxy's user
- data, two child indices, or the next free slot. flags says which — TREE_NODE_LEAF is the only
- reading under which user_data and aabb mean anything.
+ One node of a dynamic tree. Siblings sit as a pair at an even index; the root is node 0 and node 1
+ is always empty. Bit 31 of flag_index marks a leaf and bit 30 a node box3d has marked moved; the
+ low 30 bits are a leaf's proxy id or an internal node's sibling pair. The union holds an internal
+ node's height or a leaf's shape index, the low 32 bits of its proxy's user data.
 *>
 struct TreeNode {
     Aabb aabb;
-    ulong category_bits;
+    uint flag_index;
     union {
-        TreeNodeChildren children;
-        ulong user_data;
+        int height;
+        int shape_index;
     }
-    union {
-        int parent;
-        int next;
-    }
-    ushort height;
-    ushort flags;
 }
 
 <*
- A bounding volume hierarchy over proxies, held by value: 80 bytes pointing at a pool box3d
- allocated, so a copy leaves two structs sharing one pool and only one may be destroyed. Pass it
- on as &tree; the pool moves every node as it grows, so nodes is not a pointer to hold on to.
+ One proxy of a dynamic tree, at the index its id names. node is the leaf holding its box, or -1
+ for a free slot, whose next links the free list.
+*>
+struct TreeProxy {
+    ulong user_data;
+    ulong category_bits;
+    int node;
+    int next;
+}
 
- A compound's tree is neither the caller's to destroy nor to modify: destroying it frees into
- the middle of the compound, and its free list points at live geometry, so creating a proxy
- overwrites a child and hides it from every query with nothing reporting the loss.
+<*
+ A bounding volume hierarchy over proxies, held by value: 112 bytes pointing at arrays box3d
+ allocated, so a copy leaves two structs sharing them and only one may be destroyed. Pass it on as
+ &tree; the arrays move as they grow, so neither nodes nor proxies is a pointer to hold on to. A
+ proxy id indexes proxies, not nodes.
 *>
 struct DynamicTree {
     ulong version;
     TreeNode* nodes;
-    int root;
-    int node_count;
+    int* parents;
+    TreeProxy* proxies;
+    int node_end;
     int node_capacity;
+    int pair_free_list;
     int proxy_count;
-    int free_list;
+    int proxy_capacity;
+    int proxy_free_list;
+    TreeNode* swap_nodes;
     int* leaf_indices;
+    TreeNode* leaf_nodes;
     Aabb* leaf_boxes;
     Vec3* leaf_centers;
     int* bin_indices;
     int rebuild_capacity;
+    bool dfs_ordered;
 }
 
 <*
- Builds an empty tree and the node pool it inserts into.
+ Builds an empty tree and the node and proxy arrays it inserts into.
 
  proxy_capacity is a starting size and never a ceiling: box3d raises anything below 16 — a negative
- argument included — to 16, so every argument from 16 down builds the same tree, and the pool grows
+ argument included — to 16, so every argument from 16 down builds the same tree, and the arrays grow
  past it as needed. The tree comes back by value and the caller owns it: dynamic_tree_destroy() it
- exactly once, and see DynamicTree for what a copy means. The 80-byte struct is the caller's own
- storage; the node pool is on byte_count(), as a world or a mesh is.
+ exactly once, and see DynamicTree for what a copy means. The 112-byte struct is the caller's own
+ storage; the arrays are on byte_count(), as a world or a mesh is.
 *>
 extern fn DynamicTree dynamic_tree_create(int proxy_capacity) @cname("b3DynamicTree_Create");
 
 <*
- Releases the node pool and the rebuild arrays, then zeroes the tree, so a second call on the
- same struct frees nothing. That protects no copy: a copy still holds the freed pointer. See
- DynamicTree, which also covers the tree a compound owns.
-
- The zero it leaves is not the empty-tree state — box3d marks an empty root with -1, so height(),
- area_ratio() and root_bounds() read a freed pool afterwards and crash, and creating a proxy
- writes through the null pool, its zeroed free list not being -1. The rest test the node count.
+ Releases the node, parent and proxy arrays and the rebuild arrays, then zeroes the tree, so a
+ second call on the same struct frees nothing. That protects no copy: a copy still holds the freed
+ pointers. The zero it leaves is not the empty-tree state: height(), every query and creating a
+ proxy read through a null array and crash. area_ratio(), root_bounds(), byte_count() and
+ dynamic_tree_rebuild() do not, and a save writes nothing.
 *>
 extern fn void dynamic_tree_destroy(DynamicTree* tree) @cname("b3DynamicTree_Destroy");
 
 <*
  Writes the tree to the path: the struct with its pointers and rebuild scratch zeroed, then the
- whole node pool including the free list. A path box3d cannot open is a silent no-op — it returns
- nothing a caller could read, which is why this takes no fault where load_tree() does.
+ nodes and parents up to node_end and the whole proxy array, free slots included. A path box3d
+ cannot open, or a destroyed tree, is a silent no-op — it returns nothing a caller could read,
+ which is why this takes no fault where load_tree() does.
 *>
 extern fn void dynamic_tree_save(DynamicTree* tree, ZString path) @cname("b3DynamicTree_Save");
 
@@ -108,7 +95,7 @@ extern fn int dynamic_tree_create_proxy_raw(
 ) @cname("b3DynamicTree_CreateProxy") @private;
 
 <*
- Raw proxy calls that index the node array on an id the caller supplies, under assertions this
+ Raw proxy calls that index the proxy array on an id the caller supplies, under assertions this
  build compiles out. src/tree.c3 carries the guards and is the only public way in.
 *>
 extern fn void dynamic_tree_destroy_proxy_raw(DynamicTree* tree, int proxy_id) @cname("b3DynamicTree_DestroyProxy") @private;
@@ -125,9 +112,8 @@ extern fn int DynamicTree.height(&self) @cname("b3DynamicTree_GetHeight");
 
 <*
  The summed perimeter of the internal nodes over the root's. Leaves and the root are skipped, so
- a tree whose only internal node is the root reports 0 — two proxies or fewer, not an empty tree.
- A root with no volume, which proxies holding the zero box give at any count, divides by zero and
- reports NaN rather than 0.
+ a tree whose only internal node is the root reports 0, as does an empty tree. A root with no
+ perimeter, which proxies holding the zero box give at any count, reports 0 too.
 *>
 extern fn float DynamicTree.area_ratio(&self) @cname("b3DynamicTree_GetAreaRatio");
 
@@ -139,16 +125,17 @@ extern fn Aabb DynamicTree.root_bounds(&self) @cname("b3DynamicTree_GetRootBound
 
 <*
  Arithmetic over the capacities rather than a reading of the heap: it counts the caller's own
- 80-byte struct, which is not on the heap, and after a rebuild two arrays box3d's median split
+ 112-byte struct, which is not on the heap, and after a rebuild two arrays box3d's median split
  never allocates. The module's byte_count() is the number the allocator agrees with.
 *>
 extern fn int DynamicTree.byte_count(&self) @cname("b3DynamicTree_GetByteCount");
 
 <*
  Rebalances the tree and returns the number of boxes it sorted. A partial build keeps every
- subtree box3d has not marked enlarged and so sorts far fewer boxes than a full one — but any
+ subtree box3d has not marked moved and so sorts far fewer boxes than a full one — but any
  enlarge_proxy() marks the whole ancestor chain, so one of those undoes the saving. Either build
- allocates the rebuild arrays when it has something to sort, and byte_count() carries them.
+ allocates a spare node array and the rebuild arrays when it has something to sort, and
+ byte_count() carries them.
 *>
 extern fn int dynamic_tree_rebuild(DynamicTree* tree, bool full_build) @cname("b3DynamicTree_Rebuild");
 
@@ -169,10 +156,10 @@ alias TreeClosestFn = fn float(float search_bound, int proxy_id, ulong user_data
 
 <*
  Reports proxies whose box overlaps aabb, calling fcn once for each until it returns false — every
- one, unless the tree exhausts box3d's 1024-entry traversal stack, which drops a whole subtree and
+ one, unless the tree exhausts box3d's 512-entry traversal stack, which drops a whole subtree and
  reports the short answer as a normal one. Only a degenerate tree of nested boxes reaches that.
 
- The mask flags do not refine each other: loosely a node passes on any bit in common, strictly on
+ The mask flags do not refine each other: loosely a proxy passes on any bit in common, strictly on
  every bit of the mask, and only a single-bit mask agrees for every proxy. A zero mask reports
  nothing loosely and everything strictly.
 *>

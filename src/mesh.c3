@@ -3,6 +3,9 @@ module b3;
 const char HEIGHT_FIELD_APRON_SIDES @private = HEIGHT_FIELD_APRON_NEGATIVE_X | HEIGHT_FIELD_APRON_POSITIVE_X
   | HEIGHT_FIELD_APRON_NEGATIVE_Z | HEIGHT_FIELD_APRON_POSITIVE_Z;
 
+// Mirrors B3_MAX_STRIDE in box3d's mesh.c, which refuses a larger stride as uninitialised memory.
+const usz MESH_MAX_STRIDE @private = 4096;
+
 <*
  Builds a flat grid of triangles in the x-z plane, x_count by z_count cells around the origin.
 
@@ -135,12 +138,16 @@ fn MeshData*? create_platform_mesh(Vec3 center, float height, float top_width, f
 
  @param [&in] def : `the vertices and indices to build from`
  @return `the mesh`
- @return? INVALID_DEFINITION : `def is null`
- @return? DEGENERATE_GEOMETRY : `the definition names fewer than three vertices, no triangles, or
-   no triangle with area`
+ @return? INVALID_DEFINITION : `def is null, or stride is not 0 or a multiple of 4 from 12 to 4096`
+ @return? DEGENERATE_GEOMETRY : `the definition names fewer than three vertices, no triangles, a
+   missing array, or no triangle with area`
 *>
 fn MeshData*? create_mesh(MeshDef* def) {
     if (def == null) return INVALID_DEFINITION~;
+    if (def.stride != 0) {
+        if (def.stride < Vec3::size || def.stride > MESH_MAX_STRIDE) return INVALID_DEFINITION~;
+        if (def.stride % 4 != 0) return INVALID_DEFINITION~;
+    }
     return checked_geometry(
       create_mesh_raw(def: def, degenerate_triangle_indices: null, degenerate_capacity: 0),
       DEGENERATE_GEOMETRY,

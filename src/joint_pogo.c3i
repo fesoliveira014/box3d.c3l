@@ -1,0 +1,18 @@
+module b3;
+
+<*
+ A pogo joint definition: the spring that holds a dynamic character body off the ground along the
+ y-axis of local frame B. impulse and velocity seed the spring's internal state, for a pogo that is
+ recreated every frame.
+*>
+struct PogoJointDef {
+    inline JointDef base;
+    Vec3 normal;
+    float hertz;
+    float damping_ratio;
+    float rest_length;
+    float max_tension_force;
+    float max_compression_force;
+    float impulse;
+    float velocity;
+}

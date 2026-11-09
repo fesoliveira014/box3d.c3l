@@ -28,14 +28,17 @@ extern fn ExplosionDef default_explosion_def() @cname("b3DefaultExplosionDef");
 
 <*
  The plane between a mover and one shape it touches. offset is how far the mover's surface reaches
- past the shape's, and point sits on the shape's core rather than its surface — the sphere's centre,
- the capsule's segment, the hull's own face. The normal points out of the shape towards the mover
- unless the mover's core has closed within a linear slop of that same core, when box3d substitutes
- a perpendicular of the mover's axis and the direction means nothing.
+ past the shape's, and point sits on the shape's core: sphere centre, capsule segment, hull face.
+ The normal points out of the shape towards the mover, or is an arbitrary perpendicular of the
+ mover's axis once the two cores are within a linear slop. The three indices name the triangle,
+ the compound child and the material reached, each 0 where the shape has none.
 *>
 struct PlaneResult {
     Plane plane;
     Vec3 point;
+    int triangle_index;
+    int child_index;
+    int material_index;
 }
 
 <*
@@ -70,6 +73,17 @@ extern fn Vec3 clip_vector_raw(Vec3 vector, CollisionPlane* planes, int count) @
 struct BodyPlaneResult {
     ShapeId shape_id;
     PlaneResult result;
+}
+
+<*
+ Where a mover swept against one body first touches it. normal points from the body towards the
+ mover, and fraction is the share of the sweep travelled before contact.
+*>
+struct BodyToiResult {
+    Pos point;
+    Vec3 normal;
+    float fraction;
+    ShapeId shape_id;
 }
 
 <*

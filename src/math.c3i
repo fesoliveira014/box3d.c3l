@@ -3,6 +3,7 @@ module b3;
 import std::math::quaternion;
 import std::math;
 
+alias Vec2 = float[<2>];
 alias Vec3 = float[<3>];
 alias Quat = Quaternionf;
 <*

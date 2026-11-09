@@ -21,7 +21,6 @@ fn void? lib_startup() {
 
     b3::set_log_fn(&on_box3d_log);
     b3::set_length_units_per_meter(100.0f);   // centimetres
-    b3::set_stall_threshold(0.002f);          // log continuous-collision passes over 2 ms
 }
 ```
 
@@ -44,13 +43,9 @@ see [recording](recording.md#contracts).
 ### Log and assert hooks
 
 `set_log_fn` installs a `LogFn` that receives every message box3d logs: memory dumps from
-[`world_dump_memory_stats`](worlds.md#diagnostics), continuous-collision stalls, and warnings.
+[`world_dump_memory_stats`](worlds.md#diagnostics) and warnings.
 Messages are formatted into a 512-byte buffer, so longer ones are truncated. The handler may be
 called from a worker thread during a step.
-
-`set_stall_threshold(seconds)` makes box3d log any single continuous-collision pass that takes
-longer than `seconds`. The default is `float::max`, which disables the log.
-`stall_threshold` reads it back.
 
 `set_assert_fn` installs an `AssertFn`. The shipped library is a Release build with every box3d
 assertion compiled out, so this handler is never called. Neither hook can be reset to box3d's
@@ -59,11 +54,11 @@ default handler once replaced.
 ## Allocator
 
 ```c3
-fn void* box3d_alloc(int size, int alignment) {
-    return mem::malloc_aligned(size, alignment);
+fn void* box3d_alloc(usz size, int alignment) {
+    return mem::malloc_aligned((sz)size, (sz)alignment);
 }
 
-fn void box3d_free(void* memory) {
+fn void box3d_free(void* memory, usz size) {
     mem::free_aligned(memory);
 }
 ```
@@ -73,16 +68,17 @@ b3::set_allocator(&box3d_alloc, &box3d_free);
 ```
 
 `set_allocator` takes an `AllocFn` and a `FreeFn`. box3d asks for sizes rounded up to a multiple
-of 16 with an alignment of 16. The returned pointer must honour that alignment and must not be
-null: the check is compiled out. `set_allocator(null, null)` restores the built-in allocator.
+of 32 with an alignment of 32. The returned pointer must honour that alignment and must not be
+null: the check is compiled out. The `FreeFn` receives the block's rounded size, the same size
+the `AllocFn` was asked for. `set_allocator(null, null)` restores the built-in allocator.
 
 box3d frees each block through whichever `FreeFn` is installed when it frees, not the one that
 allocated it. Install the pair before box3d allocates anything (before the first world, mesh,
 hull or recording) and keep it until all of that is destroyed. Install both functions or neither.
 
-`byte_count` reports box3d's live allocated bytes, whichever allocator is installed. It returns to
-its starting value only when every world, geometry object, recording and player is destroyed,
-which makes it a leak check.
+`byte_count` reports box3d's live allocated bytes as a `long`, whichever allocator is installed.
+It returns to its starting value only when every world, geometry object, recording and player is
+destroyed, which makes it a leak check.
 
 ## Timer and threads
 

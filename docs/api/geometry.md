@@ -63,10 +63,9 @@ int count = contact.point_count;
 
 Per-pair behaviour:
 
-- The sphere-sphere and capsule-sphere pairs report a point only on touch or overlap. The hull pairs, the
-  triangle pairs (triangle-hull only with `enable_speculative`) and the one-point branch of
-  capsule-capsule report speculative points out to
-  four linear slops.
+- The sphere-sphere, capsule-sphere and hull pairs, the triangle pairs (triangle-hull only with
+  `enable_speculative`) and the one-point branch of capsule-capsule report speculative points out
+  to four linear slops.
 - Coincident sphere centres, or a sphere on a capsule's axis, report a +y normal: box3d's
   fallback where no direction can be measured.
 - `collide_capsules` reports nothing when either capsule is shorter than a linear slop, or when
@@ -134,7 +133,7 @@ points `point_a` and `point_b`, `normal` from A to B, and `distance` clamped at 
 - `normal` is exactly zero when the cores overlap. Test for the zero normal, not for
   `distance == 0`: when only the radii drove the distance to zero the normal is real and the two
   witness points have crossed.
-- Every call starts cold. `simplex_count` is always 0, and `iterations` reads 0 on any overlap.
+- Every call starts cold. `simplex_count` is always 0; `iterations` counts on overlap too.
 - Each proxy must name a non-null array of 1 to `MAX_SHAPE_CAST_POINTS` points, or the call
   returns `INVALID_DEFINITION`. The points are read during the call only.
 
@@ -167,9 +166,10 @@ slop. The stop is short of the geometric touch below a total radius of one slop,
 slop, and past it above; from two slops up it is a full slop past. Allow that band in any
 comparison.
 
-A pair that starts overlapped returns fraction 0 with a zero `normal`. With `can_encroach` set and
-more than about 2.75 slops of total radius, box3d instead lets the pair close a further slop and
-reports a real fraction and normal. `child_index` and `material_index` read 0.
+A pair whose cores start overlapped returns fraction 0 with a zero `normal`. `can_encroach` acts
+only when the cores start apart but inside the stop distance: more than two slops apart, the pair
+closes a further slop; nearer, it advances to half a slop apart, or misses if it is not closing.
+Either reports a real fraction and normal. `child_index` and `material_index` read 0.
 
 ## Time of impact
 
@@ -202,7 +202,7 @@ interval. The rotation is a normalised lerp, not a slerp. A `t` outside 0 to 1 r
 | `ToiState` | Meaning | `fraction`, `point`, `normal` |
 |---|---|---|
 | `HIT` | the shapes touch inside the interval | the touch; measured point and normal |
-| `OVERLAPPED` | the cores overlap at the start | 0; zero point and normal |
+| `OVERLAPPED` | the cores overlap at the start | 0; midway witness point, zero normal |
 | `SEPARATED` | no touch up to `max_fraction` | `max_fraction`; last witness pair |
 | `FAILED` | the solver gave up | the last time it reached |
 | `UNKNOWN` | never returned | |

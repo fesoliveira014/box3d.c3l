@@ -1,21 +1,17 @@
 module b3;
 
 <*
- Bakes the definition's children — spheres, capsules, hulls and meshes — into one compound shape.
-
- The caller owns the compound and must destroy_compound() it, as with MeshData; nothing in the
- definition has to outlive the call, because box3d clones every child. An empty definition builds a
- childless compound, owned like any other. box3d itself refuses only a definition naming
- MAX_CHILD_SHAPES children or more, and refuses before allocating; every other guard below restores
- a check it does not make at all: a null array segfaults, and a negative count hangs the allocator.
+ Bakes the definition's children — spheres, capsules, hulls and meshes — into one compound shape,
+ which the caller owns and must destroy_compound(), as with MeshData. box3d clones every child.
+ It refuses only MAX_CHILD_SHAPES children or more; the other guards restore checks it omits or
+ asserts in a build that compiles them out. It also asserts at most 65535 distinct materials,
+ unguarded here: past that, child material indices wrap silently.
 
  @param [&in] def : `the children to bake`
  @return `the compound`
- @return? CHILD_LIMIT_REACHED : `the definition names MAX_CHILD_SHAPES children or more, or box3d
-   refuses one for its own ceiling`
- @return? INVALID_DEFINITION : `def is null, a count is negative, a named array is missing, a hull
-   or mesh child names no geometry, or a mesh child's material count is outside 1 to
-   MAX_COMPOUND_MESH_MATERIALS`
+ @return? CHILD_LIMIT_REACHED : `the definition names MAX_CHILD_SHAPES children or more`
+ @return? INVALID_DEFINITION : `def is null, a count is negative, no child is named, a named array
+   is missing, a hull or mesh child names no geometry, or a mesh child names no materials`
 *>
 fn CompoundData*? create_compound(CompoundDef* def) {
     if (def == null) return INVALID_DEFINITION~;
@@ -23,6 +19,7 @@ fn CompoundData*? create_compound(CompoundDef* def) {
     if (def.mesh_count < 0 || def.sphere_count < 0) return INVALID_DEFINITION~;
 
     long child_count = (long)def.capsule_count + (long)def.hull_count + (long)def.mesh_count + (long)def.sphere_count;
+    if (child_count == 0) return INVALID_DEFINITION~;
     if (child_count >= MAX_CHILD_SHAPES) return CHILD_LIMIT_REACHED~;
 
     if (def.capsule_count > 0 && def.capsules == null) return INVALID_DEFINITION~;
@@ -37,7 +34,7 @@ fn CompoundData*? create_compound(CompoundDef* def) {
     for (int i = 0; i < def.mesh_count; i++) {
         CompoundMeshDef* mesh = &def.meshes[i];
         if (mesh.mesh_data == null || mesh.materials == null) return INVALID_DEFINITION~;
-        if (mesh.material_count < 1 || mesh.material_count > MAX_COMPOUND_MESH_MATERIALS) return INVALID_DEFINITION~;
+        if (mesh.material_count < 1) return INVALID_DEFINITION~;
     }
 
     return checked_geometry(create_compound_raw(def), CHILD_LIMIT_REACHED);
@@ -127,53 +124,41 @@ fn CompoundSphere? CompoundData.sphere(&self, int index) {
 
  Distinct is byte-for-byte, so two children agreeing on friction and restitution but differing in
  user_material_id or custom_color get an entry each. The slice borrows the compound's storage and
- lasts as long as the compound; a childless compound gives an empty slice over a non-null pointer
- past the allocation. C returns this array const: treat it as a view, and read the count for empty.
+ lasts as long as the compound. C returns this array const: treat it as a view.
 *>
 fn SurfaceMaterial[] CompoundData.materials(&self) {
     return compound_materials_raw(self)[:self.material_count];
 }
 
 <*
- The bounds of the compound placed by this transform: the box its tree root holds, which is the
- union of every child's, widened under rotation exactly as HullData.compute_aabb() is.
-
- A compound with no children carries the root -1 and box3d indexes its node array with it, a read
- landing back inside the compound's own header that answers a zero-extent box at the transform's
- position — a plausible empty box rather than an obvious wrong one, which is why it is refused.
-
- @return `the bounds`
- @return? DEGENERATE_GEOMETRY : `the compound holds no children`
+ The mesh child's material slots, which a triangle's material index selects among. The slice
+ borrows the compound's storage and lasts as long as the compound.
 *>
-fn Aabb? CompoundData.compute_aabb(&self, Transform transform) {
-    if (self.tree.root < 0) return DEGENERATE_GEOMETRY~;
-    return compute_compound_aabb_raw(self, transform);
+fn ushort[] CompoundMesh.material_slots(self) {
+    return self.material_indices[:self.material_count];
 }
 
 <*
- The compound's own bytes, ready to be written out, with the one address it holds nulled so they
- carry none. They are neither a copy nor a second allocation — destroy_compound() is what frees them
- — and the nulling is not cosmetic: every query, cast and overlap against this compound walks that
- pointer without testing it, so each one crashes until compound_from_bytes() is called over these
- very bytes. Called over a copy it repairs the copy and leaves this compound broken.
+ The child's material slots: one for a convex child, the mesh's slots for a mesh child. The slice
+ borrows the compound's storage and lasts as long as the compound.
 *>
-fn char[] convert_compound_to_bytes(CompoundData* compound) {
-    return convert_compound_to_bytes_raw(compound)[:compound.byte_count];
+fn ushort[] ChildShape.material_slots(self) {
+    return self.material_indices[:self.material_count];
 }
 
 <*
- Points a compound's tree back into the caller's own bytes and hands them back read as one. It
- allocates nothing and takes nothing over: the bytes stay the caller's, so destroy_compound() is
- right only for a compound box3d allocated. box3d reads the header through the pointer before it
- checks any length, which is what the first guard is for.
+ Reads serialized compound bytes as a compound in place: the result is bytes.ptr, so the bytes stay
+ the caller's, must outlive every use, and never go to destroy_compound(). box3d checks the
+ version, the length and the node array, and no other offset, so the bytes must be a compound's
+ byte_count bytes as this build wrote them. C returns the compound const: treat it as a view.
 
  @return `the compound`
- @return? BUFFER_TOO_SMALL : `the slice is shorter than a compound header`
- @return? NOT_A_COMPOUND : `it carries another version, another length, or no tree`
+ @return? NOT_A_COMPOUND : `the bytes are too short, carry another version or length, or hold no
+   node array that fits`
 *>
-fn CompoundData*? compound_from_bytes(char[] bytes) {
-    if (bytes.len < CompoundData::size) return BUFFER_TOO_SMALL~;
-    return checked_geometry(convert_bytes_to_compound_raw(bytes.ptr, (int)bytes.len), NOT_A_COMPOUND);
+fn CompoundData*? validate_compound(char[] bytes) {
+    if (bytes.len > int::max) return NOT_A_COMPOUND~;
+    return checked_geometry(validate_compound_raw(bytes.ptr, (int)bytes.len), NOT_A_COMPOUND);
 }
 
 <*

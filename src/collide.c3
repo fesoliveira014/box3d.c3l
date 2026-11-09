@@ -34,9 +34,9 @@ fn bool triangle_has_area(Triangle* triangle) @private {
  The contact between this sphere and another placed by transform_b_to_a, in this sphere's frame,
  the normal pointing from this sphere towards the other.
 
- A point arrives while the two touch or overlap, so its separation is never positive — exactly
- zero where the surfaces meet, negative once they overlap. Coincident centres report minus the
- summed radii under a +y normal, box3d's fallback direction rather than a measured one.
+ A four-slop speculative window, so a point can arrive with a positive separation for two spheres
+ not yet touching. Coincident centres report minus the summed radii under a +y normal, box3d's
+ fallback direction rather than a measured one.
 *>
 fn CollisionManifold collide_spheres(Sphere* sphere, Sphere other, Transform transform_b_to_a) {
     return @manifold_from(; LocalManifold* m) {
@@ -54,8 +54,8 @@ fn CollisionManifold collide_spheres(Sphere* sphere, Sphere other, Transform tra
  The contact between this capsule and a sphere placed by transform_b_to_a, in the capsule's frame,
  the normal pointing from the capsule towards the sphere.
 
- A point arrives while the two touch or overlap, so its separation is never positive — zero where
- the surfaces meet. A capsule whose centres coincide is collided as the sphere they name, and a
+ A four-slop speculative window, so a point can arrive with a positive separation for two shapes
+ not yet touching. A capsule whose centres coincide is collided as the sphere they name, and a
  sphere on the capsule's axis reports a +y normal, box3d's fallback where there is none to measure.
 *>
 fn CollisionManifold collide_capsule_and_sphere(Capsule* capsule, Sphere sphere, Transform transform_b_to_a) {

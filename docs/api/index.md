@@ -98,7 +98,7 @@ freed while a shape still borrows it, or a `ShapeProxy` passed to a world or bod
 | `BUFFER_TOO_SMALL` | A caller buffer is shorter than the call requires |
 | `FILE_UNAVAILABLE` | A path could not be read or written, or holds no data of the expected kind |
 | `NOT_A_RECORDING` | A byte buffer carries no replayable recording |
-| `NOT_A_COMPOUND` | Serialized compound data has the wrong version, length, or no tree |
+| `NOT_A_COMPOUND` | Serialized compound data has the wrong version or length, or no node array that fits |
 
 Each call's docstring lists the faults it returns and the exact condition for each.
 
@@ -108,11 +108,11 @@ Each call's docstring lists the faults it returns and the exact condition for ea
 
 Module: `b3`. Sources: `src/base.c3i`, `src/math.c3i`, `src/check.c3`.
 
-Types: `AllocFn`, `FreeFn`, `AssertFn`, `LogFn`, `Version`, `Vec3`, `Quat`, `Matrix3`, `Pos`, `WorldId`, `BodyId`, `ShapeId`, `JointId`, `ContactId`, `Transform`, `WorldTransform`, `Aabb`, `Plane`, `CosSin`, `SegmentDistanceResult`.
+Types: `AllocFn`, `FreeFn`, `AssertFn`, `LogFn`, `Version`, `Vec2`, `Vec3`, `Quat`, `Matrix3`, `Pos`, `WorldId`, `BodyId`, `ShapeId`, `JointId`, `ContactId`, `Transform`, `WorldTransform`, `Aabb`, `Plane`, `CosSin`, `SegmentDistanceResult`.
 
 Constants: `HASH_INIT`.
 
-Functions: `version`, `is_double_precision`, `byte_count`, `set_allocator`, `set_assert_fn`, `set_log_fn`, `ticks`, `milliseconds`, `milliseconds_and_reset`, `yield`, `sleep`, `length_units_per_meter`, `set_length_units_per_meter`, `stall_threshold`, `set_stall_threshold`, `hash`, `require_float_abi`, `point_to_segment_distance`, `compute_cos_sin`, `atan2`, `segment_distance`, `steiner`, `is_valid_float`, `is_valid_vec3`, `is_valid_position`, `is_valid_quat`, `is_valid_transform`, `is_valid_world_transform`, `is_valid_matrix3`, `is_valid_aabb`, `is_bounded_aabb`, `is_sane_aabb`, `is_valid_plane`, `make_quat_from_matrix`, `compute_quat_between_unit_vectors`, `line_distance`, `checked_access`, `checked_geometry`.
+Functions: `version`, `is_double_precision`, `byte_count`, `set_allocator`, `set_assert_fn`, `set_log_fn`, `ticks`, `milliseconds`, `milliseconds_and_reset`, `yield`, `sleep`, `length_units_per_meter`, `set_length_units_per_meter`, `hash`, `require_float_abi`, `point_to_segment_distance`, `compute_cos_sin`, `atan2`, `segment_distance`, `steiner`, `is_valid_float`, `is_valid_vec3`, `is_valid_position`, `is_valid_quat`, `is_valid_transform`, `is_valid_world_transform`, `is_valid_matrix3`, `is_valid_aabb`, `is_bounded_aabb`, `is_sane_aabb`, `is_valid_plane`, `make_quat_from_matrix`, `compute_quat_between_unit_vectors`, `line_distance`, `checked_access`, `checked_geometry`.
 
 Methods: `WorldId.is_null`, `BodyId.is_null`, `ShapeId.is_null`, `JointId.is_null`, `ContactId.is_null`, `WorldId.checked`, `BodyId.checked`, `ShapeId.checked`, `JointId.checked`, `ContactId.checked`.
 
@@ -123,9 +123,9 @@ Module: `b3`. Sources: `src/world.c3i`, `src/event.c3i`.
 
 Types: `FrictionFn`, `RestitutionFn`, `TaskFn`, `EnqueueTaskFn`, `FinishTaskFn`, `CreateDebugShapeFn`, `DestroyDebugShapeFn`, `Capacity`, `WorldDef`, `Profile`, `Counters`, `SensorBeginTouchEvent`, `SensorEndTouchEvent`, `ContactBeginTouchEvent`, `ContactEndTouchEvent`, `ContactHitEvent`, `BodyMoveEvent`, `JointEvent`, `PreSolveFn`, `CustomFilterFn`.
 
-Constants: `MAX_WORLDS`, `MAX_WORKERS`.
+Constants: `MAX_WORLDS`, `MAX_WORKERS`, `MAX_RESTITUTION_ITERATIONS`.
 
-Functions: `default_world_def`, `destroy_world`, `world_step`, `world_count`, `max_world_count`, `world_dump_memory_stats`, `world_rebuild_static_tree`, `create_world`.
+Functions: `default_world_def`, `destroy_world`, `world_step`, `world_count`, `max_world_count`, `world_dump_memory_stats`, `create_world`.
 
 Methods: `WorldId.is_valid`, `WorldId.gravity`, `WorldId.set_gravity`, `WorldId.restitution_threshold`, `WorldId.set_restitution_threshold`, `WorldId.hit_event_threshold`, `WorldId.set_hit_event_threshold`, `WorldId.maximum_linear_speed`, `WorldId.set_maximum_linear_speed`, `WorldId.contact_recycle_distance`, `WorldId.set_contact_recycle_distance`, `WorldId.set_contact_tuning`, `WorldId.enable_sleeping`, `WorldId.is_sleeping_enabled`, `WorldId.enable_continuous`, `WorldId.is_continuous_enabled`, `WorldId.enable_warm_starting`, `WorldId.is_warm_starting_enabled`, `WorldId.enable_speculative`, `WorldId.worker_count`, `WorldId.set_worker_count`, `WorldId.awake_body_count`, `WorldId.profile`, `WorldId.counters`, `WorldId.max_capacity`, `WorldId.bounds`, `WorldId.user_data`, `WorldId.set_user_data`, `WorldId.set_friction_callback`, `WorldId.set_restitution_callback`, `ContactId.is_valid`, `JointId.is_valid`, `WorldId.set_pre_solve_callback`, `WorldId.set_custom_filter_callback`, `WorldId.contact_begin_touch_events`, `WorldId.contact_end_touch_events`, `WorldId.contact_hit_events`, `WorldId.sensor_begin_touch_events`, `WorldId.sensor_end_touch_events`, `WorldId.body_move_events`, `WorldId.joint_events`.
 
@@ -147,18 +147,18 @@ Module: `b3`. Sources: `src/shape.c3i`, `src/hull.c3i`, `src/mesh.c3i`, `src/com
 
 Types: `Filter`, `SurfaceMaterial`, `ShapeType`, `ShapeDef`, `Sphere`, `Capsule`, `HullVertex`, `HullHalfEdge`, `HullFace`, `HullData`, `BoxHull`, `ScaledBox`, `MeshData`, `MeshDef`, `Mesh`, `HeightFieldData`, `HeightFieldDef`, `MeshQueryFn`, `CompoundData`, `CompoundSphereDef`, `CompoundCapsuleDef`, `CompoundHullDef`, `CompoundMeshDef`, `CompoundDef`, `CompoundCapsule`, `CompoundHull`, `CompoundMesh`, `CompoundSphere`, `ChildShape`, `CompoundQueryFn`.
 
-Constants: `MAX_HULL_VERTICES`, `MAX_HULL_RING_STEPS`, `HEIGHT_FIELD_APRON_NEGATIVE_X`, `HEIGHT_FIELD_APRON_POSITIVE_X`, `HEIGHT_FIELD_APRON_NEGATIVE_Z`, `HEIGHT_FIELD_APRON_POSITIVE_Z`, `MAX_CHILD_SHAPES`, `MAX_COMPOUND_MESH_MATERIALS`.
+Constants: `MAX_HULL_VERTICES`, `MAX_HULL_RING_STEPS`, `MAX_MESH_CONTACT_TRIANGLES`, `HEIGHT_FIELD_APRON_NEGATIVE_X`, `HEIGHT_FIELD_APRON_POSITIVE_X`, `HEIGHT_FIELD_APRON_NEGATIVE_Z`, `HEIGHT_FIELD_APRON_POSITIVE_Z`, `MAX_CHILD_SHAPES`.
 
-Functions: `default_filter`, `default_surface_material`, `default_shape_def`, `destroy_shape`, `shape_apply_wind`, `create_sphere_shape`, `create_capsule_shape`, `create_hull_shape`, `create_transformed_hull_shape`, `make_cube_hull`, `make_box_hull`, `make_offset_box_hull`, `make_transformed_box_hull`, `make_scaled_box_hull`, `destroy_hull`, `create_hull`, `create_cylinder`, `create_cone`, `create_rock`, `clone_hull`, `clone_and_transform_hull`, `scale_box`, `destroy_mesh`, `destroy_height_field`, `query_mesh`, `query_height_field`, `create_grid_mesh`, `create_wave_mesh`, `create_torus_mesh`, `create_box_mesh`, `create_hollow_box_mesh`, `create_platform_mesh`, `create_mesh`, `create_height_field_grid`, `create_height_field_wave`, `create_height_field`, `dump_height_data`, `load_height_field`, `create_mesh_shape`, `create_height_field_shape`, `destroy_compound`, `query_compound`, `create_compound`, `convert_compound_to_bytes`, `compound_from_bytes`, `create_baked_compound_shape`.
+Functions: `default_filter`, `default_surface_material`, `default_shape_def`, `destroy_shape`, `shape_apply_wind`, `create_sphere_shape`, `create_capsule_shape`, `create_hull_shape`, `create_transformed_hull_shape`, `make_cube_hull`, `make_box_hull`, `make_offset_box_hull`, `make_transformed_box_hull`, `make_scaled_box_hull`, `destroy_hull`, `create_hull`, `create_cylinder`, `create_cone`, `create_rock`, `clone_hull`, `clone_and_transform_hull`, `scale_box`, `destroy_mesh`, `destroy_height_field`, `query_mesh`, `query_height_field`, `create_grid_mesh`, `create_wave_mesh`, `create_torus_mesh`, `create_box_mesh`, `create_hollow_box_mesh`, `create_platform_mesh`, `create_mesh`, `create_height_field_grid`, `create_height_field_wave`, `create_height_field`, `dump_height_data`, `load_height_field`, `create_mesh_shape`, `create_height_field_shape`, `destroy_compound`, `query_compound`, `create_compound`, `validate_compound`, `create_baked_compound_shape`.
 
-Methods: `Sphere.compute_mass_data`, `Sphere.compute_aabb`, `Capsule.compute_mass_data`, `Capsule.compute_aabb`, `ShapeId.is_valid`, `ShapeId.type`, `ShapeId.body`, `ShapeId.world`, `ShapeId.is_sensor`, `ShapeId.enable_sensor_events`, `ShapeId.are_sensor_events_enabled`, `ShapeId.set_name`, `ShapeId.name`, `ShapeId.set_user_data`, `ShapeId.user_data`, `ShapeId.set_density`, `ShapeId.density`, `ShapeId.set_friction`, `ShapeId.set_restitution`, `ShapeId.set_surface_material`, `ShapeId.friction`, `ShapeId.restitution`, `ShapeId.surface_material`, `ShapeId.mesh_material_count`, `ShapeId.filter`, `ShapeId.set_filter`, `ShapeId.enable_contact_events`, `ShapeId.are_contact_events_enabled`, `ShapeId.enable_pre_solve_events`, `ShapeId.are_pre_solve_events_enabled`, `ShapeId.enable_hit_events`, `ShapeId.are_hit_events_enabled`, `ShapeId.set_sphere`, `ShapeId.set_capsule`, `ShapeId.set_hull`, `ShapeId.aabb`, `ShapeId.compute_mass_data`, `ShapeId.closest_point`, `ShapeId.sphere`, `ShapeId.capsule`, `ShapeId.hull`, `ShapeId.mesh`, `ShapeId.height_field`, `ShapeId.set_mesh`, `ShapeId.mesh_surface_material`, `ShapeId.set_mesh_material`, `HullData.compute_mass_data`, `HullData.compute_aabb`, `MeshData.tree_height`, `MeshData.compute_aabb`, `HeightFieldData.compute_aabb`, `CompoundData.child_count`, `CompoundData.child`, `CompoundData.capsule`, `CompoundData.hull`, `CompoundData.mesh`, `CompoundData.sphere`, `CompoundData.materials`, `CompoundData.compute_aabb`.
+Methods: `Sphere.compute_mass_data`, `Sphere.compute_aabb`, `Capsule.compute_mass_data`, `Capsule.compute_aabb`, `ShapeId.is_valid`, `ShapeId.type`, `ShapeId.body`, `ShapeId.world`, `ShapeId.is_sensor`, `ShapeId.enable_sensor_events`, `ShapeId.are_sensor_events_enabled`, `ShapeId.set_name`, `ShapeId.name`, `ShapeId.set_user_data`, `ShapeId.user_data`, `ShapeId.set_density`, `ShapeId.density`, `ShapeId.set_friction`, `ShapeId.set_restitution`, `ShapeId.set_surface_material`, `ShapeId.friction`, `ShapeId.restitution`, `ShapeId.surface_material`, `ShapeId.mesh_material_count`, `ShapeId.filter`, `ShapeId.set_filter`, `ShapeId.enable_contact_events`, `ShapeId.are_contact_events_enabled`, `ShapeId.enable_pre_solve_events`, `ShapeId.are_pre_solve_events_enabled`, `ShapeId.enable_hit_events`, `ShapeId.are_hit_events_enabled`, `ShapeId.set_sphere`, `ShapeId.set_capsule`, `ShapeId.set_hull`, `ShapeId.aabb`, `ShapeId.compute_mass_data`, `ShapeId.closest_point`, `ShapeId.sphere`, `ShapeId.capsule`, `ShapeId.hull`, `ShapeId.mesh`, `ShapeId.height_field`, `ShapeId.set_mesh`, `ShapeId.mesh_surface_material`, `ShapeId.set_mesh_material`, `HullData.compute_mass_data`, `HullData.compute_aabb`, `MeshData.tree_height`, `MeshData.compute_aabb`, `HeightFieldData.compute_aabb`, `CompoundData.compute_aabb`, `CompoundData.child_count`, `CompoundData.child`, `CompoundData.capsule`, `CompoundData.hull`, `CompoundData.mesh`, `CompoundData.sphere`, `CompoundData.materials`, `CompoundMesh.material_slots`, `ChildShape.material_slots`.
 
 
 ### [Joints](joints.md)
 
-Module: `b3`. Sources: `src/joint.c3i`, `src/joint_distance.c3i`, `src/joint_motor.c3i`, `src/joint_parallel.c3i`, `src/joint_prismatic.c3i`, `src/joint_revolute.c3i`, `src/joint_spherical.c3i`, `src/joint_weld.c3i`, `src/joint_wheel.c3i`.
+Module: `b3`. Sources: `src/joint.c3i`, `src/joint_distance.c3i`, `src/joint_motor.c3i`, `src/joint_mover.c3i`, `src/joint_parallel.c3i`, `src/joint_pogo.c3i`, `src/joint_prismatic.c3i`, `src/joint_revolute.c3i`, `src/joint_spherical.c3i`, `src/joint_weld.c3i`, `src/joint_wheel.c3i`.
 
-Types: `JointType`, `JointDef`, `FilterJointDef`, `ConstraintTuning`, `DistanceJointId`, `DistanceJointDef`, `SpringForceRange`, `MotorJointId`, `MotorJointDef`, `ParallelJointId`, `ParallelJointDef`, `PrismaticJointId`, `PrismaticJointDef`, `RevoluteJointId`, `RevoluteJointDef`, `SphericalJointId`, `SphericalJointDef`, `WeldJointId`, `WeldJointDef`, `WheelJointId`, `WheelJointDef`.
+Types: `JointType`, `JointDef`, `FilterJointDef`, `ConstraintTuning`, `DistanceJointId`, `DistanceJointDef`, `SpringForceRange`, `MotorJointId`, `MotorJointDef`, `MoverJointDef`, `ParallelJointId`, `ParallelJointDef`, `PogoJointDef`, `PrismaticJointId`, `PrismaticJointDef`, `RevoluteJointId`, `RevoluteJointDef`, `SphericalJointId`, `SphericalJointDef`, `WeldJointId`, `WeldJointDef`, `WheelJointId`, `WheelJointDef`.
 
 Functions: `default_filter_joint_def`, `destroy_joint`, `joint_wake_bodies`, `create_filter_joint`, `default_distance_joint_def`, `create_distance_joint`, `default_motor_joint_def`, `create_motor_joint`, `default_parallel_joint_def`, `create_parallel_joint`, `default_prismatic_joint_def`, `create_prismatic_joint`, `default_revolute_joint_def`, `create_revolute_joint`, `default_spherical_joint_def`, `create_spherical_joint`, `default_weld_joint_def`, `create_weld_joint`, `default_wheel_joint_def`, `create_wheel_joint`.
 
@@ -182,7 +182,7 @@ Methods: `ContactId.data`, `BodyId.contact_capacity`, `ShapeId.contact_capacity`
 
 Module: `b3`. Sources: `src/collide.c3i`, `src/distance.c3i`.
 
-Types: `Triangle`, `FeaturePair`, `LocalManifoldPoint`, `CollisionManifold`, `CollisionManifoldView`, `DistanceInput`, `DistanceOutput`, `ShapeCastPairInput`, `Sweep`, `ToiInput`, `ToiState`, `ToiOutput`.
+Types: `Triangle`, `FeaturePair`, `Point2D`, `LocalManifoldPoint`, `CollisionManifold`, `CollisionManifoldView`, `DistanceInput`, `DistanceOutput`, `ShapeCastPairInput`, `Sweep`, `ToiInput`, `ToiState`, `ToiOutput`.
 
 Functions: `collide_spheres`, `collide_capsule_and_sphere`, `collide_hull_and_sphere`, `collide_capsules`, `collide_hull_and_capsule`, `collide_hulls`, `collide_triangle_and_sphere`, `collide_triangle_and_capsule`, `collide_triangle_and_hull`, `shape_distance`, `shape_cast`, `time_of_impact`.
 
@@ -193,9 +193,7 @@ Methods: `CollisionManifold.contact_points`, `Sweep.transform_at`.
 
 Module: `b3`. Sources: `src/tree.c3i`.
 
-Types: `TreeNodeChildren`, `TreeNode`, `DynamicTree`, `TreeQueryFn`, `TreeClosestFn`, `ClosestSearch`, `BoxCastInput`, `TreeRayCastFn`, `TreeBoxCastFn`.
-
-Constants: `TREE_NODE_ALLOCATED`, `TREE_NODE_ENLARGED`, `TREE_NODE_LEAF`.
+Types: `TreeNode`, `TreeProxy`, `DynamicTree`, `TreeQueryFn`, `TreeClosestFn`, `ClosestSearch`, `BoxCastInput`, `TreeRayCastFn`, `TreeBoxCastFn`.
 
 Functions: `dynamic_tree_create`, `dynamic_tree_destroy`, `dynamic_tree_save`, `dynamic_tree_rebuild`, `dynamic_tree_query`, `dynamic_tree_ray_cast`, `dynamic_tree_box_cast`, `dynamic_tree_create_proxy`, `dynamic_tree_destroy_proxy`, `dynamic_tree_move_proxy`, `dynamic_tree_enlarge_proxy`, `dynamic_tree_query_closest`, `load_tree`.
 
@@ -206,7 +204,7 @@ Methods: `DynamicTree.height`, `DynamicTree.area_ratio`, `DynamicTree.root_bound
 
 Module: `b3`. Sources: `src/mover.c3i`.
 
-Types: `ExplosionDef`, `PlaneResult`, `CollisionPlane`, `PlaneSolverResult`, `BodyPlaneResult`, `PlaneResultFn`, `MoverFilterFn`.
+Types: `ExplosionDef`, `PlaneResult`, `CollisionPlane`, `PlaneSolverResult`, `BodyPlaneResult`, `BodyToiResult`, `PlaneResultFn`, `MoverFilterFn`.
 
 Functions: `default_explosion_def`, `world_collide_mover`, `world_cast_mover`, `solve_planes`, `clip_vector`, `body_collide_mover`, `world_explode`.
 

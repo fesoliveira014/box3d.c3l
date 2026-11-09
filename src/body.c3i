@@ -34,6 +34,7 @@ struct BodyDef {
     float angular_damping;
     float gravity_scale;
     float sleep_threshold;
+    float safety_factor;
     ZString name;
     void* user_data;
     MotionLocks motion_locks;

@@ -9,25 +9,20 @@ module b3;
 const int MAX_CHILD_SHAPES = 1048576;
 
 <*
- The number of surface materials one mesh child of a compound can carry. Mirrors
- B3_MAX_COMPOUND_MESH_MATERIALS in types.h, which the C API does not expose as a function. A mesh
- with more materials than this has to be used outside a compound.
-*>
-const int MAX_COMPOUND_MESH_MATERIALS = 4;
-
-<*
  The baked collision data behind a compound shape: spheres, capsules, hulls and meshes flattened
- into one tree a world populates as a single shape. Ownership and the byte count are MeshData's;
- this type is declared in full because its counts are reachable nowhere else. The children live
- past the end of the struct at byte offsets, so a bare CompoundData must never be copied, and the
- accessors trust the counts — assigning to one moves the bound they check. shared_hull_count and
- shared_mesh_count count distinct geometry, not children.
+ into one tree a world populates as a single shape. Ownership and the byte count are MeshData's.
+ The tree and the children live past the end of the struct at byte offsets and it holds no
+ pointer, so its byte_count bytes are its serialized form, but a bare CompoundData must never be
+ copied. The accessors trust the counts. bounds is the union of the children's boxes in the
+ compound's frame; tree_height, shared_hull_count and shared_mesh_count are diagnostics.
 *>
 struct CompoundData {
     ulong version;
     int byte_count;
+    Aabb bounds;
+    int tree_height;
     int node_offset;
-    DynamicTree tree;
+    int node_count;
     int material_offset;
     int material_count;
     int capsule_offset;
@@ -73,10 +68,9 @@ struct CompoundHullDef {
 <*
  A mesh child of a compound. The mesh is cloned in, so it need not outlive create_compound(), and
  children naming the same mesh store it once between them. material_count must equal the mesh's
- own material count, not merely be compatible: box3d asserts that and this build compiles the
- assertion out, so naming fewer silently folds every triangle material above the last named onto
- entry 0. It is capped at MAX_COMPOUND_MESH_MATERIALS too. scale is stored as given — unlike a
- mesh shape's it is not pushed away from zero.
+ own material count: box3d asserts that and this build compiles the assertion out, so naming fewer
+ lets a triangle's material index read past this child's slots and report a material the caller
+ never named. scale is stored as given — unlike a mesh shape's it is not pushed away from zero.
 *>
 struct CompoundMeshDef {
     MeshData* mesh_data;
@@ -89,8 +83,7 @@ struct CompoundMeshDef {
 <*
  The children create_compound() bakes into a compound, a pointer and a count per kind. box3d
  clones everything it reads, so none of the arrays has to outlive the call. There is no
- default_compound_def() upstream and no cookie, so a definition is written field by field, and an
- all-zero one is a legal request for a compound with no children rather than a malformed one.
+ default_compound_def() upstream and no cookie, so a definition is written field by field.
 *>
 struct CompoundDef {
     CompoundCapsuleDef* capsules;
@@ -110,7 +103,8 @@ struct CompoundDef {
 *>
 struct CompoundCapsule {
     Capsule capsule;
-    int material_index;
+    ushort material_index;
+    ushort padding;
 }
 
 <*
@@ -122,22 +116,23 @@ struct CompoundCapsule {
 struct CompoundHull {
     HullData* hull;
     Transform transform;
-    int material_index;
+    ushort material_index;
+    ushort padding;
 }
 
 <*
  A mesh child as the compound holds it. mesh_data points inside the compound's own allocation, not
  at the mesh create_compound() was given, so it dies with the compound and must not be destroyed
- on its own. material_indices is a second indirection: a triangle's material index, clamped to
- MAX_COMPOUND_MESH_MATERIALS, selects a slot here, which selects an entry of
- CompoundData.materials(). Unused slots read 0, a real index rather than a marker, so the struct
- cannot say how many are meaningful.
+ on its own. material_indices is a second indirection into the compound, material_count slots
+ long: a triangle's material index selects a slot, which selects an entry of
+ CompoundData.materials(). Read it through material_slots().
 *>
 struct CompoundMesh {
     MeshData* mesh_data;
     Transform transform;
     Vec3 scale;
-    int[MAX_COMPOUND_MESH_MATERIALS] material_indices;
+    ushort* material_indices;
+    int material_count;
 }
 
 <*
@@ -147,7 +142,8 @@ struct CompoundMesh {
 *>
 struct CompoundSphere {
     Sphere sphere;
-    int material_index;
+    ushort material_index;
+    ushort padding;
 }
 
 <*
@@ -156,8 +152,8 @@ struct CompoundSphere {
  type is the union's tag; reading another arm yields plausible geometry rather than an error, so a
  caller that knows the kind it wants should reach for capsule(), hull(), mesh() or sphere().
  transform is identity for a capsule and a sphere, which carry their own placement.
- material_indices reads as on CompoundMesh, and the hull and mesh arms borrow the compound's
- allocation: destroying either frees a pointer never separately allocated and aborts.
+ material_indices reads as on CompoundMesh, one slot long for a convex child, and the hull and mesh
+ arms borrow the compound's allocation: destroying either aborts.
 *>
 struct ChildShape {
     union {
@@ -167,7 +163,8 @@ struct ChildShape {
         Sphere sphere;
     }
     Transform transform;
-    int[MAX_COMPOUND_MESH_MATERIALS] material_indices;
+    ushort* material_indices;
+    int material_count;
     ShapeType type;
 }
 
@@ -185,13 +182,10 @@ extern fn CompoundData* create_compound_raw(CompoundDef* def) @cname("b3CreateCo
 extern fn void destroy_compound(CompoundData* compound) @cname("b3DestroyCompound");
 
 <*
- Raw byte conversions. Neither allocates nor copies: both hand back the address they were given,
- the first having nulled the compound's tree pointer and the second having pointed it back into
- the bytes. box3d reads the header through the pointer before it checks any length, so the
- wrappers in src/compound.c3 carry the size guard and are the only public way in.
+ Raw byte check. It hands back the address it was given or null, and takes the length as an int,
+ so the wrapper in src/compound.c3 takes a slice and is the only public way in.
 *>
-extern fn char* convert_compound_to_bytes_raw(CompoundData* compound) @cname("b3ConvertCompoundToBytes") @private;
-extern fn CompoundData* convert_bytes_to_compound_raw(char* bytes, int byte_count) @cname("b3ConvertBytesToCompound") @private;
+extern fn CompoundData* validate_compound_raw(char* bytes, int byte_count) @cname("b3ValidateCompound") @private;
 
 <*
  Raw child accessors. Every one of them asserts its index and this release build compiles the
@@ -206,18 +200,16 @@ extern fn CompoundMesh compound_mesh_raw(CompoundData* compound, int index) @cna
 extern fn CompoundSphere compound_sphere_raw(CompoundData* compound, int index) @cname("b3GetCompoundSphere") @private;
 
 <*
- Raw material accessor. It carries no count, and the pointer it returns is non-null even for a
- compound with no materials at all — it then addresses the first byte past the allocation — so the
- wrapper in src/compound.c3 pairs it with the count and is the only public way in.
+ Raw material accessor. It carries no count, so the wrapper in src/compound.c3 pairs it with the
+ count and is the only public way in.
 *>
 extern fn SurfaceMaterial* compound_materials_raw(CompoundData* compound) @cname("b3GetCompoundMaterials") @private;
 
 <*
- Raw compound bounds. box3d indexes the compound's node array at the tree's root without testing
- it, and a compound with no children carries the root -1, so the wrapper in src/compound.c3
- refuses that one case and is the only public way in.
+ The bounds of the compound placed by this transform: CompoundData.bounds, widened under rotation
+ exactly as HullData.compute_aabb() is.
 *>
-extern fn Aabb compute_compound_aabb_raw(CompoundData* compound, Transform transform) @cname("b3ComputeCompoundAABB") @private;
+extern fn Aabb CompoundData.compute_aabb(&self, Transform transform) @cname("b3ComputeCompoundAABB");
 
 <*
  Called once for each child a compound query finds, given the compound queried and the index

@@ -147,7 +147,7 @@ Module: `b3`. Sources: `src/shape.c3i`, `src/hull.c3i`, `src/mesh.c3i`, `src/com
 
 Types: `Filter`, `SurfaceMaterial`, `ShapeType`, `ShapeDef`, `Sphere`, `Capsule`, `HullVertex`, `HullHalfEdge`, `HullFace`, `HullData`, `BoxHull`, `ScaledBox`, `MeshData`, `MeshDef`, `Mesh`, `HeightFieldData`, `HeightFieldDef`, `MeshQueryFn`, `CompoundData`, `CompoundSphereDef`, `CompoundCapsuleDef`, `CompoundHullDef`, `CompoundMeshDef`, `CompoundDef`, `CompoundCapsule`, `CompoundHull`, `CompoundMesh`, `CompoundSphere`, `ChildShape`, `CompoundQueryFn`.
 
-Constants: `MAX_HULL_VERTICES`, `MAX_HULL_RING_STEPS`, `MAX_CHILD_SHAPES`, `MAX_COMPOUND_MESH_MATERIALS`.
+Constants: `MAX_HULL_VERTICES`, `MAX_HULL_RING_STEPS`, `HEIGHT_FIELD_APRON_NEGATIVE_X`, `HEIGHT_FIELD_APRON_POSITIVE_X`, `HEIGHT_FIELD_APRON_NEGATIVE_Z`, `HEIGHT_FIELD_APRON_POSITIVE_Z`, `MAX_CHILD_SHAPES`, `MAX_COMPOUND_MESH_MATERIALS`.
 
 Functions: `default_filter`, `default_surface_material`, `default_shape_def`, `destroy_shape`, `shape_apply_wind`, `create_sphere_shape`, `create_capsule_shape`, `create_hull_shape`, `create_transformed_hull_shape`, `make_cube_hull`, `make_box_hull`, `make_offset_box_hull`, `make_transformed_box_hull`, `make_scaled_box_hull`, `destroy_hull`, `create_hull`, `create_cylinder`, `create_cone`, `create_rock`, `clone_hull`, `clone_and_transform_hull`, `scale_box`, `destroy_mesh`, `destroy_height_field`, `query_mesh`, `query_height_field`, `create_grid_mesh`, `create_wave_mesh`, `create_torus_mesh`, `create_box_mesh`, `create_hollow_box_mesh`, `create_platform_mesh`, `create_mesh`, `create_height_field_grid`, `create_height_field_wave`, `create_height_field`, `dump_height_data`, `load_height_field`, `create_mesh_shape`, `create_height_field_shape`, `destroy_compound`, `query_compound`, `create_compound`, `convert_compound_to_bytes`, `compound_from_bytes`, `create_baked_compound_shape`.
 
@@ -231,5 +231,3 @@ Types: `Recording`, `Player`, `PlayerInfo`, `QueryType`, `QueryInfo`, `QueryHit`
 Functions: `create_recording`, `destroy_recording`, `world_stop_recording`, `destroy_player`, `player_step_frame`, `player_sub_step_frame`, `player_restart`, `player_seek_frame`, `player_has_diverged`, `player_draw_frame_queries`, `world_start_recording`, `save_recording_to_file`, `load_recording`, `validate_replay`, `create_player`.
 
 Methods: `Player.world_id`, `Player.frame`, `Player.frame_count`, `Player.is_at_end`, `Player.is_at_pre_step`, `Player.info`, `Player.set_worker_count`, `Player.set_keyframe_policy`, `Player.keyframe_budget`, `Player.keyframe_min_interval`, `Player.keyframe_interval`, `Player.keyframe_bytes`, `Player.body_count`, `Player.set_debug_shape_callbacks`, `Player.frame_query_count`, `Recording.data`, `Player.diverge_frame`, `Player.body_id`, `Player.frame_query`, `Player.frame_query_hit`.
-
-

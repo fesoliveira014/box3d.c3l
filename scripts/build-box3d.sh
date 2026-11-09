@@ -2,6 +2,10 @@
 # Build the box3d static library from the vendored submodule into linked-libs/<target>/,
 # then probe the public struct layouts the C3 binding pins with $assert.
 #
+# The library is box3d plus the patches listed in patches/series, applied in order to a scratch copy
+# of the submodule under build/. The submodule working tree is never modified, so the upstream pin
+# stays exactly what git records, and a patch that no longer applies stops the build.
+#
 # Usage:
 #   scripts/build-box3d.sh            build, then print the probed layouts
 #   scripts/build-box3d.sh --check    build, then fail if a layout drifted from scripts/abi-sizes.txt
@@ -20,6 +24,8 @@ set -e
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VENDOR="$ROOT/vendor/box3d"
+PATCHES="$ROOT/patches"
+SOURCE="$ROOT/build/box3d-src"
 case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*) TARGET="windows-x64" ;;
     *)                    TARGET="linux-x64" ;;
@@ -103,10 +109,46 @@ generate_layout() {
     '
 }
 
+# Prints the patch file names of the series, one per line, in apply order.
+series_patches() {
+    sed -e 's/#.*//' -e '/^[[:space:]]*$/d' "$PATCHES/series"
+}
+
+# Recreates the scratch copy when the submodule commit or the series changed, so an unchanged tree
+# keeps its CMake build between runs. The copy comes from git rather than from the working tree,
+# and with line endings pinned to LF: a Windows checkout may hold CRLF files, which the LF patches
+# would not apply to.
+prepare_source() {
+    stamp="$(git -C "$VENDOR" rev-parse HEAD) $(series_patches | while IFS= read -r name; do cat "$PATCHES/$name"; done | cksum)"
+    if [ "$(cat "$SOURCE/.patched" 2>/dev/null)" = "$stamp" ]; then
+        return
+    fi
+
+    rm -rf "$SOURCE"
+    mkdir -p "$SOURCE"
+    git -c core.autocrlf=false -c core.eol=lf -C "$VENDOR" archive HEAD | tar -x -C "$SOURCE"
+
+    # git apply run inside another repository resolves paths against that repository's root, so
+    # the copy is made a repository of its own.
+    git init -q "$SOURCE"
+    for name in $(series_patches); do
+        if ! git -C "$SOURCE" apply --check "$PATCHES/$name"; then
+            echo "ERROR: patches/$name does not apply to vendor/box3d at $(git -C "$VENDOR" rev-parse --short HEAD)." >&2
+            rm -rf "$SOURCE"
+            exit 1
+        fi
+        git -C "$SOURCE" apply "$PATCHES/$name"
+        echo "Applied patches/$name"
+    done
+    printf '%s\n' "$stamp" > "$SOURCE/.patched"
+}
+
 if [ ! -f "$VENDOR/CMakeLists.txt" ]; then
     echo "ERROR: vendor/box3d is empty. Run: git submodule update --init" >&2
     exit 1
 fi
+
+prepare_source
 
 # BOX3D_DOUBLE_PRECISION is a PUBLIC compile definition: it switches b3Vec3/b3Pos and every
 # struct that embeds them from float to double. The C3 binding is written against the float
@@ -120,20 +162,20 @@ if [ "$TARGET" = "windows-x64" ]; then
     # box3d pins CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded, the static CRT, which is why the
     # manifest's windows-x64 target sets "wincrt": "static" -- a consumer on the dynamic CRT will
     # not link against this archive.
-    BUILD_BAT="$VENDOR/build.bat"
-    mkdir -p "$VENDOR/build"
+    BUILD_BAT="$SOURCE/build.bat"
+    mkdir -p "$SOURCE/build"
     {
         echo '@echo off'
         echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
         echo 'if not defined VSPATH (echo ERROR: vswhere found no Visual Studio installation & exit /b 1)'
         echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1'
-        printf 'cmake -S "%s" -B "%s" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBOX3D_DOUBLE_PRECISION=OFF -DBOX3D_SAMPLES=OFF -DBOX3D_UNIT_TESTS=OFF -DBOX3D_BENCHMARKS=OFF -DBOX3D_DOCS=OFF -DBOX3D_VALIDATE=OFF || exit /b 1\n' "$(cygpath -w "$VENDOR")" "$(cygpath -w "$VENDOR/build")"
-        printf 'cmake --build "%s" --target box3d --parallel || exit /b 1\n' "$(cygpath -w "$VENDOR/build")"
+        printf 'cmake -S "%s" -B "%s" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBOX3D_DOUBLE_PRECISION=OFF -DBOX3D_SAMPLES=OFF -DBOX3D_UNIT_TESTS=OFF -DBOX3D_BENCHMARKS=OFF -DBOX3D_DOCS=OFF -DBOX3D_VALIDATE=OFF || exit /b 1\n' "$(cygpath -w "$SOURCE")" "$(cygpath -w "$SOURCE/build")"
+        printf 'cmake --build "%s" --target box3d --parallel || exit /b 1\n' "$(cygpath -w "$SOURCE/build")"
     } > "$BUILD_BAT"
     cmd //c "$(cygpath -w "$BUILD_BAT")"
     LIBNAME="box3d.lib"
 else
-    cmake -S "$VENDOR" -B "$VENDOR/build" \
+    cmake -S "$SOURCE" -B "$SOURCE/build" \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
         -DBUILD_SHARED_LIBS=OFF \
@@ -143,11 +185,11 @@ else
         -DBOX3D_BENCHMARKS=OFF \
         -DBOX3D_DOCS=OFF \
         -DBOX3D_VALIDATE=OFF
-    cmake --build "$VENDOR/build" --target box3d --parallel
+    cmake --build "$SOURCE/build" --target box3d --parallel
     LIBNAME="libbox3d.a"
 fi
 
-LIB="$(find "$VENDOR/build" -name "$LIBNAME" -print -quit)"
+LIB="$(find "$SOURCE/build" -name "$LIBNAME" -print -quit)"
 [ -n "$LIB" ] || { echo "ERROR: $LIBNAME not produced by the build" >&2; exit 1; }
 mkdir -p "$OUT"
 cp "$LIB" "$OUT/$LIBNAME"
@@ -174,7 +216,7 @@ echo "Installed $OUT/$LIBNAME"
 # it keep their positions and their own names.
 [ -f "$TYPES" ] || { echo "No $TYPES yet — skipping layout probe."; exit 0; }
 
-PROBE="$VENDOR/build/abi_probe.c"
+PROBE="$SOURCE/build/abi_probe.c"
 {
     echo '#include <box3d/box3d.h>'
     echo '#include <stddef.h>'
@@ -209,19 +251,19 @@ if [ "$TARGET" = "windows-x64" ]; then
     # cl needs the developer environment, which vswhere locates without hard-coding an edition or
     # a version. The probe runs as a real Windows binary, so what it reports is MSVC's own layout
     # rather than a cross-compiler's guess at it.
-    BAT="$VENDOR/build/abi_probe.bat"
+    BAT="$SOURCE/build/abi_probe.bat"
     {
         echo '@echo off'
         echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
         echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul'
-        printf 'cd /d "%s"\n' "$(cygpath -w "$VENDOR/build")"
-        printf 'cl /nologo /std:c17 /I "%s" abi_probe.c /Fe:abi_probe.exe >nul || exit /b 1\n' "$(cygpath -w "$VENDOR/include")"
+        printf 'cd /d "%s"\n' "$(cygpath -w "$SOURCE/build")"
+        printf 'cl /nologo /std:c17 /I "%s" abi_probe.c /Fe:abi_probe.exe >nul || exit /b 1\n' "$(cygpath -w "$SOURCE/include")"
         echo 'abi_probe.exe'
     } > "$BAT"
     probed="$(cmd //c "$(cygpath -w "$BAT")" | tr -d '\r')"
 else
-    "${CC:-cc}" -std=c17 -I"$VENDOR/include" "$PROBE" -o "$VENDOR/build/abi_probe"
-    probed="$("$VENDOR/build/abi_probe")"
+    "${CC:-cc}" -std=c17 -I"$SOURCE/include" "$PROBE" -o "$SOURCE/build/abi_probe"
+    probed="$("$SOURCE/build/abi_probe")"
 fi
 
 case "$MODE" in

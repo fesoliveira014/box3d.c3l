@@ -65,7 +65,8 @@ read a value out of something rather than operating on it.
 
 ## Types and layout
 
-- Never bind from memory. Read the declaration in `vendor/box3d/include/box3d/*.h` first. A wrong
+- Never bind from memory. Read the declaration in `build/box3d-src/include/box3d/*.h`, the patched
+  copy the build uses (`vendor/box3d/` lacks what a patch adds). A wrong
   parameter or return type is a silent cross-ABI memory bug.
 - The IDs (`b3WorldId`, `b3BodyId`, `b3ShapeId`, `b3JointId`, `b3ContactId`, …) are value structs
   passed and returned by value. Declare their fields exactly as the header does. Never model an ID
@@ -152,7 +153,7 @@ value keeps a plain `@return`.
 
 `@return? check_shape_proxy!` inherits a shared guard's faults instead of restating them.
 
-What c3c 0.8.5 checks: a literal `return SOME_FAULT~;` in the body is checked against the list,
+What c3c 0.8.5_1 checks: a literal `return SOME_FAULT~;` in the body is checked against the list,
 and an inherited name that does not resolve is a hard error. A fault arriving through
 `callee(...)!`, `return callee(...)`, or a macro body is not checked, and neither is a declared
 fault that is never returned. A clean build is not proof the list is complete.
@@ -169,7 +170,7 @@ fault that is never returned. A clean build is not proof the list is complete.
 - §8's `c3c build`/`c3c test` describe a consuming project. This package's checks are in
   [testing.md](testing.md).
 
-## C3 0.8.5 spellings
+## C3 0.8.5_1 spellings
 
 All confirmed against the compiler at `/home/fesol/opt/c3/c3c` (the `c3-linux-static` build; the
 host glibc is too old for the stock release).

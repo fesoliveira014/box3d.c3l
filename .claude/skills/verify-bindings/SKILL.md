@@ -61,4 +61,4 @@ Fails when a public symbol declared in `src/` is missing from the symbol map in 
 
 ## 6. Report honestly
 
-State exactly which steps ran and which passed. Quote the shortest decisive compiler error line for any failure. If a step was skipped — no `test/`, empty `linked-libs/`, `c3c` not matching the 0.8.5 target this repo declares — say which step and why. Do not claim the bindings are verified when only step 1 ran.
+State exactly which steps ran and which passed. Quote the shortest decisive compiler error line for any failure. If a step was skipped — no `test/`, empty `linked-libs/`, `c3c` not matching the 0.8.5_1 target this repo declares — say which step and why. Do not claim the bindings are verified when only step 1 ran.

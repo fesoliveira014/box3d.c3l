@@ -356,6 +356,53 @@ both arrays. `create_height_field` returns `INVALID_DEFINITION` for a null defin
 heights, or a global range that runs backwards. `b3::dump_height_data` writes the definition as
 text and requires both arrays; a path it cannot open is silently ignored.
 
+### Height-field aprons
+
+Height fields placed side by side meet at a shared edge, and a sphere or capsule crossing it feels
+the edge as a bump, because neither field knows about the other. `HeightFieldDef.apron_sides`
+marks the sides that touch a neighbour with the `HEIGHT_FIELD_APRON_*` bits. This field comes from
+a patch to box3d that this package carries; upstream box3d does not have it.
+
+| Bit | Side |
+|---|---|
+| `b3::HEIGHT_FIELD_APRON_NEGATIVE_X` | column 0 |
+| `b3::HEIGHT_FIELD_APRON_POSITIVE_X` | the last column |
+| `b3::HEIGHT_FIELD_APRON_NEGATIVE_Z` | row 0 |
+| `b3::HEIGHT_FIELD_APRON_POSITIVE_Z` | the last row |
+
+```c3
+// A 3 x 3 field whose positive-x side meets a neighbour. Padded: 5 columns by 5 rows.
+float[25] heights;
+for (int row = 1; row <= 3; row++) {
+    for (int column = 1; column <= 4; column++) {
+        heights[row * 5 + column] = 0.1f * (float)column;  // column 4: the neighbour's first column
+    }
+}
+b3::HeightFieldDef left_def = {
+    .heights = &heights[0],
+    .scale = { 1, 1, 1 },
+    .count_x = 3,
+    .count_z = 3,
+    .global_minimum_height = 0.0f,
+    .global_maximum_height = 1.0f,
+    .apron_sides = b3::HEIGHT_FIELD_APRON_POSITIVE_X,
+};
+b3::HeightFieldData* left = b3::create_height_field(&left_def)!;
+defer b3::destroy_height_field(left);
+```
+
+- With any bit set, `heights` is padded by one sample on every side,
+  `(count_x + 2) * (count_z + 2)` row-major, with the field's own samples starting at `(1, 1)`.
+  `material_indices`, if given, is padded to `(count_x + 1) * (count_z + 1)` cells.
+- The padding along a marked side holds the neighbour's own samples. Padding along an unmarked side,
+  and the four corners, is never read and may hold anything.
+- Both fields must use the same `global_minimum_height` and `global_maximum_height`, because
+  samples are quantised against that range.
+- A neighbour cell that is a hole leaves the shared edge open.
+- The padding is read while the field is created and is not stored. `b3::dump_height_data` does not
+  keep it. `apron_sides = 0` is upstream box3d's behaviour.
+- A bit outside the four sides returns `INVALID_DEFINITION`.
+
 `b3::create_height_field_shape` accepts only a **static** body. On a kinematic or dynamic body
 box3d returns a null identifier, reported as `INVALID_HANDLE`. There is no shape scale: the field
 keeps the one it was built with.

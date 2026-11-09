@@ -35,9 +35,10 @@ fn void? simulate() {
 
 ## Requirements and status
 
-C3 **0.8.5**. Targets `linux-x64` (GCC) and `windows-x64` (MSVC, static CRT). The release archive
-carries a prebuilt box3d for both, so consumers need neither CMake nor a C compiler. box3d is
-pinned in `manifest.json`.
+C3 **0.8.5_1**. Targets `linux-x64` (GCC, glibc 2.35 or newer) and `windows-x64` (MSVC, static
+CRT). Each release archive carries a prebuilt box3d for its target, so consumers need neither CMake
+nor a C compiler. box3d is pinned in `manifest.json` and built with the patches in
+`patches/series`; see [NOTICE](NOTICE).
 
 Pre-1.0. See [features and limitations](docs/features_and_limitations.md) for what is and is not
 bound.
@@ -50,8 +51,9 @@ bound.
 
 ## Install
 
-Download `b3.c3l` from the [latest release](https://github.com/fesoliveira014/box3d.c3l/releases/latest),
-put it in a directory your project searches for libraries, and name `b3` as a dependency:
+Download `b3-v<version>-linux-x64.c3l` or `b3-v<version>-windows-x64.c3l` from the
+[latest release](https://github.com/fesoliveira014/box3d.c3l/releases/latest), put it in a directory
+your project searches for libraries, and name `b3` as a dependency:
 
 ```json
 {
@@ -60,8 +62,8 @@ put it in a directory your project searches for libraries, and name `b3` as a de
 }
 ```
 
-The file is a packed `.c3l` that c3c reads as it stands. Do not unzip or rename it. On Windows, the
-project must also set `"wincrt": "static"`.
+The file is a packed `.c3l` that c3c reads as it stands and resolves by its `provides` name, `b3`.
+Do not unzip it. On Windows, the project must also set `"wincrt": "static"`.
 
 To build from a clone instead, see [getting started](docs/getting_started.md#install).
 

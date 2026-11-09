@@ -1,12 +1,13 @@
 # b3: C3 bindings for box3d
 
 Version @VERSION@, built against box3d @BOX3D_DESCRIBE@ (Erin Catto's 3D rigid-body physics
-library, C17). This package carries the sources, the consumer documentation, and a prebuilt static
-box3d per target, so it needs no CMake, submodule, or C compiler.
+library, C17) with the patches @BOX3D_PATCHES@ applied. This package carries the sources, the
+consumer documentation, and a prebuilt static box3d for one target, so it needs no CMake,
+submodule, or C compiler.
 
 ## Use
 
-Put `b3.c3l` in a directory your project searches for libraries and name `b3` as a dependency:
+Put this `.c3l` in a directory your project searches for libraries and name `b3` as a dependency:
 
 ```json
 {
@@ -15,7 +16,7 @@ Put `b3.c3l` in a directory your project searches for libraries and name `b3` as
 }
 ```
 
-c3c reads the packed `.c3l` as it stands. Do not unzip or rename it.
+c3c reads the packed `.c3l` as it stands and resolves it by its `provides` name. Do not unzip it.
 
 ```c3
 import b3;
@@ -42,13 +43,19 @@ Docstrings in `src/*.c3i` and `src/*.c3` are the authority for exact signatures.
 
 ## Targets
 
-| Target | Archive | Notes |
+| Package | Archive | Notes |
 |---|---|---|
-| `linux-x64` | `linked-libs/linux-x64/libbox3d.a` | GCC |
-| `windows-x64` | `linked-libs/windows-x64/box3d.lib` | MSVC, static CRT; set `"wincrt": "static"` |
+| `b3-v@VERSION@-linux-x64.c3l` | `linked-libs/linux-x64/libbox3d.a` | GCC; glibc 2.35 or newer |
+| `b3-v@VERSION@-windows-x64.c3l` | `linked-libs/windows-x64/box3d.lib` | MSVC, static CRT; set `"wincrt": "static"` |
 
-c3c's `mingw-x64` is a different ABI and is not shipped. Both archives use box3d's float ABI;
-`b3::require_float_abi()` refuses a double-precision build.
+This package carries one of the two. c3c's `mingw-x64` is a different ABI and is not shipped. Both
+archives use box3d's float ABI; `b3::require_float_abi()` refuses a double-precision build.
+
+## Patched box3d
+
+The library is box3d with a patch series applied. `0001-height-field-apron.patch` adds
+`HeightFieldDef.apron_sides`, which lets height fields placed side by side share their edges; see
+`docs/api/shapes.md`. A field with `apron_sides = 0` behaves exactly as upstream box3d.
 
 ## License
 

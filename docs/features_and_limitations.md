@@ -78,9 +78,12 @@ nothing.
 | `linux-x64` | `linked-libs/linux-x64/libbox3d.a` | GCC | glibc; links `m` and `pthread` |
 | `windows-x64` | `linked-libs/windows-x64/box3d.lib` | MSVC | static (`"wincrt": "static"`) |
 
-- C3 0.8.5.
-- The release `b3.c3l` carries both archives. A clone builds only the host's, with
-  `scripts/build-box3d.sh`; there is no cross-compilation.
+- C3 0.8.5_1.
+- A release publishes one `.c3l` per target, `b3-v<version>-<platform>.c3l`, each carrying that
+  target's archive. A clone builds only the host's, with `scripts/build-box3d.sh`; there is no
+  cross-compilation.
+- The Linux archive is built on Ubuntu 22.04 and needs glibc 2.35 or newer; the release workflow
+  fails if it references a newer glibc symbol.
 - Windows is the MSVC ABI only. c3c's `mingw-x64` target is a different ABI and is not shipped.
 - box3d links the static MSVC runtime. A project on the dynamic runtime fails to link with
   duplicate-symbol errors; set `"wincrt": "static"` in `project.json`.
@@ -124,6 +127,11 @@ Limits inside box3d with no C3 constant:
 `manifest.json` pins the vendored box3d in its `vendor` block, as a commit (`box3d-commit`) and a
 `git describe` string (`box3d-describe`). The release README carries the same description.
 `b3::version()` returns the version box3d reports for itself.
+
+The shipped library is box3d with a patch series applied; the release README names it and
+`NOTICE` describes it. The one patch adds `HeightFieldDef.apron_sides`
+([height-field aprons](api/shapes.md#height-field-aprons)). A field with `apron_sides = 0`
+behaves as upstream box3d.
 
 ## Release-build implications
 

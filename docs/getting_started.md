@@ -8,7 +8,7 @@ walked through in sections; the complete source is at the [end](#complete-progra
 
 ## Prerequisites
 
-- `c3c --version` reports 0.8.5.
+- `c3c --version` reports 0.8.5_1.
 - A `linux-x64` or `windows-x64` host. These are the only two targets `b3` ships.
 - Building from a clone also needs Git with submodule support, CMake and the platform C compiler:
   GCC on Linux, MSVC on Windows.
@@ -20,7 +20,7 @@ Lay the application out like this:
 ```text
 hello_box3d/
 ├── libs/
-│   └── b3.c3l        the release file, or a link to a clone
+│   └── b3-v<version>-linux-x64.c3l   the release file, or b3.c3l linking a clone
 ├── src/
 │   └── main.c3
 └── project.json
@@ -28,14 +28,14 @@ hello_box3d/
 
 ### From a release
 
-Download `b3.c3l` from the
+Download `b3-v<version>-linux-x64.c3l` or `b3-v<version>-windows-x64.c3l` from the
 [latest release](https://github.com/fesoliveira014/box3d.c3l/releases/latest) and put it in
-`libs/`. The file is a packed `.c3l`: a zip archive that c3c reads as it stands. It carries the C3
-sources and a prebuilt box3d static library for both targets, so a consumer needs neither CMake nor
-a C compiler.
+`libs/`. `SHA256SUMS` beside them holds their checksums. The file is a packed `.c3l`: a zip archive
+that c3c reads as it stands. It carries the C3 sources, the docs, and a prebuilt box3d static
+library for its platform, so a consumer needs neither CMake nor a C compiler.
 
-Do not unzip or rename it. c3c unpacks it into the build directory itself, and `c3c project fetch`
-looks for the dependency as `<search-path>/b3.c3l`.
+Do not unzip it. c3c unpacks it into the build directory itself and resolves it by the `provides`
+name in its manifest, `b3`, not by file name.
 
 ### From a clone
 

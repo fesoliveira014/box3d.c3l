@@ -13,7 +13,7 @@ Before writing any C3: invoke the `c3-expert`, `c3-style`, and `c3-bindings` ski
 
 The box3d C headers are the only source of truth. A transcribed parameter or return type that is wrong corrupts memory silently across the ABI — the worst and hardest-to-find binding bug.
 
-- Headers live in the box3d submodule under `include/box3d/`. If the submodule is not checked out, run `git submodule update --init` (or ask the user where box3d is) rather than guessing.
+- Read headers from `build/box3d-src/include/box3d/`, the patched copy `scripts/build-box3d.sh` builds from; the submodule under `vendor/box3d/include/box3d/` lacks whatever `patches/series` adds. If neither exists, run `git submodule update --init && ./scripts/build-box3d.sh` (or ask the user where box3d is) rather than guessing.
 - Grep for the specific symbol; do not read whole headers:
   - function → `grep -rnA6 'b3CreateWorld' include/box3d/`
   - ID / struct / enum → `grep -rnA25 'typedef struct b3WorldDef' include/box3d/`
@@ -75,7 +75,7 @@ Struct initializers use `.field = value` for every supplied field; calls with �
 c3c compile-only --no-obj src/*.c3i src/*.c3
 ```
 
-Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.5 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.
+Fix every error before finishing, and delete the `obj/` directory the check leaves behind. Note the compiler on PATH may be older than the 0.8.5_1 target this repo declares — if an error looks like a version mismatch, say so rather than working around it.
 
 ## 6. Document it
 

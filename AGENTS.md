@@ -3,7 +3,7 @@
 `box3d.c3l` is a C3 binding for [box3d](https://github.com/erincatto/box3d), Erin Catto's C17 3D
 physics library, packaged as a C3 library (`.c3l`), not a program. The module is `b3` (the
 manifest's `provides`); `b3::draw` and `b3::record` are its two submodules. The project targets
-**C3 0.8.5** (`/home/fesol/opt/c3/c3c`).
+**C3 0.8.5_1** (`/home/fesol/opt/c3/c3c`).
 
 ## Before changing code
 
@@ -12,7 +12,8 @@ manifest's `provides`); `b3::draw` and `b3::record` are its two submodules. The 
   memory. A review without them is not valid.
 - Read [docs/contributing/bindings.md](docs/contributing/bindings.md) before touching `src/`.
   [docs/contributing/style.md](docs/contributing/style.md) is the baseline it refines.
-- Never bind from memory. Read the declaration in `vendor/box3d/include/box3d/*.h` first.
+- Never bind from memory. Read the declaration in `build/box3d-src/include/box3d/*.h`, the patched
+  copy `scripts/build-box3d.sh` builds from; `vendor/box3d/` is the unpatched submodule.
 - Build the native library once: `git submodule update --init && ./scripts/build-box3d.sh`.
 - Bind incrementally: only the surface actually needed.
 
@@ -23,7 +24,8 @@ manifest's `provides`); `b3::draw` and `b3::record` are its two submodules. The 
 | `src/<area>.c3i` / `src/<area>.c3` | externs and types / wrappers, one pair per C API area |
 | `src/check.c3` | faults, `.is_null()`/`.checked()` macros, shared private guards |
 | `src/layout.c3` | generated `$assert` layout pins; never edit by hand |
-| `vendor/box3d/` | upstream submodule |
+| `vendor/box3d/` | upstream submodule, never modified |
+| `patches/` | patches applied to box3d at build time, in `patches/series` order |
 | `scripts/` | native build, layout probe, packaging, audits, docs gate |
 | `test/` | standalone consumer project with the unit tests; not shipped |
 | `docs/` | consumer docs (shipped); `docs/contributing/` is not shipped |
@@ -34,6 +36,8 @@ manifest's `provides`); `b3::draw` and `b3::record` are its two submodules. The 
 - Layout pins are generated: add the type to `scripts/abi-types.txt`, run
   `./scripts/build-box3d.sh --update`. Never `--update` to silence a drift.
 - Keep box3d on the float ABI; `BOX3D_DOUBLE_PRECISION` must stay off.
+- Never edit `vendor/box3d/`. Change box3d through `patches/`; see
+  [releasing.md](docs/contributing/releasing.md#patches).
 - A caller-supplied pointer gets `@param [&in]` and an explicit null guard; release builds drop
   `[&in]`.
 - Definitions must come from `default_*_def()`; wrappers check the cookie because box3d's Release

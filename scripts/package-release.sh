@@ -4,9 +4,10 @@
 # `project fetch` looks for <search-path>/<dependency>.c3l, and the dependency name is the
 # manifest's `provides`.
 #
-# What ships is what a consumer compiles and links against, and nothing else: the sources, one
-# static library per declared target, the licences and a consumer README. Not the vendored
-# submodule, not the build and audit scripts, not the test project.
+# What ships is what a consumer compiles, links and reads, and nothing else: the sources, one
+# static library per declared target, the licences, a consumer README and the consumer docs. Not
+# the vendored submodule, not the build and audit scripts, not the test project, not
+# docs/contributing/.
 set -eu
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -52,6 +53,8 @@ cp "$ROOT"/src/*.c3 "$ROOT"/src/*.c3i "$STAGE/src/"
 cp "$LINUX_LIB" "$STAGE/linked-libs/linux-x64/"
 cp "$WINDOWS_LIB" "$STAGE/linked-libs/windows-x64/"
 cp "$ROOT/LICENSE" "$ROOT/LICENSE.box3d.mit" "$ROOT/NOTICE" "$STAGE/"
+cp -r "$ROOT/docs" "$STAGE/docs"
+rm -rf "$STAGE/docs/contributing"
 
 BOX3D_COMMIT="$(git -C "$ROOT/vendor/box3d" rev-parse --short HEAD)"
 BOX3D_DESCRIBE="$(git -C "$ROOT/vendor/box3d" describe --tags 2>/dev/null || echo "$BOX3D_COMMIT")"
@@ -66,7 +69,7 @@ sed -e "s/@VERSION@/$VERSION/g" \
 
 # manifest.json must sit at the archive root: c3c reports "Missing manifest" for an archive that
 # carries it under a directory prefix.
-( cd "$STAGE" && zip -q -r -X "$ARCHIVE" manifest.json README.md LICENSE LICENSE.box3d.mit NOTICE src linked-libs )
+( cd "$STAGE" && zip -q -r -X "$ARCHIVE" manifest.json README.md LICENSE LICENSE.box3d.mit NOTICE docs src linked-libs )
 rm -rf "$STAGE"
 
 ( cd "$DIST" && sha256sum b3.c3l > b3.c3l.sha256 )

@@ -28,9 +28,14 @@ git submodule update --init
   the real headers on both platforms and agree on every pinned type's size, alignment, and field
   offsets, so one `src/layout.c3` serves both and `--check` on either platform gates the other.
   `--update` is Linux-only so the shared record has one author.
-- box3d pins `CMAKE_MSVC_RUNTIME_LIBRARY` to `MultiThreaded`, the static CRT, so the manifest's
-  `windows-x64` target sets `"wincrt": "static"`. A consumer on the dynamic CRT fails with
+- The manifest's `windows-x64` target sets `"wincrt": "static"`, so the script configures box3d
+  with `CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded`, the static CRT. box3d sets no runtime of its
+  own, and CMake's default is the dynamic CRT. A consumer on the dynamic CRT fails with
   duplicate-symbol errors that do not name the cause.
+- The Windows build fails unless `dumpbin` finds `box3d.lib` free of the dynamic CRT: no `__imp_`
+  import of a CRT function (`__imp_fopen`, `__imp_remainderf`), which a static-CRT consumer cannot
+  resolve, and no default library besides `LIBCMT` and `OLDNAMES`. Win32 imports such as
+  `__imp_Sleep` are expected.
 - The build must stay on the float ABI. `BOX3D_DOUBLE_PRECISION` is a PUBLIC compile definition
   that widens `b3Vec3`, `b3Pos`, and everything embedding them to double. The script forces it
   OFF; a build with it on corrupts every call. `b3::require_float_abi()` refuses such a library at
@@ -81,7 +86,8 @@ native archives, and runs `build-box3d.sh --check` first.
 
 `.github/workflows/release.yml` runs on a `v*` tag, on every pull request, and on manual dispatch:
 
-1. `windows`: build `box3d.lib`, check the layout pins, upload the archive.
+1. `windows`: build `box3d.lib`, check that it uses the static CRT and the layout pins, upload
+   the archive.
 2. `release` (Ubuntu 22.04): install c3c 0.8.5_1 (the static tarball), build `libbox3d.a` with
    `--check`, fail if the archive references a glibc symbol newer than 2.35, fetch the Windows
    archive, compile the package, run `smoke`, `unit`, `unit-checked`, the comment gate, the

@@ -12,7 +12,8 @@
 #   scripts/build-box3d.sh --update   build, then rewrite scripts/abi-sizes.txt from the probe
 #
 # The target is the host's: linux-x64 under a Linux shell, windows-x64 under a Windows one (Git
-# Bash on a runner, say), where the library is box3d.lib built by MSVC rather than libbox3d.a.
+# Bash on a runner, say), where the library is box3d.lib built by MSVC rather than libbox3d.a,
+# and must use the static CRT (see check_static_crt).
 # There is no cross-compilation here -- each target is built on its own platform, which is what
 # the release workflow's two jobs are for.
 #
@@ -143,6 +144,42 @@ prepare_source() {
     printf '%s\n' "$stamp" > "$SOURCE/.patched"
 }
 
+# Fails unless the MSVC archive $1 carries the static CRT that "wincrt": "static" promises. On the
+# dynamic CRT it reaches the runtime through __imp_ thunks (__imp_fopen, __imp_remainderf,
+# __imp__aligned_malloc) that a static-CRT consumer cannot resolve, and asks for MSVCRT instead of
+# LIBCMT. The only imports allowed are the Win32 API's, from kernel32 and its kin, whose names are
+# PascalCase (__imp_Sleep); every CRT export starts with a lowercase letter or an underscore. On
+# failure the copy an earlier run installed is removed as well, so no stale archive gets packaged.
+check_static_crt() {
+    crt_bat="$SOURCE/build/crt_check.bat"
+    crt_symbols="$SOURCE/build/crt_symbols.txt"
+    crt_directives="$SOURCE/build/crt_directives.txt"
+    {
+        echo '@echo off'
+        echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
+        echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1'
+        printf 'dumpbin /nologo /symbols "%s" > "%s" || exit /b 1\n' "$(cygpath -w "$1")" "$(cygpath -w "$crt_symbols")"
+        printf 'dumpbin /nologo /directives "%s" > "%s" || exit /b 1\n' "$(cygpath -w "$1")" "$(cygpath -w "$crt_directives")"
+    } > "$crt_bat"
+    cmd //c "$(cygpath -w "$crt_bat")"
+    grep -q 'COFF SYMBOL TABLE' "$crt_symbols" || {
+        echo "ERROR: dumpbin printed no symbol table for $1; the CRT check cannot vouch for it." >&2
+        exit 1
+    }
+
+    crt_imports="$(grep -o '__imp_[^ ]*' "$crt_symbols" | tr -d '\r' | grep -v '^__imp_[A-Z]' | sort -u)" || true
+    crt_libs="$(grep -io '/DEFAULTLIB:[^ ]*' "$crt_directives" | tr -d '\r"' | sed 's/^[^:]*://' \
+        | grep -iv -e '^LIBCMT$' -e '^OLDNAMES$' | sort -u)" || true
+    if [ -n "$crt_imports" ] || [ -n "$crt_libs" ]; then
+        echo "ERROR: $LIBNAME is built against the dynamic MSVC CRT, but the manifest declares" >&2
+        echo "\"wincrt\": \"static\"; a consumer would fail to link. CRT imports and libraries:" >&2
+        printf '%s\n' $crt_imports $crt_libs | sed 's/^/  /' >&2
+        rm -f "$OUT/$LIBNAME"
+        exit 1
+    fi
+    echo "$LIBNAME uses the static CRT: no CRT imports, default libraries LIBCMT and OLDNAMES only."
+}
+
 if [ ! -f "$VENDOR/CMakeLists.txt" ]; then
     echo "ERROR: vendor/box3d is empty. Run: git submodule update --init" >&2
     exit 1
@@ -159,9 +196,11 @@ if [ "$TARGET" = "windows-x64" ]; then
     # generator named for a Visual Studio version: the runner image's version is not ours to pin,
     # and naming one is how this first failed. Ninja comes with that environment.
     #
-    # box3d pins CMAKE_MSVC_RUNTIME_LIBRARY to MultiThreaded, the static CRT, which is why the
-    # manifest's windows-x64 target sets "wincrt": "static" -- a consumer on the dynamic CRT will
-    # not link against this archive.
+    # The manifest's windows-x64 target sets "wincrt": "static", so the archive is built against
+    # MultiThreaded, the static CRT. box3d does not choose a runtime (its own pin is commented
+    # out) and CMake's default is the dynamic one, so it is set here. The setting takes effect
+    # because box3d requires CMake 3.22, which makes policy CMP0091 NEW; check_static_crt fails
+    # the build if the archive comes out on the dynamic CRT anyway.
     BUILD_BAT="$SOURCE/build.bat"
     mkdir -p "$SOURCE/build"
     {
@@ -169,7 +208,7 @@ if [ "$TARGET" = "windows-x64" ]; then
         echo 'for /f "usebackq tokens=*" %%i in (`"C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath`) do set VSPATH=%%i'
         echo 'if not defined VSPATH (echo ERROR: vswhere found no Visual Studio installation & exit /b 1)'
         echo 'call "%VSPATH%\VC\Auxiliary\Build\vcvars64.bat" >nul || exit /b 1'
-        printf 'cmake -S "%s" -B "%s" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DBOX3D_DOUBLE_PRECISION=OFF -DBOX3D_SAMPLES=OFF -DBOX3D_UNIT_TESTS=OFF -DBOX3D_BENCHMARKS=OFF -DBOX3D_DOCS=OFF -DBOX3D_VALIDATE=OFF || exit /b 1\n' "$(cygpath -w "$SOURCE")" "$(cygpath -w "$SOURCE/build")"
+        printf 'cmake -S "%s" -B "%s" -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded -DBOX3D_DOUBLE_PRECISION=OFF -DBOX3D_SAMPLES=OFF -DBOX3D_UNIT_TESTS=OFF -DBOX3D_BENCHMARKS=OFF -DBOX3D_DOCS=OFF -DBOX3D_VALIDATE=OFF || exit /b 1\n' "$(cygpath -w "$SOURCE")" "$(cygpath -w "$SOURCE/build")"
         printf 'cmake --build "%s" --target box3d --parallel || exit /b 1\n' "$(cygpath -w "$SOURCE/build")"
     } > "$BUILD_BAT"
     cmd //c "$(cygpath -w "$BUILD_BAT")"
@@ -191,6 +230,9 @@ fi
 
 LIB="$(find "$SOURCE/build" -name "$LIBNAME" -print -quit)"
 [ -n "$LIB" ] || { echo "ERROR: $LIBNAME not produced by the build" >&2; exit 1; }
+if [ "$TARGET" = "windows-x64" ]; then
+    check_static_crt "$LIB"
+fi
 mkdir -p "$OUT"
 cp "$LIB" "$OUT/$LIBNAME"
 echo "Installed $OUT/$LIBNAME"

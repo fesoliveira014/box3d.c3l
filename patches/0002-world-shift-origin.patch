@@ -19,7 +19,12 @@ emptied, so its next update queries the triangles again and keeps the caches
 of the triangles it finds again.
 
 The shift is refused while the world is locked and ignored for a non-finite
-origin. It is recorded as op 0x71, and the recording minor version becomes 11.
+origin. It is recorded as op 0x7F, the first of the range 0x78-0x7F this patch
+reserves for local ops, assigned downward from 0x7F, so that no local op takes
+the number upstream assigns next. The recording minor version stays upstream's;
+instead the header's reserved2 carries B3_REC_LOCAL_EXTENSIONS ('B3L' and a
+level, 1 here), which an upstream build leaves zero, so a reader can tell a
+locally extended recording from an upstream one.
 
 diff --git a/include/box3d/box3d.h b/include/box3d/box3d.h
 index d9f5fdf..2549116 100644
@@ -267,32 +272,68 @@ index ce86343..0a77e19 100644
  void b3World_EnableSpeculative( b3WorldId worldId, bool flag )
  {
  	b3World* world = b3GetUnlockedWorldFromId( worldId );
+diff --git a/src/recording.c b/src/recording.c
+index e3cdced..7b03aff 100644
+--- a/src/recording.c
++++ b/src/recording.c
+@@ -1033,6 +1033,7 @@ void b3StartRecordingIntoBuffer( b3World* world, b3Recording* recording )
+ 	hdr.bigEndian = 0;
+ 	hdr.validationEnabled = B3_ENABLE_VALIDATION ? 1u : 0u;
+ 	hdr.lengthScale = b3GetLengthUnitsPerMeter();
++	hdr.reserved2 = B3_REC_LOCAL_EXTENSIONS;
+ 	hdr.registryOffset = 0; // backpatched in b3StopRecordingInternal
+ 	hdr.registryByteCount = 0;
+ 
 diff --git a/src/recording.h b/src/recording.h
-index 1afd800..aa4c43e 100644
+index 1afd800..6578027 100644
 --- a/src/recording.h
 +++ b/src/recording.h
-@@ -52,7 +52,8 @@ typedef struct b3World b3World;
- 
- // Minor tracks op-stream additions that keep the 48 byte header shape.
+@@ -54,6 +54,12 @@ typedef struct b3World b3World;
  // Minor version 7 made the contact body sim locators persistent
--#define B3_REC_VERSION_MINOR 10
-+// Minor version 11 added the world origin shift op
-+#define B3_REC_VERSION_MINOR 11
+ #define B3_REC_VERSION_MINOR 10
  
++// Written to the header's reserved2 by a build that carries local ops (0x78-0x7F). The minor
++// version stays upstream's, so it never claims a number upstream assigns to its own ops; a reader
++// tells a locally extended recording by this marker: 'B3L' and the local op set's level, 1 for
++// WorldShiftOrigin at 0x7F. An upstream build writes zero there.
++#define B3_REC_LOCAL_EXTENSIONS 0x014C3342u
++
  // File header, fixed 48 bytes. Contains the registry locator so the player
  // can load geometry before replaying any ops.
+ typedef struct b3RecHeader
+@@ -66,7 +72,7 @@ typedef struct b3RecHeader
+ 	uint8_t validationEnabled; // 1 if built with BOX3D_VALIDATE, diagnostic only
+ 	uint8_t reserved;
+ 	float lengthScale; // b3GetLengthUnitsPerMeter()
+-	uint32_t reserved2;
++	uint32_t reserved2;			// B3_REC_LOCAL_EXTENSIONS, or zero from an upstream build
+ 	uint32_t reserved3;			// explicit pad so the 64-bit fields align with no implicit gap
+ 	uint64_t snapshotSize;		// bytes of snapshot blob after the header (0 in Phase 1)
+ 	uint64_t registryOffset;	// absolute offset to trailing registry block, backpatched at stop
 diff --git a/src/recording_ops.inl b/src/recording_ops.inl
-index df13ebe..ed4c2cc 100644
+index df13ebe..e38a450 100644
 --- a/src/recording_ops.inl
 +++ b/src/recording_ops.inl
-@@ -42,6 +42,7 @@ B3_REC_OP( 0x0D, WorldEnableSpeculative, RET_NONE, ARG( WORLDID, world ) ARG( BO
- B3_REC_OP( 0x0E, WorldSetRestitutionIterations, RET_NONE, ARG( WORLDID, world ) ARG( I32, iterations ) )
+@@ -14,6 +14,9 @@
+ //   0x20-0x3F  body mutators
+ //   0x40-0x4F  shape create/destroy
+ //   0x50-0x6F  shape mutators
++//   0x70-0x77  world config overflow
++//   0x78-0x7F  local ops added by patches outside upstream, assigned downward from 0x7F; an
++//              upstream op in this range means a local op must move (see B3_REC_LOCAL_EXTENSIONS)
+ //   0x80       step
+ //   0x81-0x8F  mover and pogo joints
+ //   0x90-0xE7  joints (create, generic, per-type)
+@@ -43,6 +46,9 @@ B3_REC_OP( 0x0E, WorldSetRestitutionIterations, RET_NONE, ARG( WORLDID, world )
  B3_REC_OP( 0x0F, WorldEnableRestitutionPropagation, RET_NONE, ARG( WORLDID, world ) ARG( BOOL, flag ) )
  B3_REC_OP( 0x70, WorldSetIsotropicInertiaTolerance, RET_NONE, ARG( WORLDID, world ) ARG( F32, tolerance ) )
-+B3_REC_OP( 0x71, WorldShiftOrigin, RET_NONE, ARG( WORLDID, world ) ARG( POSITION, newOrigin ) )
  
++// Local op, not an upstream one: the world origin shift.
++B3_REC_OP( 0x7F, WorldShiftOrigin, RET_NONE, ARG( WORLDID, world ) ARG( POSITION, newOrigin ) )
++
  // Body
  B3_REC_OP( 0x10, CreateBody, RET_BODYID, ARG( WORLDID, world ) ARG( BODYDEF, def ) )
+ B3_REC_OP( 0x11, DestroyBody, RET_NONE, ARG( BODYID, body ) )
 diff --git a/src/replay.c b/src/replay.c
 index 78b73df..154d4c0 100644
 --- a/src/replay.c

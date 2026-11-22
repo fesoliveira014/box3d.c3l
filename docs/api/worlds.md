@@ -153,6 +153,60 @@ the two materials' values and `user_material_id`s and no context pointer. box3d 
 from a worker thread, and they must not touch the world. They run when a contact's manifold is
 recomputed, so the call count is not one per pair per step.
 
+### Contact materials
+
+```c3
+struct Ice {
+    b3::ShapeId rink;
+}
+
+fn void icy_rink(b3::ShapeId shape_a, b3::ShapeId shape_b, b3::ContactMaterial* material, void* context) {
+    Ice* ice = context;
+    if (shape_a.index1 == ice.rink.index1 || shape_b.index1 == ice.rink.index1) {
+        material.friction = 0.02f;
+        material.restitution = 0.0f;
+    }
+}
+```
+
+```c3
+world.set_contact_material_callback(&icy_rink, &ice);
+```
+
+A `ContactMaterialFn` sees each touching contact after its manifold is computed and before the
+solver reads it, with the two shape ids and a `ContactMaterial` holding what the mixing callbacks
+produced: `friction`, `restitution`, `rolling_resistance` (already scaled by the rolling shape's
+radius) and `tangent_velocity` (world space). Change any of them to override that contact. It runs
+for convex, compound, mesh and height-field contacts, but not for a contact the pre-solve callback
+disabled. Passing null removes it.
+
+The contact keeps what was written until the narrow phase next updates it, so the values hold
+while the contact is recycled or asleep. A negative or non-finite friction, restitution or rolling
+resistance, or a non-finite tangent velocity, keeps the mixed value. The callback runs on the step's
+worker threads, so it must be thread-safe and must not read or modify the world; it writes only to
+its own contact, so the result is the same on any number of workers. box3d passes the context
+pointer on every call, so it must outlive the world or the next `set_contact_material_callback`.
+
+## Origin shift
+
+```c3
+b3::Pos camera = { 12000.0f, 0.0f, -8000.0f };
+b3::world_shift_origin(world, camera);    // every position becomes position - camera
+```
+
+`world_shift_origin` re-centres the whole world in one pass, for a large world that keeps the
+simulation near the origin: body poses, shape bounds, broad-phase proxies, cached mesh contact
+queries, and the body move and contact hit events of the last step all become relative to the new
+origin. Joint frames, contact manifolds, warm starting, velocities and sleep state are relative to
+the bodies and carry over unchanged, so a resting stack stays at rest and a sleeping island stays
+asleep. No proxy is marked as moved, so the next step creates no new pairs.
+
+Call it between steps, then express everything handed to box3d afterwards (queries, new bodies,
+kinematic targets) in the new frame. A shift whose offset is close to the positions it moves is
+exact; otherwise each position rounds once to the float nearest `position - new_origin`. A locked
+world, or a non-finite `new_origin`, ignores the call. A recording captures the shift and a replay
+repeats it.
+
 ## Pre-solve and custom filters
 
 ```c3
@@ -280,11 +334,12 @@ and recording is [`record::world_start_recording`](recording.md).
   player.
 - A world is locked during `world_step` and inside the callbacks it runs. Do not call setters or
   create or destroy objects while it is locked. Some calls are silently ignored on a locked world
-  (`set_worker_count`, the mixing-callback setters); others are not checked at all and corrupt
+  (`set_worker_count`, the mixing and contact material callback setters, `world_shift_origin`); others are not checked at all and corrupt
   state.
-- Friction, restitution, pre-solve and custom-filter callbacks may run on worker threads. They must
-  not modify the world.
-- The pre-solve and custom-filter context pointer must outlive the world.
+- Friction, restitution, contact material, pre-solve and custom-filter callbacks may run on worker
+  threads. They must not modify the world.
+- The contact material, pre-solve and custom-filter context pointer must outlive the world.
+- `world_shift_origin` runs between steps; a locked world ignores it.
 - `finish_task` must block until its job completes. Do not call `world_step` from a job that
   cannot yield its stack.
 - Event slices are valid until the next `world_step` or `destroy_world`.

@@ -53,9 +53,16 @@ archives use box3d's float ABI; `b3::require_float_abi()` refuses a double-preci
 
 ## Patched box3d
 
-The library is box3d with a patch series applied. `0001-height-field-apron.patch` adds
-`HeightFieldDef.apron_sides`, which lets height fields placed side by side share their edges; see
-`docs/api/shapes.md`. A field with `apron_sides = 0` behaves exactly as upstream box3d.
+The library is box3d with a patch series applied:
+
+- `0001-height-field-apron.patch` adds `HeightFieldDef.apron_sides`, which lets height fields
+  placed side by side share their edges; see `docs/api/shapes.md`. A field with `apron_sides = 0`
+  behaves exactly as upstream box3d.
+- `0002-world-shift-origin.patch` adds `world_shift_origin`, which moves the whole world to a new
+  origin in one pass; see `docs/api/worlds.md`.
+- `0003-contact-material-callback.patch` adds `WorldId.set_contact_material_callback`, which
+  overrides the material of each touching contact before the solver runs; see
+  `docs/api/worlds.md`. A world without the callback behaves exactly as upstream box3d.
 
 ## License
 

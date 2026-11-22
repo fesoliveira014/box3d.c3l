@@ -6,10 +6,15 @@ Box3D itself is not redistributed as source here; it is a git submodule under
 vendor/box3d, built by scripts/build-box3d.sh.
 
 The shipped library is a modified build of Box3D. It is built from the vendored sources with the
-patches listed in the source repository's patches/series applied. The modification adds the apronSides field to
-b3HeightFieldDef, which lets the edge flags of a height field agree with a neighbouring height
-field, and it replaces a sphere's edge or vertex contact on such an edge with the contact against
-the plane of the triangle.
+patches listed in the source repository's patches/series applied. The modifications:
+
+- add the apronSides field to b3HeightFieldDef, which lets the edge flags of a height field agree
+  with a neighbouring height field, and replace a sphere's edge or vertex contact on such an edge
+  with the contact against the plane of the triangle;
+- add b3World_ShiftOrigin, which moves the world origin in one pass, and record it as a new
+  recording op;
+- add b3World_SetContactMaterialCallback, b3ContactMaterialFcn and b3ContactMaterial, which let
+  the application override the material of each touching contact before the solver runs.
 
 The C3 binding itself (everything under src/) is MIT-licensed —
 see LICENSE.

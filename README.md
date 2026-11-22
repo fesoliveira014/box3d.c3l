@@ -26,7 +26,8 @@ fn void? simulate() {
 - All eleven joint types, including mover and pogo.
 - Ray casts, shape casts, overlap queries, and contact data.
 - Body, contact, sensor, and joint event arrays; pre-solve, custom-filter, friction, and
-  restitution callbacks.
+  restitution callbacks, and per-contact material overrides.
+- A one-pass origin shift that re-centres a large world without waking it.
 - The dynamic tree, the character mover, and explosions.
 - Standalone geometry, distance, and manifold functions that need no world.
 - Debug draw (`b3::draw`) and recording and replay (`b3::record`).

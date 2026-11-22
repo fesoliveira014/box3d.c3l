@@ -67,8 +67,8 @@ body, shape, and joint in it. Geometry that box3d builds for the caller (`MeshDa
 `HeightFieldData`, hulls, compound data) is the caller's to destroy. A mesh or height-field shape
 references its data, so the data must outlive the shape; see [shapes](shapes.md#contracts).
 
-**Threading and callbacks.** box3d may call the friction, restitution, pre-solve, and
-custom-filter callbacks from a worker thread during a step; they must not touch the world. Query
+**Threading and callbacks.** box3d may call the friction, restitution, contact material,
+pre-solve, and custom-filter callbacks from a worker thread during a step; they must not touch the world. Query
 and cast callbacks run synchronously on the calling thread, and the world must not be modified
 from inside them. See [architecture](../architecture.md#threading).
 
@@ -121,13 +121,13 @@ Methods: `WorldId.is_null`, `BodyId.is_null`, `ShapeId.is_null`, `JointId.is_nul
 
 Module: `b3`. Sources: `src/world.c3i`, `src/event.c3i`.
 
-Types: `FrictionFn`, `RestitutionFn`, `TaskFn`, `EnqueueTaskFn`, `FinishTaskFn`, `CreateDebugShapeFn`, `DestroyDebugShapeFn`, `Capacity`, `WorldDef`, `Profile`, `Counters`, `SensorBeginTouchEvent`, `SensorEndTouchEvent`, `ContactBeginTouchEvent`, `ContactEndTouchEvent`, `ContactHitEvent`, `BodyMoveEvent`, `JointEvent`, `PreSolveFn`, `CustomFilterFn`.
+Types: `FrictionFn`, `RestitutionFn`, `ContactMaterialFn`, `TaskFn`, `EnqueueTaskFn`, `FinishTaskFn`, `CreateDebugShapeFn`, `DestroyDebugShapeFn`, `Capacity`, `WorldDef`, `ContactMaterial`, `Profile`, `Counters`, `SensorBeginTouchEvent`, `SensorEndTouchEvent`, `ContactBeginTouchEvent`, `ContactEndTouchEvent`, `ContactHitEvent`, `BodyMoveEvent`, `JointEvent`, `PreSolveFn`, `CustomFilterFn`.
 
 Constants: `MAX_WORLDS`, `MAX_WORKERS`, `MAX_RESTITUTION_ITERATIONS`.
 
-Functions: `default_world_def`, `destroy_world`, `world_step`, `world_count`, `max_world_count`, `world_dump_memory_stats`, `create_world`.
+Functions: `default_world_def`, `destroy_world`, `world_step`, `world_count`, `max_world_count`, `world_dump_memory_stats`, `world_shift_origin`, `create_world`.
 
-Methods: `WorldId.is_valid`, `WorldId.gravity`, `WorldId.set_gravity`, `WorldId.restitution_threshold`, `WorldId.set_restitution_threshold`, `WorldId.hit_event_threshold`, `WorldId.set_hit_event_threshold`, `WorldId.maximum_linear_speed`, `WorldId.set_maximum_linear_speed`, `WorldId.contact_recycle_distance`, `WorldId.set_contact_recycle_distance`, `WorldId.set_contact_tuning`, `WorldId.enable_sleeping`, `WorldId.is_sleeping_enabled`, `WorldId.enable_continuous`, `WorldId.is_continuous_enabled`, `WorldId.enable_warm_starting`, `WorldId.is_warm_starting_enabled`, `WorldId.enable_speculative`, `WorldId.set_restitution_iterations`, `WorldId.restitution_iterations`, `WorldId.enable_restitution_propagation`, `WorldId.is_restitution_propagation_enabled`, `WorldId.set_isotropic_inertia_tolerance`, `WorldId.isotropic_inertia_tolerance`, `WorldId.enable_sse2_fallback`, `WorldId.worker_count`, `WorldId.set_worker_count`, `WorldId.awake_body_count`, `WorldId.profile`, `WorldId.counters`, `WorldId.max_capacity`, `WorldId.bounds`, `WorldId.user_data`, `WorldId.set_user_data`, `WorldId.set_friction_callback`, `WorldId.set_restitution_callback`, `ContactId.is_valid`, `JointId.is_valid`, `WorldId.set_pre_solve_callback`, `WorldId.set_custom_filter_callback`, `WorldId.contact_begin_touch_events`, `WorldId.contact_end_touch_events`, `WorldId.contact_hit_events`, `WorldId.sensor_begin_touch_events`, `WorldId.sensor_end_touch_events`, `WorldId.body_move_events`, `WorldId.joint_events`.
+Methods: `WorldId.is_valid`, `WorldId.gravity`, `WorldId.set_gravity`, `WorldId.restitution_threshold`, `WorldId.set_restitution_threshold`, `WorldId.hit_event_threshold`, `WorldId.set_hit_event_threshold`, `WorldId.maximum_linear_speed`, `WorldId.set_maximum_linear_speed`, `WorldId.contact_recycle_distance`, `WorldId.set_contact_recycle_distance`, `WorldId.set_contact_tuning`, `WorldId.enable_sleeping`, `WorldId.is_sleeping_enabled`, `WorldId.enable_continuous`, `WorldId.is_continuous_enabled`, `WorldId.enable_warm_starting`, `WorldId.is_warm_starting_enabled`, `WorldId.enable_speculative`, `WorldId.set_restitution_iterations`, `WorldId.restitution_iterations`, `WorldId.enable_restitution_propagation`, `WorldId.is_restitution_propagation_enabled`, `WorldId.set_isotropic_inertia_tolerance`, `WorldId.isotropic_inertia_tolerance`, `WorldId.enable_sse2_fallback`, `WorldId.worker_count`, `WorldId.set_worker_count`, `WorldId.awake_body_count`, `WorldId.profile`, `WorldId.counters`, `WorldId.max_capacity`, `WorldId.bounds`, `WorldId.user_data`, `WorldId.set_user_data`, `WorldId.set_friction_callback`, `WorldId.set_restitution_callback`, `WorldId.set_contact_material_callback`, `ContactId.is_valid`, `JointId.is_valid`, `WorldId.set_pre_solve_callback`, `WorldId.set_custom_filter_callback`, `WorldId.contact_begin_touch_events`, `WorldId.contact_end_touch_events`, `WorldId.contact_hit_events`, `WorldId.sensor_begin_touch_events`, `WorldId.sensor_end_touch_events`, `WorldId.body_move_events`, `WorldId.joint_events`.
 
 
 ### [Bodies](bodies.md)

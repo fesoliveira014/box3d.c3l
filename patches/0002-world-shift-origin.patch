@@ -1,0 +1,311 @@
+World origin shift
+
+Adds b3World_ShiftOrigin( worldId, newOrigin ), which moves the world origin in
+one pass so that position -= newOrigin for everything the world stores in
+world space: the transform, center and previous center of every body sim in
+every solver set (static, disabled, awake and each sleeping island), the tight
+and fat bounding box of every shape, the leaves of the three broad-phase trees,
+whose internal nodes are then recomputed as the union of their leaves, the
+cached query box of every mesh contact, and the body move and contact hit
+events of the last step.
+
+Joint frames, contact manifolds, warm starting impulses, contact recycling
+poses and velocities are relative to the bodies and do not change. No body is
+woken, no proxy is marked as moved, and no tree is rebuilt, so a resting or
+sleeping island stays as it is and the next step creates no new pairs. Fat
+boxes are shifted with outward rounding and then grown to the recomputed tight
+box, so a proxy never stops enclosing its shape. A mesh contact's query box is
+emptied, so its next update queries the triangles again and keeps the caches
+of the triangles it finds again.
+
+The shift is refused while the world is locked and ignored for a non-finite
+origin. It is recorded as op 0x71, and the recording minor version becomes 11.
+
+diff --git a/include/box3d/box3d.h b/include/box3d/box3d.h
+index d9f5fdf..2549116 100644
+--- a/include/box3d/box3d.h
++++ b/include/box3d/box3d.h
+@@ -193,6 +193,15 @@ B3_API void b3World_SetCustomFilterCallback( b3WorldId worldId, b3CustomFilterFc
+ /// Register the pre-solve callback. This is optional.
+ B3_API void b3World_SetPreSolveCallback( b3WorldId worldId, b3PreSolveFcn* fcn, void* context );
+ 
++/// Move the world origin to newOrigin in one pass: every body position, shape bounding box,
++/// broad-phase proxy and cached contact query box becomes relative to newOrigin, so
++/// position -= newOrigin. Joints, contact manifolds and warm starting impulses are relative to
++/// the bodies and carry over unchanged. Bodies keep their velocities and no body is woken, so a
++/// resting or sleeping island stays as it is. Body move and contact hit events of the last step
++/// are shifted as well. Use this to keep the simulation near the origin in a large world.
++/// Not allowed while the world is locked. A non-finite origin is ignored.
++B3_API void b3World_ShiftOrigin( b3WorldId worldId, b3Pos newOrigin );
++
+ /// Set the gravity vector for the entire world. Box3D has no concept of an up direction and this
+ /// is left as a decision for the application. Usually in m/s^2.
+ /// @see b3WorldDef
+diff --git a/src/dynamic_tree.c b/src/dynamic_tree.c
+index 5206637..9c049f0 100644
+--- a/src/dynamic_tree.c
++++ b/src/dynamic_tree.c
+@@ -2357,6 +2357,45 @@ void b3DynamicTree_Refit( b3DynamicTree* tree )
+ 	}
+ }
+ 
++void b3DynamicTree_RecomputeInternalBounds( b3DynamicTree* tree )
++{
++	b3TreeNode* nodes = tree->nodes;
++	const int32_t* parents = tree->parents;
++
++	// Empty nodes pass as leaves, so this resets exactly the internal nodes.
++	b3AABB emptyBox = { { FLT_MAX, FLT_MAX, FLT_MAX }, { -FLT_MAX, -FLT_MAX, -FLT_MAX } };
++	for ( int index = 0; index < tree->nodeEnd; ++index )
++	{
++		if ( b3IsLeaf( nodes + index ) == false )
++		{
++			nodes[index].aabb = emptyBox;
++		}
++	}
++
++	// Each internal node is the union of the leaves enlarged into it so far, so a node that already
++	// holds a leaf box has ancestors that hold it too and the walk can stop there. The result is
++	// the exact union whatever the leaf order.
++	for ( int proxyId = 0; proxyId < tree->proxyCapacity; ++proxyId )
++	{
++		int leaf = tree->proxies[proxyId].node;
++		if ( leaf == B3_NULL_INDEX )
++		{
++			continue;
++		}
++
++		b3AABB box = nodes[leaf].aabb;
++		int index = parents[leaf];
++		while ( index != B3_NULL_INDEX )
++		{
++			if ( b3EnlargeAABB( &nodes[index].aabb, box ) == false )
++			{
++				break;
++			}
++			index = parents[index];
++		}
++	}
++}
++
+ static FILE* b3OpenTreeFile( const char* fileName, const char* mode )
+ {
+ 	FILE* file = NULL;
+diff --git a/src/dynamic_tree.h b/src/dynamic_tree.h
+index cee702e..6a2d0ac 100644
+--- a/src/dynamic_tree.h
++++ b/src/dynamic_tree.h
+@@ -111,3 +111,7 @@ void b3DynamicTree_MarkProxyMoved( b3DynamicTree* tree, int proxyId, b3AABB aabb
+ void b3DynamicTree_ClearMoved( b3DynamicTree* tree );
+ int b3DynamicTree_GatherMovedProxies( const b3DynamicTree* tree, int* proxyIds );
+ void b3DynamicTree_Refit( b3DynamicTree* tree );
++
++// Recompute every internal node as the union of the leaves below it, whatever the node order and
++// without marking any node as moved. Used after the leaves are set in place by an origin shift.
++void b3DynamicTree_RecomputeInternalBounds( b3DynamicTree* tree );
+diff --git a/src/physics_world.c b/src/physics_world.c
+index ce86343..0a77e19 100644
+--- a/src/physics_world.c
++++ b/src/physics_world.c
+@@ -3,6 +3,7 @@
+ 
+ #include "physics_world.h"
+ 
++#include "aabb.h"
+ #include "arena_allocator.h"
+ #include "bitset.h"
+ #include "body.h"
+@@ -29,6 +30,7 @@
+ 
+ #include <float.h>
+ #include <inttypes.h>
++#include <math.h>
+ #include <stdio.h>
+ #include <string.h>
+ 
+@@ -3594,6 +3596,143 @@ void b3World_RebuildStaticTree( b3WorldId worldId )
+ 	b3DynamicTree_Rebuild( staticTree, true );
+ }
+ 
++static b3Pos b3ShiftPos( b3Pos p, b3Pos origin )
++{
++	p.x -= origin.x;
++	p.y -= origin.y;
++	p.z -= origin.z;
++	return p;
++}
++
++// x - origin rounded toward negative infinity, so a shifted lower bound never moves inward.
++static float b3ShiftDownFloat( float x, double origin )
++{
++	double d = (double)x - origin;
++	float f = (float)d;
++	return (double)f > d ? nextafterf( f, -FLT_MAX ) : f;
++}
++
++// x - origin rounded toward positive infinity, so a shifted upper bound never moves inward.
++static float b3ShiftUpFloat( float x, double origin )
++{
++	double d = (double)x - origin;
++	float f = (float)d;
++	return (double)f < d ? nextafterf( f, FLT_MAX ) : f;
++}
++
++static b3AABB b3ShiftAABB( b3AABB box, b3Pos origin )
++{
++	b3AABB out;
++	out.lowerBound.x = b3ShiftDownFloat( box.lowerBound.x, origin.x );
++	out.lowerBound.y = b3ShiftDownFloat( box.lowerBound.y, origin.y );
++	out.lowerBound.z = b3ShiftDownFloat( box.lowerBound.z, origin.z );
++	out.upperBound.x = b3ShiftUpFloat( box.upperBound.x, origin.x );
++	out.upperBound.y = b3ShiftUpFloat( box.upperBound.y, origin.y );
++	out.upperBound.z = b3ShiftUpFloat( box.upperBound.z, origin.z );
++	return out;
++}
++
++void b3World_ShiftOrigin( b3WorldId worldId, b3Pos newOrigin )
++{
++	b3World* world = b3GetUnlockedWorldFromId( worldId );
++	if ( world == NULL )
++	{
++		return;
++	}
++
++	B3_ASSERT( b3IsValidPosition( newOrigin ) );
++	if ( b3IsValidPosition( newOrigin ) == false )
++	{
++		return;
++	}
++
++	B3_REC( world, WorldShiftOrigin, worldId, newOrigin );
++
++	// Every solver set holds body sims: static, disabled, awake and one per sleeping island. The
++	// body states hold velocities and deltas only, which do not depend on the origin.
++	int setCount = world->solverSets.count;
++	for ( int setIndex = 0; setIndex < setCount; ++setIndex )
++	{
++		b3SolverSet* set = world->solverSets.data + setIndex;
++		if ( set->setIndex == B3_NULL_INDEX )
++		{
++			continue;
++		}
++
++		for ( int i = 0; i < set->bodySims.count; ++i )
++		{
++			b3BodySim* sim = set->bodySims.data + i;
++			sim->transform.p = b3ShiftPos( sim->transform.p, newOrigin );
++			sim->center = b3ShiftPos( sim->center, newOrigin );
++			sim->center0 = b3ShiftPos( sim->center0, newOrigin );
++		}
++	}
++
++	// The tight box is recomputed at the shifted transform, as a step would compute it. The fat box
++	// is shifted with outward rounding, and grown to the tight box if rounding left it outside. The
++	// leaf of the proxy takes the fat box, as it always holds between steps. No proxy is marked as
++	// moved, so the shift creates no pairs and rebuilds no tree.
++	b3BroadPhase* broadPhase = &world->broadPhase;
++	for ( int shapeId = 0; shapeId < world->shapes.count; ++shapeId )
++	{
++		b3Shape* shape = world->shapes.data + shapeId;
++		if ( shape->id == B3_NULL_INDEX )
++		{
++			continue;
++		}
++
++		b3Body* body = b3Array_Get( world->bodies, shape->bodyId );
++		b3BodySim* bodySim = b3GetBodySim( world, body );
++		b3AABB aabb = b3ComputeFatShapeAABB( shape, bodySim->transform, B3_SPECULATIVE_DISTANCE );
++		shape->aabb = aabb;
++
++		b3AABB fatAABB = b3ShiftAABB( world->fatAABBs.data[shapeId], newOrigin );
++		b3EnlargeAABB( &fatAABB, aabb );
++		world->fatAABBs.data[shapeId] = fatAABB;
++
++		if ( shape->proxyKey != B3_NULL_INDEX )
++		{
++			b3DynamicTree* tree = broadPhase->trees + B3_PROXY_TYPE( shape->proxyKey );
++			int nodeIndex = tree->proxies[B3_PROXY_ID( shape->proxyKey )].node;
++			tree->nodes[nodeIndex].aabb = fatAABB;
++		}
++	}
++
++	for ( int treeIndex = 0; treeIndex < b3_bodyTypeCount; ++treeIndex )
++	{
++		b3DynamicTree_RecomputeInternalBounds( broadPhase->trees + treeIndex );
++	}
++
++	// A mesh contact caches the triangles under a world space query box. An empty box makes its
++	// next update query the triangles again, which keeps the caches of the triangles it finds.
++	b3AABB emptyBox = { { FLT_MAX, FLT_MAX, FLT_MAX }, { -FLT_MAX, -FLT_MAX, -FLT_MAX } };
++	for ( int contactIndex = 0; contactIndex < world->contacts.count; ++contactIndex )
++	{
++		b3Contact* contact = world->contacts.data + contactIndex;
++		if ( contact->contactId == B3_NULL_INDEX || ( contact->flags & b3_simMeshContact ) == 0 )
++		{
++			continue;
++		}
++
++		contact->meshContact.queryBounds = emptyBox;
++	}
++
++	for ( int i = 0; i < world->bodyMoveEvents.count; ++i )
++	{
++		b3BodyMoveEvent* event = world->bodyMoveEvents.data + i;
++		event->transform.p = b3ShiftPos( event->transform.p, newOrigin );
++	}
++
++	for ( int i = 0; i < world->contactHitEvents.count; ++i )
++	{
++		b3ContactHitEvent* event = world->contactHitEvents.data + i;
++		event->point = b3ShiftPos( event->point, newOrigin );
++	}
++
++	b3ValidateSolverSets( world );
++	b3ValidateBroadPhase( broadPhase );
++}
++
+ void b3World_EnableSpeculative( b3WorldId worldId, bool flag )
+ {
+ 	b3World* world = b3GetUnlockedWorldFromId( worldId );
+diff --git a/src/recording.h b/src/recording.h
+index 1afd800..aa4c43e 100644
+--- a/src/recording.h
++++ b/src/recording.h
+@@ -52,7 +52,8 @@ typedef struct b3World b3World;
+ 
+ // Minor tracks op-stream additions that keep the 48 byte header shape.
+ // Minor version 7 made the contact body sim locators persistent
+-#define B3_REC_VERSION_MINOR 10
++// Minor version 11 added the world origin shift op
++#define B3_REC_VERSION_MINOR 11
+ 
+ // File header, fixed 48 bytes. Contains the registry locator so the player
+ // can load geometry before replaying any ops.
+diff --git a/src/recording_ops.inl b/src/recording_ops.inl
+index df13ebe..ed4c2cc 100644
+--- a/src/recording_ops.inl
++++ b/src/recording_ops.inl
+@@ -42,6 +42,7 @@ B3_REC_OP( 0x0D, WorldEnableSpeculative, RET_NONE, ARG( WORLDID, world ) ARG( BO
+ B3_REC_OP( 0x0E, WorldSetRestitutionIterations, RET_NONE, ARG( WORLDID, world ) ARG( I32, iterations ) )
+ B3_REC_OP( 0x0F, WorldEnableRestitutionPropagation, RET_NONE, ARG( WORLDID, world ) ARG( BOOL, flag ) )
+ B3_REC_OP( 0x70, WorldSetIsotropicInertiaTolerance, RET_NONE, ARG( WORLDID, world ) ARG( F32, tolerance ) )
++B3_REC_OP( 0x71, WorldShiftOrigin, RET_NONE, ARG( WORLDID, world ) ARG( POSITION, newOrigin ) )
+ 
+ // Body
+ B3_REC_OP( 0x10, CreateBody, RET_BODYID, ARG( WORLDID, world ) ARG( BODYDEF, def ) )
+diff --git a/src/replay.c b/src/replay.c
+index 78b73df..154d4c0 100644
+--- a/src/replay.c
++++ b/src/replay.c
+@@ -836,6 +836,11 @@ static void b3RecDispatch_WorldSetIsotropicInertiaTolerance( const b3RecArgs_Wor
+ 	b3World_SetIsotropicInertiaTolerance( rdr->replayWorldId, a->tolerance );
+ }
+ 
++static void b3RecDispatch_WorldShiftOrigin( const b3RecArgs_WorldShiftOrigin* a, b3RecReader* rdr )
++{
++	b3World_ShiftOrigin( rdr->replayWorldId, a->newOrigin );
++}
++
+ static void b3RecDispatch_CreateBody( const b3RecArgs_CreateBody* a, b3RecReader* rdr )
+ {
+ 	b3BodyId recId = b3RecR_BODYID( rdr );

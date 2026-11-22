@@ -72,6 +72,8 @@ world.set_contact_material_callback(&ice_patch, &ice_shape);
 
 - The callback runs on the step's worker threads, once per contact update: keep it to reading the
   context and writing `material`.
+- A resting contact is not updated again on its own. When the answers change, call
+  `b3::shape_invalidate_contact_materials(ice_shape)` (or the world form) once.
 - The context must outlive the world, or the next `set_contact_material_callback`.
 
 API: [worlds](api/worlds.md#contact-materials).

@@ -1,5 +1,6 @@
 // The harness scripts/tsan-check.sh runs under ThreadSanitizer: a 256-box pile on four workers with
-// the contact material callback set or not, and the origin shifted every 30 steps or not.
+// the contact material callback set (and its contacts invalidated every 20 steps) or not, and the
+// origin shifted every 30 steps or not.
 #include "box3d/box3d.h"
 #include <stdatomic.h>
 #include <stdio.h>
@@ -58,6 +59,10 @@ int main( int argc, char** argv )
 
 	for ( int step = 0; step < 240; ++step )
 	{
+		if ( useCallback && step % 20 == 10 )
+		{
+			b3World_InvalidateContactMaterials( world );
+		}
 		if ( useShift && step % 30 == 29 )
 		{
 			b3World_ShiftOrigin( world, ( b3Pos ){ step % 60 == 59 ? -5000.0f : 5000.0f, 0.0f, 0.0f } );

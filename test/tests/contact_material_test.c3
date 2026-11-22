@@ -18,6 +18,11 @@ struct ThreadCensus {
     int threads;
 }
 
+struct Conveyors {
+    b3::ShapeId[2] belts;
+    bool[2] running;
+}
+
 struct PileRun {
     ulong hash;
     int calls;
@@ -69,6 +74,19 @@ fn void counting_materials(
         atomic::fetch_add(&census.threads, 1);
     }
     material.friction = (shape_a.index1 + shape_b.index1) % 2 == 0 ? 0.2 : 0.9;
+}
+
+fn void conveyor_belts(
+  b3::ShapeId shape_a,
+  b3::ShapeId shape_b,
+  b3::ContactMaterial* material,
+  void* context,
+) {
+    Conveyors* conveyors = context;
+    foreach (i, belt : conveyors.belts) {
+        if (!conveyors.running[i] || !touches(shape_a, shape_b, belt)) continue;
+        material.tangent_velocity = {3.0, 0.0, 0.0};
+    }
 }
 
 fn b3::ShapeId a_static_slab(b3::WorldId world, b3::Pos position, b3::Vec3 half_extents) {
@@ -159,7 +177,7 @@ fn float bounce_height(
     return apex - 0.25;
 }
 
-fn PileRun a_pile_under_counting_materials(uint workers, int generation) {
+fn PileRun a_pile_under_counting_materials(uint workers, int generation, bool recycling) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.worker_count = workers;
     b3::WorldId world = b3::create_world(&world_def)!!;
@@ -178,8 +196,7 @@ fn PileRun a_pile_under_counting_materials(uint workers, int generation) {
         body_def.type = b3::BodyType.DYNAMIC;
         body_def.position = position;
         body_def.linear_velocity = {(float)(i % 3) - 1.0f, 0.0, (float)(i % 5) - 2.0f};
-        // Every step then updates every touching contact instead of reusing its manifold.
-        body_def.enable_contact_recycling = false;
+        body_def.enable_contact_recycling = recycling;
         *body = b3::create_body(world, &body_def)!!;
         b3::ShapeDef shape_def = b3::default_shape_def();
         shape_def.density = 1.0;
@@ -228,14 +245,87 @@ fn void restitution_set_per_contact_changes_the_bounce_height() @test {
 }
 
 fn void the_material_callback_runs_on_the_step_workers_without_changing_the_result() @test {
-    PileRun threaded = a_pile_under_counting_materials(workers: 4, generation: 1);
-    PileRun again = a_pile_under_counting_materials(workers: 4, generation: 2);
-    PileRun serial = a_pile_under_counting_materials(workers: 1, generation: 3);
+    // Without recycling every touching contact updates on every step; with it, as by default,
+    // only the contacts that moved do.
+    foreach (recycling : (bool[2]){ false, true }) {
+        int base = recycling ? 10 : 0;
+        PileRun threaded = a_pile_under_counting_materials(4, base + 1, recycling);
+        PileRun again = a_pile_under_counting_materials(4, base + 2, recycling);
+        PileRun serial = a_pile_under_counting_materials(1, base + 3, recycling);
 
-    assert(threaded.calls > 10000, "every touching contact of every step asked for its material");
-    assert(threaded.threads >= 2, "and the calls came from more than one of the step's threads");
-    assert(serial.threads == 1, "a single-threaded world calls it on the stepping thread alone");
-    assert(threaded.calls == serial.calls, "the worker count changes who calls it, not how often");
-    assert(threaded.hash == again.hash && threaded.hash == serial.hash,
-        "and the pile lands bit for bit the same on four workers, twice, and on one");
+        assert(threaded.calls > (recycling ? 1000 : 10000), "the contacts asked for materials");
+        assert(threaded.threads >= 2, "from more than one of the step's threads");
+        assert(serial.threads == 1, "a single-threaded world calls it on the stepping thread only");
+        assert(threaded.calls == serial.calls, "the worker count changes who calls, not how often");
+        assert(threaded.hash == again.hash && threaded.hash == serial.hash,
+            "and the pile lands bit for bit the same on four workers, twice, and on one");
+    }
+}
+
+struct ConveyorRun {
+    b3::WorldId world;
+    Conveyors conveyors;
+    b3::BodyId[2] crates;
+}
+
+<* Two crates resting on two belts, settled before anything is installed; sleep is off. *>
+fn ConveyorRun* two_resting_crates(ConveyorRun* run) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.enable_sleep = false;
+    run.world = b3::create_world(&world_def)!!;
+    run.conveyors.belts = {
+        a_static_slab(run.world, {0.0, -0.5, 0.0}, {20.0, 0.5, 1.0}),
+        a_static_slab(run.world, {0.0, -0.5, 5.0}, {20.0, 0.5, 1.0}),
+    };
+    run.crates = {
+        a_sliding_box(run.world, {0.0, 0.25, 0.0}),
+        a_sliding_box(run.world, {0.0, 0.25, 5.0}),
+    };
+    for (int i = 0; i < 120; i++) b3::world_step(run.world, MATERIAL_STEP, 4);
+    return run;
+}
+
+fn float[2] crate_speeds_over_a_second(ConveyorRun* run) {
+    float[2] fastest;
+    for (int i = 0; i < 60; i++) {
+        b3::world_step(run.world, MATERIAL_STEP, 4);
+        foreach (j, crate : run.crates) {
+            fastest[j] = math::max(fastest[j], crate.linear_velocity().length());
+        }
+    }
+    return fastest;
+}
+
+fn void a_callback_set_after_the_bodies_settle_reaches_their_resting_contacts() @test {
+    ConveyorRun run;
+    two_resting_crates(&run);
+    defer b3::destroy_world(run.world);
+
+    run.conveyors.running = { true, true };
+    run.world.set_contact_material_callback(&conveyor_belts, &run.conveyors);
+    float[2] speeds = crate_speeds_over_a_second(&run);
+    assert(speeds[0] > 2.5 && speeds[0] < 3.5 && speeds[1] > 2.5 && speeds[1] < 3.5,
+        "both belts carry their resting crates at 3 m/s");
+}
+
+fn void changed_answers_reach_resting_contacts_once_invalidated() @test {
+    ConveyorRun run;
+    two_resting_crates(&run);
+    defer b3::destroy_world(run.world);
+    run.world.set_contact_material_callback(&conveyor_belts, &run.conveyors);
+    crate_speeds_over_a_second(&run);
+
+    run.conveyors.running = { true, true };
+    float[2] unannounced = crate_speeds_over_a_second(&run);
+    assert(unannounced[0] < 0.01 && unannounced[1] < 0.01,
+        "a resting contact is recycled, so it keeps the answer it had until it is invalidated");
+
+    b3::shape_invalidate_contact_materials(run.conveyors.belts[1]);
+    float[2] one_belt = crate_speeds_over_a_second(&run);
+    assert(one_belt[0] < 0.01, "invalidating one belt leaves the other's contact as it was");
+    assert(one_belt[1] > 2.5 && one_belt[1] < 3.5, "and starts the crate on the belt invalidated");
+
+    b3::world_invalidate_contact_materials(run.world);
+    float[2] both = crate_speeds_over_a_second(&run);
+    assert(both[0] > 2.5 && both[0] < 3.5, "invalidating the world starts the other crate as well");
 }

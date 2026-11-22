@@ -61,8 +61,9 @@ The library is box3d with a patch series applied:
 - `0002-world-shift-origin.patch` adds `world_shift_origin`, which moves the whole world to a new
   origin in one pass; see `docs/api/worlds.md`.
 - `0003-contact-material-callback.patch` adds `WorldId.set_contact_material_callback`, which
-  overrides the material of each touching contact before the solver runs; see
-  `docs/api/worlds.md`. A world without the callback behaves exactly as upstream box3d.
+  overrides the material of each touching contact before the solver runs, and the two
+  `*_invalidate_contact_materials` calls for answers that change; see `docs/api/worlds.md`. A
+  world that uses none of them behaves exactly as upstream box3d.
 
 ## License
 

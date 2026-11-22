@@ -175,17 +175,39 @@ world.set_contact_material_callback(&icy_rink, &ice);
 
 A `ContactMaterialFn` sees each touching contact after its manifold is computed and before the
 solver reads it, with the two shape ids and a `ContactMaterial` holding what the mixing callbacks
-produced: `friction`, `restitution`, `rolling_resistance` (already scaled by the rolling shape's
-radius) and `tangent_velocity` (world space). Change any of them to override that contact. It runs
-for convex, compound, mesh and height-field contacts, but not for a contact the pre-solve callback
-disabled. Passing null removes it.
+produced. Change any field to override that contact:
 
-The contact keeps what was written until the narrow phase next updates it, so the values hold
-while the contact is recycled or asleep. A negative or non-finite friction, restitution or rolling
-resistance, or a non-finite tangent velocity, keeps the mixed value. The callback runs on the step's
-worker threads, so it must be thread-safe and must not read or modify the world; it writes only to
-its own contact, so the result is the same on any number of workers. box3d passes the context
-pointer on every call, so it must outlive the world or the next `set_contact_material_callback`.
+| Field | Meaning |
+|---|---|
+| `friction`, `restitution` | the coefficients the solver uses for this contact |
+| `rolling_resistance` | already scaled by the rolling shape's radius |
+| `tangent_velocity` | world space, for conveyors: the solver drives the tangential velocity of shape B's body relative to shape A's toward it, so the mixed value is shape A's surface velocity minus shape B's |
+
+It runs for convex, compound, mesh and height-field contacts, but not for a contact the pre-solve
+callback disabled. The callback names no child shape or triangle, so on a multi-material mesh,
+height field or compound it sees the contact's averaged mix. Passing null removes it. A negative or
+non-finite friction, restitution or rolling resistance, or a non-finite tangent velocity, keeps the
+mixed value.
+
+**When it runs.** box3d calls it each time the narrow phase updates a contact, and not while contact
+recycling reuses the contact's manifold instead. A resting contact is recycled on every step, for as
+long as it rests, and keeps the last material written to it. So:
+
+- `set_contact_material_callback` makes every contact update on its next step, and the new callback
+  reaches contacts that are already resting.
+- When the callback's answers change later (a conveyor switched on, a floor made icy), call
+  `b3::world_invalidate_contact_materials(world)`, or `b3::shape_invalidate_contact_materials(shape)`
+  for the shapes whose answers changed. Without it a resting body keeps the old material.
+- An invalidation makes the next step run the narrow phase on those contacts once; on 6400 resting
+  boxes that step's collide phase goes from 0.3 ms to 1.5 ms on one worker.
+- Neither call wakes anything: a sleeping body's contacts update when it wakes, so wake it if the
+  change should act at once.
+
+The callback runs on the step's worker threads, so it must be thread-safe and must not read or
+modify the world; it writes only to its own contact, so the result is the same on any number of
+workers. box3d passes the context pointer on every call, so it must outlive the world or the next
+`set_contact_material_callback`. A recording captures the invalidations but not the callback, as
+with the pre-solve callback, so a replay of a world that uses it diverges.
 
 ## Origin shift
 

@@ -310,7 +310,12 @@ fn ulong hash_of_bodies(b3::BodyId[] bodies) {
     return hash;
 }
 
-fn ulong a_tumbling_pile_hash(bool shift, uint workers, record::Recording* recording = null) {
+fn ulong a_tumbling_pile_hash(
+  bool shift,
+  uint workers,
+  record::Recording* recording = null,
+  bool invalidate = false,
+) {
     b3::WorldDef world_def = b3::default_world_def();
     world_def.worker_count = workers;
     b3::WorldId world = b3::create_world(&world_def)!!;
@@ -322,7 +327,7 @@ fn ulong a_tumbling_pile_hash(bool shift, uint workers, record::Recording* recor
     b3::BodyId ground = b3::create_body(world, &body_def)!!;
     b3::BoxHull ground_box = b3::make_box_hull(20.0, 0.5, 20.0);
     b3::ShapeDef shape_def = b3::default_shape_def();
-    b3::create_hull_shape(ground, &shape_def, &ground_box.base)!!;
+    b3::ShapeId ground_shape = b3::create_hull_shape(ground, &shape_def, &ground_box.base)!!;
 
     b3::BodyId[40] bodies;
     b3::BoxHull box = b3::make_box_hull(0.4, 0.3, 0.5);
@@ -341,6 +346,8 @@ fn ulong a_tumbling_pile_hash(bool shift, uint workers, record::Recording* recor
     if (recording) record::world_start_recording(world, recording)!!;
     for (int i = 0; i < 180; i++) {
         if (shift && i == 60) b3::world_shift_origin(world, FAR_BASE);
+        if (invalidate && i == 120) b3::world_invalidate_contact_materials(world);
+        if (invalidate && i == 150) b3::shape_invalidate_contact_materials(ground_shape);
         b3::world_step(world, STEP, 4);
     }
     if (recording) record::world_stop_recording(world);
@@ -356,11 +363,12 @@ fn void a_shifted_run_is_deterministic() @test {
     assert(shifted != plain, "and the hash sees the shift, so the checks above test something");
 }
 
-fn void a_recorded_shift_replays_to_the_states_it_recorded() @test {
+fn void a_recorded_shift_and_invalidation_replay_to_the_states_recorded() @test {
     record::Recording* recording = record::create_recording(0);
     defer record::destroy_recording(recording);
-    a_tumbling_pile_hash(shift: true, workers: 1, recording: recording);
-    assert(record::validate_replay(recording.data(), 1), "the replay shifts where the session did");
+    a_tumbling_pile_hash(shift: true, workers: 1, recording: recording, invalidate: true);
+    assert(record::validate_replay(recording.data(), 1),
+        "the replay shifts and invalidates contacts where the session did");
 }
 
 fn void a_fast_body_keeps_its_continuous_sweep_across_a_shift() @test {
@@ -457,4 +465,146 @@ fn void a_box_resting_on_a_mesh_stays_at_rest_across_a_shift() @test {
     }
     assert(fastest < 1e-4, "the mesh contact carries over without an impulse");
     assert((box.position() - expected).length() < 1e-4, "and the box stays where it rested");
+}
+
+const b3::Pos ODD_BASE = {3000.0, 0.0, -3000.0};
+
+<* The largest change of any box's position relative to the bottom box, against `reference`. *>
+fn float stack_distortion(Stack* stack, b3::Vec3[STACK_HEIGHT]* reference) {
+    float largest = 0.0;
+    foreach (i, box : stack.boxes) {
+        b3::Vec3 relative = box.position() - stack.boxes[0].position();
+        largest = math::max(largest, (relative - (*reference)[i]).length());
+    }
+    return largest;
+}
+
+fn void stack_shape(Stack* stack, b3::Vec3[STACK_HEIGHT]* out) {
+    foreach (i, box : stack.boxes) (*out)[i] = box.position() - stack.boxes[0].position();
+}
+
+fn void inexact_shifts_round_a_stack_by_a_float_step_and_never_more() @test {
+    // The three offsets add up to zero, so the stack wanders within a few kilometres of its start.
+    b3::Pos[3] offsets;
+    offsets[0] = {1234.567, 2345.6789, -987.65};
+    offsets[1] = {-321.123, 77.777, 4444.4};
+    offsets[2] = (b3::Pos)(-(offsets[0] + offsets[1]));
+
+    // A large inexact vertical offset rounds every gap in the stack.
+    Stack single = a_box_stack_at(ODD_BASE, enable_sleep: false);
+    defer b3::destroy_world(single.world);
+    fastest_box_over_steps(&single, 300);
+    b3::world_shift_origin(single.world, {0.0, 2345.6789, 0.0});
+    float single_after = fastest_box_over_steps(&single, 120);
+
+    // Asleep: back and forth a thousand times, then two thousand different offsets.
+    Stack sleeping = a_box_stack_at(ODD_BASE, enable_sleep: true);
+    defer b3::destroy_world(sleeping.world);
+    settle_asleep(&sleeping);
+    b3::Vec3[STACK_HEIGHT] before;
+    stack_shape(&sleeping, &before);
+    for (int i = 0; i < 1000; i++) {
+        b3::world_shift_origin(sleeping.world, offsets[0]);
+        b3::world_shift_origin(sleeping.world, (b3::Pos)(-offsets[0]));
+    }
+    float back_and_forth = stack_distortion(&sleeping, &before);
+    bool asleep_after_back_and_forth = sleeping.world.awake_body_count() == 0;
+    for (int i = 0; i < 2000; i++) b3::world_shift_origin(sleeping.world, offsets[i % 3]);
+    float wandering = stack_distortion(&sleeping, &before);
+    bool asleep_after_wandering = sleeping.world.awake_body_count() == 0;
+    sleeping.boxes[STACK_HEIGHT - 1].set_awake(true);
+    float woken = fastest_box_over_steps(&sleeping, 120);
+
+    // Awake: a shift before every step for a thousand steps.
+    Stack awake = a_box_stack_at(ODD_BASE, enable_sleep: false);
+    defer b3::destroy_world(awake.world);
+    fastest_box_over_steps(&awake, 300);
+    float every_step = 0.0;
+    for (int i = 0; i < 1000; i++) {
+        b3::Pos offset = i % 2 == 0 ? offsets[i % 3] : (b3::Pos)(-offsets[(i - 1) % 3]);
+        b3::world_shift_origin(awake.world, offset);
+        every_step = math::max(every_step, fastest_box_over_steps(&awake, 1));
+    }
+
+    // Measured 0.94 mm/s, 0.12 mm, 0.27 mm, 2.3 mm/s and 1.0 mm/s: a float step at 5 km is 0.5 mm,
+    // far below the sleep threshold of 5 cm/s.
+    assert(single_after < 3e-3, "one inexact vertical shift leaves the stack under 3 mm/s");
+    assert(asleep_after_back_and_forth && asleep_after_wandering, "no shift wakes the stack");
+    assert(back_and_forth < 5e-4, "a thousand shifts there and back distort it by under 0.5 mm");
+    assert(wandering < 1e-3, "two thousand different shifts by under 1 mm: no build-up");
+    assert(woken < 0.01, "woken afterwards, it settles under 1 cm/s");
+    assert(every_step < 5e-3, "and shifted before each of 1000 steps it stays under 5 mm/s");
+}
+
+struct WallTwin {
+    b3::WorldId world;
+    b3::BodyId crate;
+}
+
+<* A crate resting on a floor 0.10 m short of a mesh wall facing it. *>
+fn WallTwin a_crate_before_a_mesh_wall(b3::MeshData* grid) {
+    b3::WorldDef world_def = b3::default_world_def();
+    world_def.enable_sleep = false;
+    WallTwin twin = { .world = b3::create_world(&world_def)!! };
+
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.0, -0.5, 0.0};
+    b3::BodyId floor = b3::create_body(twin.world, &body_def)!!;
+    b3::BoxHull slab = b3::make_box_hull(5.0, 0.5, 5.0);
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    b3::create_hull_shape(floor, &shape_def, &slab.base)!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.STATIC;
+    body_def.position = {0.6, 1.0, 0.0};
+    // A quarter turn about z stands the grid up with its face toward -x, toward the crate.
+    body_def.rotation = {0.0, 0.0, 0.70710678, 0.70710678};
+    b3::BodyId wall = b3::create_body(twin.world, &body_def)!!;
+    b3::create_mesh_shape(wall, &shape_def, grid, {1.0, 1.0, 1.0})!!;
+
+    body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = {0.0, 0.5, 0.0};
+    twin.crate = b3::create_body(twin.world, &body_def)!!;
+    shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    b3::BoxHull cube = b3::make_box_hull(0.5, 0.5, 0.5);
+    b3::create_hull_shape(twin.crate, &shape_def, &cube.base)!!;
+    for (int i = 0; i < 60; i++) b3::world_step(twin.world, STEP, 4);
+    return twin;
+}
+
+<* How far the crate's leading face gets past `wall_x` while pushed at 1 m/s for half a second. *>
+fn float deepest_past(WallTwin* twin, float wall_x) {
+    float deepest = -1.0;
+    for (int i = 0; i < 30; i++) {
+        twin.crate.set_linear_velocity({1.0, 0.0, 0.0});
+        b3::world_step(twin.world, STEP, 4);
+        deepest = math::max(deepest, twin.crate.position().x + 0.5f - wall_x);
+    }
+    return deepest;
+}
+
+fn void a_small_shift_leaves_no_stale_mesh_query_behind() @test {
+    b3::MeshData* grid = b3::create_grid_mesh(
+      x_count: 16,
+      z_count: 16,
+      cell_width: 0.25,
+      material_count: 1,
+      identify_edges: true,
+    )!!;
+    defer b3::destroy_mesh(grid);
+    WallTwin shifted = a_crate_before_a_mesh_wall(grid);
+    defer b3::destroy_world(shifted.world);
+    WallTwin reference = a_crate_before_a_mesh_wall(grid);
+    defer b3::destroy_world(reference.world);
+
+    // Under the query margin on every axis, so the old world-space query box still holds the
+    // crate's new bounds while the triangles cached for it stop short of the wall.
+    b3::world_shift_origin(shifted.world, {0.06, 0.0, 0.0});
+    float shifted_depth = deepest_past(&shifted, 0.6 - 0.06);
+    float reference_depth = deepest_past(&reference, 0.6);
+    assert(reference_depth < 0.01, "the unshifted crate stops at the wall's face");
+    assert(shifted_depth < reference_depth + 0.002, "and so does the shifted one");
 }

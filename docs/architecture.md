@@ -307,7 +307,7 @@ Callbacks fall into two groups:
 | Callback | Runs on | Rules |
 |---|---|---|
 | `FrictionFn`, `RestitutionFn` | Any worker thread, during `world_step` | Thread-safe; no context pointer; must not touch the world |
-| `PreSolveFn`, `CustomFilterFn` | Any worker thread, during `world_step` | Thread-safe; must not modify the world; the context must outlive the world |
+| `ContactMaterialFn`, `PreSolveFn`, `CustomFilterFn` | Any worker thread, during `world_step` | Thread-safe; must not modify the world; the context must outlive the world |
 | `TaskFn` (via `enqueue_task`) | The caller's worker threads | Must run exactly once per enqueue |
 | `CastResultFn`, `OverlapResultFn`, `PlaneResultFn`, `MoverFilterFn`, `MeshQueryFn`, `CompoundQueryFn`, the dynamic tree callbacks | The calling thread, inside the query | Must not modify the world |
 | `draw::DebugDraw` callbacks, `CreateDebugShapeFn` | The calling thread, inside `draw::world_draw` | Must not modify the world |

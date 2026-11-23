@@ -26,6 +26,7 @@ b3MassData 52 4 mass=0 center=4 inertia=16
 b3BodyDef 112 8 type=0 position=4 rotation=16 linearVelocity=32 angularVelocity=44 linearDamping=56 angularDamping=60 gravityScale=64 sleepThreshold=68 safetyFactor=72 name=80 userData=88 motionLocks=96 enableSleep=102 isAwake=103 isBullet=104 isEnabled=105 allowFastRotation=106 enableContactRecycling=107 internalValue=108
 b3Filter 24 8 categoryBits=0 maskBits=8 groupIndex=16
 b3SurfaceMaterial 40 8 friction=0 restitution=4 rollingResistance=8 tangentVelocity=12 userMaterialId=24 customColor=32 padding=36
+b3ContactMaterial 24 4 friction=0 restitution=4 rollingResistance=8 tangentVelocity=12
 b3ShapeType 4 4
 b3ShapeDef 120 8 name=0 userData=8 materials=16 materialCount=24 baseMaterial=32 density=72 explosionScale=76 filter=80 enableCustomFiltering=104 isSensor=105 enableSensorEvents=106 enableContactEvents=107 enableHitEvents=108 enablePreSolveEvents=109 invokeContactCreation=110 updateBodyMass=111 enableSpeculativeContact=112 internalValue=116
 b3Sphere 16 4 center=0 radius=12

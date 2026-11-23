@@ -96,5 +96,10 @@ native archives, and runs `build-box3d.sh --check` first.
 3. On a tag only, publish a GitHub release with those files. A pull request or manual run packages
    as version `0.0.0-dev` and publishes nothing.
 
+The tag job's notes are generated from the merged pull requests. A release with notes of its own
+keeps them in `docs/contributing/release-notes/v<version>.md`; after the tag's release is
+published, set them with `gh release edit v<version> --notes-file
+docs/contributing/release-notes/v<version>.md`.
+
 `scripts/consumer-smoke/` is a real project rather than a heredoc in the workflow so that an API
 sweep over the repository reaches it.

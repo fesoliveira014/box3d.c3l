@@ -189,6 +189,13 @@ extern fn void ShapeId.enable_contact_events(self, bool flag) @cname("b3Shape_En
 extern fn bool ShapeId.are_contact_events_enabled(self) @cname("b3Shape_AreContactEventsEnabled");
 extern fn void ShapeId.enable_pre_solve_events(self, bool flag) @cname("b3Shape_EnablePreSolveEvents");
 extern fn bool ShapeId.are_pre_solve_events_enabled(self) @cname("b3Shape_ArePreSolveEventsEnabled");
+
+<*
+ Makes this shape's contacts update on their next step instead of being recycled, so the contact
+ material callback answers for them again: world_invalidate_contact_materials() for one shape whose
+ answers changed. It wakes nothing; a sleeping contact updates when it wakes.
+*>
+extern fn void shape_invalidate_contact_materials(ShapeId shape) @cname("b3Shape_InvalidateContactMaterials");
 extern fn void ShapeId.enable_hit_events(self, bool flag) @cname("b3Shape_EnableHitEvents");
 extern fn bool ShapeId.are_hit_events_enabled(self) @cname("b3Shape_AreHitEventsEnabled");
 

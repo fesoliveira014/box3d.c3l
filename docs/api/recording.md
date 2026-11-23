@@ -70,6 +70,13 @@ path cannot be read or holds no recording.
 hash they carry. It returns true only when all match. False covers both divergence and bytes that
 are not a recording. It creates and destroys its world itself.
 
+**Local ops.** This package's box3d records three ops upstream box3d does not have:
+`world_shift_origin` (`0x7F`) and the two contact material invalidations (`0x7E`, `0x7D`). They sit
+in a range kept for local ops, and the header's `reserved2` word reads `B3L` plus a level byte (2),
+where an upstream build writes zero. The minor version is upstream's own. An upstream reader skips
+the three ops, and its replay of a recording that used them diverges, which `validate_replay`
+reports. The contact material callback, like the pre-solve callback, is not recorded.
+
 ## Replay with a player
 
 ```c3

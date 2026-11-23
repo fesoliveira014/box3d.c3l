@@ -32,6 +32,20 @@ c3c compile-only --no-obj src/*.c3i src/*.c3 && rm -rf obj
 - `check-docs.sh` fails when a public symbol is missing from `docs/api/index.md` or a relative
   link in the docs does not resolve.
 
+## Thread sanitizer
+
+The callbacks box3d runs on its workers, and the origin shift, have a sanitizer run of their own.
+It needs clang and Linux, and builds from the copy `build-box3d.sh` prepared:
+
+```sh
+./scripts/build-box3d.sh && ./scripts/tsan-check.sh
+```
+
+`scripts/tsan_harness.c` steps a 256-box pile on four workers with and without the contact
+material callback and an origin shift, and once with a deliberate race in the callback. The script
+fails when a clean run reports anything, or when the deliberate race goes unreported. Run it after
+touching a patch that changes what the step does on its workers.
+
 ## Coverage audits
 
 Every `@cname` resolves to an exported symbol:

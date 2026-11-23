@@ -33,6 +33,51 @@ fn float advance(b3::WorldId world, float accumulator, float frame_seconds) {
 
 API: [worlds](api/worlds.md).
 
+## Re-centre a large world
+
+Keep the simulation near the origin by moving the origin to the camera once it strays too far:
+
+```c3
+const float RECENTRE_DISTANCE = 2000.0f;
+
+fn void follow_camera(b3::WorldId world, b3::Pos* physics_camera, double[<3>]* world_offset) {
+    b3::Pos camera = *physics_camera;
+    if (math::abs(camera.x) < RECENTRE_DISTANCE && math::abs(camera.z) < RECENTRE_DISTANCE) return;
+    b3::world_shift_origin(world, camera);
+    *world_offset += { camera.x, camera.y, camera.z };
+    *physics_camera = { 0.0f, 0.0f, 0.0f };
+}
+```
+
+- Call it between steps. Afterwards a game position is `physics position + world_offset`, and
+  everything handed to box3d is in the new frame.
+- One call moves every body, proxy and joint anchor; resting and sleeping bodies stay as they were.
+
+API: [worlds](api/worlds.md#origin-shift).
+
+## Per-contact friction
+
+Override the material of the contacts a shape makes, here a slippery ice patch:
+
+```c3
+fn void ice_patch(b3::ShapeId shape_a, b3::ShapeId shape_b, b3::ContactMaterial* material, void* context) {
+    b3::ShapeId* ice = context;
+    if (shape_a.index1 == ice.index1 || shape_b.index1 == ice.index1) material.friction = 0.02f;
+}
+```
+
+```c3
+world.set_contact_material_callback(&ice_patch, &ice_shape);
+```
+
+- The callback runs on the step's worker threads, once per contact update: keep it to reading the
+  context and writing `material`.
+- A resting contact is not updated again on its own. When the answers change, call
+  `b3::shape_invalidate_contact_materials(ice_shape)` (or the world form) once.
+- The context must outlive the world, or the next `set_contact_material_callback`.
+
+API: [worlds](api/worlds.md#contact-materials).
+
 ## Apply a force or an impulse
 
 Forces act over the next step; impulses change velocity at once:

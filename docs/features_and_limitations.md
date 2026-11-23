@@ -13,7 +13,8 @@ limits an application designs around, and the sharp edges that cross domains.
 - Math types mapped onto the C3 standard library, with box3d's validity predicates and helpers.
 - Worlds: creation, stepping, tuning (including restitution iterations and propagation, and the
   isotropic inertia tolerance), worker threads and task callbacks, profile and counters,
-  friction and restitution mixing callbacks, pre-solve and custom-filter callbacks.
+  friction and restitution mixing callbacks, per-contact material overrides, pre-solve and
+  custom-filter callbacks, and a one-pass origin shift for large worlds.
 - Events: contact begin, end and hit; sensor begin and end; body moves; joint thresholds.
 - Bodies: type, pose, velocity, forces and impulses, mass data, damping, sleep, motion locks,
   bullets, safety factor and extents, contact and joint listing.
@@ -102,6 +103,8 @@ shipped archives are built with it off. `b3::require_float_abi()` returns
 
 Single precision bounds the useful world size. box3d's own guidance is that positions beyond about
 16 km from the origin lose precision, and its sanity limit is 100 km (`1e5` length units).
+A larger world keeps the simulation near the origin with
+[`world_shift_origin`](api/worlds.md#origin-shift), which moves the whole world in one pass.
 
 ## Fixed limits
 

@@ -15,6 +15,15 @@ alias FrictionFn = fn float(float friction_a, ulong user_material_id_a, float fr
  line after a contact's manifold is recomputed.
 *>
 alias RestitutionFn = fn float(float restitution_a, ulong user_material_id_a, float restitution_b, ulong user_material_id_b);
+
+<*
+ Overrides one touching contact's averaged material mix before the solver reads it; a negative or
+ non-finite value written back keeps the mix. Called from worker threads when the narrow phase
+ updates a contact, never while it is recycled, as a resting contact is on every step: after the
+ answers change, call world_invalidate_contact_materials(). Not recorded; must not touch the world;
+ its context is dereferenced on every call, so it must outlive the world.
+*>
+alias ContactMaterialFn = fn void(ShapeId shape_id_a, ShapeId shape_id_b, ContactMaterial* material, void* context);
 alias TaskFn = fn void(void* task_context);
 alias EnqueueTaskFn = fn void*(TaskFn task, void* task_context, void* user_context, ZString task_name);
 alias FinishTaskFn = fn void(void* user_task, void* user_context);
@@ -88,6 +97,18 @@ struct WorldDef {
     void* user_debug_shape_context;
     Capacity capacity;
     int internal_value;
+}
+
+<*
+ The material inputs the contact solver reads for one contact. rolling_resistance is already
+ scaled by the radius of the rolling shape. tangent_velocity is in world space, for conveyors: the
+ solver drives the tangential velocity of shape B's body relative to shape A's toward it.
+*>
+struct ContactMaterial {
+    float friction;
+    float restitution;
+    float rolling_resistance;
+    Vec3 tangent_velocity;
 }
 
 struct Profile {
@@ -237,4 +258,28 @@ extern fn void WorldId.set_friction_callback(self, FrictionFn fcn) @cname("b3Wor
  RestitutionFn for what box3d then calls, and how often.
 *>
 extern fn void WorldId.set_restitution_callback(self, RestitutionFn fcn) @cname("b3World_SetRestitutionCallback");
+
+<*
+ Installs fcn to override each touching contact's material before the solver runs, with context
+ passed to every call; a null fcn removes it. Every contact then updates on its next step, so fcn
+ reaches contacts already resting. A locked world keeps the callback it has. See
+ ContactMaterialFn for when box3d calls it and what it may write.
+*>
+extern fn void WorldId.set_contact_material_callback(self, ContactMaterialFn fcn, void* context) @cname("b3World_SetContactMaterialCallback");
+
+<*
+ Makes every contact update on its next step instead of being recycled, so the contact material
+ callback answers again. Call it when the answers change: a resting contact is recycled on every
+ step and otherwise keeps its old material for as long as it rests. The next step then runs the
+ whole narrow phase once. It wakes nothing; a sleeping contact updates when it wakes.
+*>
+extern fn void world_invalidate_contact_materials(WorldId world) @cname("b3World_InvalidateContactMaterials");
+
+<*
+ Moves the world origin to new_origin in one pass, so every position becomes position - new_origin:
+ bodies, shape bounds, broad-phase proxies and the last step's move and hit events. Joints,
+ contacts and velocities are relative to the bodies and carry over; no body wakes. A locked world
+ or a non-finite new_origin is ignored, without a fault. Recorded as a shift op.
+*>
+extern fn void world_shift_origin(WorldId world, Pos new_origin) @cname("b3World_ShiftOrigin");
 

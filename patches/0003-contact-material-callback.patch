@@ -1,0 +1,342 @@
+Contact material callback
+
+Adds b3ContactMaterial, b3ContactMaterialFcn and
+b3World_SetContactMaterialCallback( worldId, fcn, context ). When a callback is
+set, every touching contact the narrow phase updates calls it after its
+manifold is computed and before the solver reads it, with the two shape ids,
+the friction, restitution, rolling resistance and tangent velocity mixed from
+the shapes' surface materials, and the context. The callback may change any of
+them; the contact keeps what it writes until its next update. Convex, compound,
+mesh and height-field contacts all call it. A contact the pre-solve callback
+disables does not.
+
+Contact recycling skips the narrow phase, and with it the callback, for a
+contact whose bodies barely moved, and a resting contact is recycled on every
+step. So setting the callback clears the recycling state of every contact, and
+b3World_InvalidateContactMaterials( worldId ) and
+b3Shape_InvalidateContactMaterials( shapeId ) do the same for a world or one
+shape when the callback's answers change. They wake nothing: a sleeping
+contact updates when its island wakes. Both are recorded, as local ops 0x7E
+and 0x7D, and B3_REC_LOCAL_EXTENSIONS moves to level 2; the callback itself is
+not recorded, like the pre-solve callback.
+
+The callback runs on the worker threads of the step and writes only to the
+contact being updated, so the result does not depend on the thread count or
+the order of the updates. A negative or non-finite friction, restitution or
+rolling resistance, or a non-finite tangent velocity, keeps the mixed value.
+Without a callback, and without an invalidation, the narrow phase is
+unchanged.
+
+diff --git a/include/box3d/box3d.h b/include/box3d/box3d.h
+index 2549116..a869102 100644
+--- a/include/box3d/box3d.h
++++ b/include/box3d/box3d.h
+@@ -193,6 +193,19 @@ B3_API void b3World_SetCustomFilterCallback( b3WorldId worldId, b3CustomFilterFc
+ /// Register the pre-solve callback. This is optional.
+ B3_API void b3World_SetPreSolveCallback( b3WorldId worldId, b3PreSolveFcn* fcn, void* context );
+ 
++/// Register the contact material callback, which may override the friction, restitution, rolling
++/// resistance and tangent velocity of each touching contact before the solver runs. This is
++/// optional. Pass NULL to remove it. Every contact then updates on its next step instead of being
++/// recycled, so the new callback reaches contacts that are already resting.
++/// @see b3ContactMaterialFcn
++B3_API void b3World_SetContactMaterialCallback( b3WorldId worldId, b3ContactMaterialFcn* fcn, void* context );
++
++/// Make every contact in the world update on its next step instead of being recycled, so the
++/// contact material callback runs on it again. Call this when the callback's answers change: a
++/// resting contact is recycled on every step and would otherwise keep its old material for as long
++/// as it rests. A contact of a sleeping body updates when the body wakes; this wakes nothing.
++B3_API void b3World_InvalidateContactMaterials( b3WorldId worldId );
++
+ /// Move the world origin to newOrigin in one pass: every body position, shape bounding box,
+ /// broad-phase proxy and cached contact query box becomes relative to newOrigin, so
+ /// position -= newOrigin. Joints, contact manifolds and warm starting impulses are relative to
+@@ -1037,6 +1050,11 @@ B3_API void b3Shape_EnablePreSolveEvents( b3ShapeId shapeId, bool flag );
+ /// Returns true if pre-solve events are enabled
+ B3_API bool b3Shape_ArePreSolveEventsEnabled( b3ShapeId shapeId );
+ 
++/// Make every contact of this shape update on its next step instead of being recycled, so the
++/// contact material callback runs on it again. b3World_InvalidateContactMaterials for one shape
++/// whose answers changed. This wakes nothing.
++B3_API void b3Shape_InvalidateContactMaterials( b3ShapeId shapeId );
++
+ /// Enable contact hit events for this shape. Ignored for sensors.
+ /// @see b3WorldDef.hitEventThreshold
+ B3_API void b3Shape_EnableHitEvents( b3ShapeId shapeId, bool flag );
+diff --git a/include/box3d/types.h b/include/box3d/types.h
+index 11678e5..5e27bb6 100644
+--- a/include/box3d/types.h
++++ b/include/box3d/types.h
+@@ -96,6 +96,48 @@ typedef bool b3CustomFilterFcn( b3ShapeId shapeIdA, b3ShapeId shapeIdB, void* co
+ typedef bool b3PreSolveFcn( b3ShapeId shapeIdA, b3ShapeId shapeIdB, b3Pos point, b3Vec3 normal,
+ 							void* context );
+ 
++/// The material inputs the contact solver reads for one contact.
++/// @see b3ContactMaterialFcn
++/// @ingroup world
++typedef struct b3ContactMaterial
++{
++	/// The Coulomb friction coefficient, usually in the range [0,1].
++	float friction;
++
++	/// The coefficient of restitution (bounce), usually in the range [0,1].
++	float restitution;
++
++	/// The rolling resistance, already scaled by the radius of the rolling shape.
++	float rollingResistance;
++
++	/// The relative surface velocity in world space, for conveyor belts: the solver drives the
++	/// tangential part of the velocity of body B relative to body A at the contact toward this.
++	/// The mixed value is the surface velocity of shape A minus that of shape B.
++	b3Vec3 tangentVelocity;
++} b3ContactMaterial;
++
++/// Prototype for a contact material callback.
++/// This is called after a touching contact is updated, before it goes to the solver. The material
++/// holds the values mixed from the two shapes' surface materials by the friction and restitution
++/// callbacks. Change any of them to override the material of this contact for this update.
++/// Notes:
++/// - this function must be thread-safe, it is called from the worker threads of the step
++/// - this is called for every touching contact the narrow phase updates, not for contacts that
++///   are recycled, sleeping or not touching, which keep the last material written to them
++/// - a resting contact is recycled on every step, so it keeps its material for as long as it
++///   rests: setting the callback updates every contact once, and when the answers change later
++///   call b3World_InvalidateContactMaterials or b3Shape_InvalidateContactMaterials
++/// - there is no child index or triangle: on a multi-material mesh, height field or compound the
++///   material holds the contact's averaged mix
++/// - a negative or non-finite friction, restitution or rolling resistance, or a non-finite
++///   tangent velocity, is ignored and the mixed value is kept
++/// - the callback is not recorded, like the pre-solve callback, so a replay of a world that uses
++///   it diverges
++/// - the context pointer is stored in the world and passed to every call
++/// @warning Do not attempt to read or modify the world inside this callback
++/// @ingroup world
++typedef void b3ContactMaterialFcn( b3ShapeId shapeIdA, b3ShapeId shapeIdB, b3ContactMaterial* material, void* context );
++
+ /// Prototype callback for overlap queries.
+ /// Called for each shape found in the query.
+ /// @see b3World_OverlapAABB
+diff --git a/src/contact.c b/src/contact.c
+index d200301..67b62f1 100644
+--- a/src/contact.c
++++ b/src/contact.c
+@@ -731,6 +731,45 @@ static bool b3UpdateConvexContact( b3World* world, int workerIndex, b3Contact* c
+ 	return true;
+ }
+ 
++// Lets the application override the mixed material of a touching contact. Runs on a worker thread
++// and writes only to this contact, so the result does not depend on the thread or the order.
++static void b3ApplyContactMaterial( b3World* world, b3Contact* contact, const b3Shape* shapeA, const b3Shape* shapeB )
++{
++	b3ShapeId shapeIdA = { shapeA->id + 1, world->worldId, shapeA->generation };
++	b3ShapeId shapeIdB = { shapeB->id + 1, world->worldId, shapeB->generation };
++
++	b3ContactMaterial material = {
++		.friction = contact->friction,
++		.restitution = contact->restitution,
++		.rollingResistance = contact->rollingResistance,
++		.tangentVelocity = contact->tangentVelocity,
++	};
++
++	// this call assumes thread safety
++	world->contactMaterialFcn( shapeIdA, shapeIdB, &material, world->contactMaterialContext );
++
++	// A value the solver cannot use keeps the mixed one
++	if ( b3IsValidFloat( material.friction ) && material.friction >= 0.0f )
++	{
++		contact->friction = material.friction;
++	}
++
++	if ( b3IsValidFloat( material.restitution ) && material.restitution >= 0.0f )
++	{
++		contact->restitution = material.restitution;
++	}
++
++	if ( b3IsValidFloat( material.rollingResistance ) && material.rollingResistance >= 0.0f )
++	{
++		contact->rollingResistance = material.rollingResistance;
++	}
++
++	if ( b3IsValidVec3( material.tangentVelocity ) )
++	{
++		contact->tangentVelocity = material.tangentVelocity;
++	}
++}
++
+ // Update the contact manifold and touching status.
+ // Note: do not assume the shape AABBs are overlapping or are valid.
+ bool b3UpdateContact( b3World* world, int workerIndex, b3Contact* contact, b3Shape* shapeA, b3Vec3 localCenterA,
+@@ -879,6 +918,11 @@ bool b3UpdateContact( b3World* world, int workerIndex, b3Contact* contact, b3Sha
+ 			}
+ 		}
+ 
++		if ( world->contactMaterialFcn != NULL )
++		{
++			b3ApplyContactMaterial( world, contact, shapeA, shapeB );
++		}
++
+ 		contact->flags |= b3_simTouchingFlag;
+ 	}
+ 	else
+diff --git a/src/physics_world.c b/src/physics_world.c
+index 0a77e19..c71b675 100644
+--- a/src/physics_world.c
++++ b/src/physics_world.c
+@@ -3436,6 +3436,47 @@ void b3World_SetPreSolveCallback( b3WorldId worldId, b3PreSolveFcn* fcn, void* c
+ 	world->preSolveContext = context;
+ }
+ 
++// A recycled contact skips the narrow phase and keeps its material, and a resting contact is
++// recycled on every step, so a change of materials reaches it only through a full update.
++static void b3InvalidateAllContactMaterials( b3World* world )
++{
++	for ( int contactIndex = 0; contactIndex < world->contacts.count; ++contactIndex )
++	{
++		b3Contact* contact = world->contacts.data + contactIndex;
++		if ( contact->contactId != B3_NULL_INDEX )
++		{
++			contact->flags &= ~b3_relativeTransformValid;
++		}
++	}
++}
++
++void b3World_SetContactMaterialCallback( b3WorldId worldId, b3ContactMaterialFcn* fcn, void* context )
++{
++	b3World* world = b3GetUnlockedWorldFromId( worldId );
++	if ( world == NULL )
++	{
++		return;
++	}
++	world->contactMaterialFcn = fcn;
++	world->contactMaterialContext = context;
++
++	// The callback is not recorded, but the invalidation changes the simulation, so it is.
++	B3_REC( world, WorldInvalidateContactMaterials, worldId );
++	b3InvalidateAllContactMaterials( world );
++}
++
++void b3World_InvalidateContactMaterials( b3WorldId worldId )
++{
++	b3World* world = b3GetUnlockedWorldFromId( worldId );
++	if ( world == NULL )
++	{
++		return;
++	}
++
++	B3_REC( world, WorldInvalidateContactMaterials, worldId );
++	b3InvalidateAllContactMaterials( world );
++}
++
+ void b3World_SetGravity( b3WorldId worldId, b3Vec3 gravity )
+ {
+ 	b3World* world = b3GetWorldFromId( worldId );
+diff --git a/src/physics_world.h b/src/physics_world.h
+index 1436ee4..5e74976 100644
+--- a/src/physics_world.h
++++ b/src/physics_world.h
+@@ -259,6 +259,9 @@ typedef struct b3World
+ 	b3PreSolveFcn* preSolveFcn;
+ 	void* preSolveContext;
+ 
++	b3ContactMaterialFcn* contactMaterialFcn;
++	void* contactMaterialContext;
++
+ 	b3CustomFilterFcn* customFilterFcn;
+ 	void* customFilterContext;
+ 
+diff --git a/src/recording.h b/src/recording.h
+index 6578027..805f859 100644
+--- a/src/recording.h
++++ b/src/recording.h
+@@ -56,9 +56,10 @@ typedef struct b3World b3World;
+ 
+ // Written to the header's reserved2 by a build that carries local ops (0x78-0x7F). The minor
+ // version stays upstream's, so it never claims a number upstream assigns to its own ops; a reader
+-// tells a locally extended recording by this marker: 'B3L' and the local op set's level, 1 for
+-// WorldShiftOrigin at 0x7F. An upstream build writes zero there.
+-#define B3_REC_LOCAL_EXTENSIONS 0x014C3342u
++// tells a locally extended recording by this marker: 'B3L' and the local op set's level, 2 for
++// WorldShiftOrigin at 0x7F and the two contact material invalidations at 0x7E and 0x7D. An
++// upstream build writes zero there.
++#define B3_REC_LOCAL_EXTENSIONS 0x024C3342u
+ 
+ // File header, fixed 48 bytes. Contains the registry locator so the player
+ // can load geometry before replaying any ops.
+diff --git a/src/recording_ops.inl b/src/recording_ops.inl
+index e38a450..0dcd13f 100644
+--- a/src/recording_ops.inl
++++ b/src/recording_ops.inl
+@@ -49,6 +49,10 @@ B3_REC_OP( 0x70, WorldSetIsotropicInertiaTolerance, RET_NONE, ARG( WORLDID, worl
+ // Local op, not an upstream one: the world origin shift.
+ B3_REC_OP( 0x7F, WorldShiftOrigin, RET_NONE, ARG( WORLDID, world ) ARG( POSITION, newOrigin ) )
+ 
++// Local ops, not upstream ones: forcing contacts to update. The callback itself is not recorded.
++B3_REC_OP( 0x7E, WorldInvalidateContactMaterials, RET_NONE, ARG( WORLDID, world ) )
++B3_REC_OP( 0x7D, ShapeInvalidateContactMaterials, RET_NONE, ARG( SHAPEID, shape ) )
++
+ // Body
+ B3_REC_OP( 0x10, CreateBody, RET_BODYID, ARG( WORLDID, world ) ARG( BODYDEF, def ) )
+ B3_REC_OP( 0x11, DestroyBody, RET_NONE, ARG( BODYID, body ) )
+diff --git a/src/replay.c b/src/replay.c
+index 154d4c0..2c1b98d 100644
+--- a/src/replay.c
++++ b/src/replay.c
+@@ -841,6 +841,19 @@ static void b3RecDispatch_WorldShiftOrigin( const b3RecArgs_WorldShiftOrigin* a,
+ 	b3World_ShiftOrigin( rdr->replayWorldId, a->newOrigin );
+ }
+ 
++static void b3RecDispatch_WorldInvalidateContactMaterials( const b3RecArgs_WorldInvalidateContactMaterials* a,
++														   b3RecReader* rdr )
++{
++	(void)a;
++	b3World_InvalidateContactMaterials( rdr->replayWorldId );
++}
++
++static void b3RecDispatch_ShapeInvalidateContactMaterials( const b3RecArgs_ShapeInvalidateContactMaterials* a,
++														   b3RecReader* rdr )
++{
++	b3Shape_InvalidateContactMaterials( b3RecMakeShapeId( rdr, a->shape ) );
++}
++
+ static void b3RecDispatch_CreateBody( const b3RecArgs_CreateBody* a, b3RecReader* rdr )
+ {
+ 	b3BodyId recId = b3RecR_BODYID( rdr );
+diff --git a/src/shape.c b/src/shape.c
+index 7b21700..4845f7a 100644
+--- a/src/shape.c
++++ b/src/shape.c
+@@ -1492,6 +1492,34 @@ void b3Shape_EnablePreSolveEvents( b3ShapeId shapeId, bool flag )
+ 	shape->flags = flag ? shape->flags | b3_enablePreSolveEvents : shape->flags & ~b3_enablePreSolveEvents;
+ }
+ 
++void b3Shape_InvalidateContactMaterials( b3ShapeId shapeId )
++{
++	b3World* world = b3GetUnlockedWorld( shapeId.world0 );
++	if ( world == NULL )
++	{
++		return;
++	}
++
++	B3_REC( world, ShapeInvalidateContactMaterials, shapeId );
++
++	b3Shape* shape = b3GetShape( world, shapeId );
++	b3Body* body = b3Array_Get( world->bodies, shape->bodyId );
++
++	// A recycled contact skips the narrow phase and keeps its material; see b3World_InvalidateContactMaterials.
++	int edgeKey = body->headContactKey;
++	while ( edgeKey != B3_NULL_INDEX )
++	{
++		int contactId = edgeKey >> 1;
++		int edgeIndex = edgeKey & 1;
++		b3Contact* contact = b3Array_Get( world->contacts, contactId );
++		if ( contact->shapeIdA == shape->id || contact->shapeIdB == shape->id )
++		{
++			contact->flags &= ~b3_relativeTransformValid;
++		}
++		edgeKey = contact->edges[edgeIndex].nextKey;
++	}
++}
++
+ bool b3Shape_ArePreSolveEventsEnabled( b3ShapeId shapeId )
+ {
+ 	b3World* world = b3GetWorld( shapeId.world0 );

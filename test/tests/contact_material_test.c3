@@ -469,7 +469,7 @@ fn void the_material_callback_sees_the_user_material_ids_of_both_surfaces() @tes
     for (int pass = 0; pass < 2; pass++) {
         foreach (i, calls : seen.calls) {
             assert(calls > 0, "every watched contact reached the callback");
-            assert(seen.first_is_watched[i] == false, "the field, the compound and the mesh are shape A");
+            assert(seen.first_is_watched[i] == false, "the field, compound and mesh are shape A");
             assert(seen.id_a[i] == expected_a[i] && seen.id_b[i] == expected_b[i],
                 "lane or sphere child first, the box second: the order of the shape ids");
         }

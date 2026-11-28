@@ -187,8 +187,9 @@ produced. Change any field to override that contact:
 It runs for convex, compound, mesh and height-field contacts, but not for a contact the pre-solve
 callback disabled. The callback names no child shape or triangle, so on a multi-material mesh,
 height field or compound it sees the contact's averaged mix. The two user material ids tell it which
-surface it touches: a convex shape or a compound child gives its own material, and a mesh or height
-field gives the material under most of the manifold points (the lowest index on a tie). Passing null
+surface it touches: a convex shape or a convex compound child gives its own material, and a mesh (a
+compound's mesh child too) or height field gives the material under most of the manifold points
+(the lowest index on a tie). Passing null
 removes it. A negative or
 non-finite friction, restitution or rolling resistance, or a non-finite tangent velocity, keeps the
 mixed value.

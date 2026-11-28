@@ -330,12 +330,14 @@ fn void changed_answers_reach_resting_contacts_once_invalidated() @test {
     assert(both[0] > 2.5 && both[0] < 3.5, "invalidating the world starts the other crate as well");
 }
 
+const int WATCHED_BOXES = 7;
+
 struct SeenMaterialIds {
-    b3::ShapeId[3] watched;
-    bool[3] first_is_watched;
-    ulong[3] id_a;
-    ulong[3] id_b;
-    int[3] calls;
+    b3::ShapeId[WATCHED_BOXES] watched;
+    bool[WATCHED_BOXES] first_is_watched;
+    ulong[WATCHED_BOXES] id_a;
+    ulong[WATCHED_BOXES] id_b;
+    int[WATCHED_BOXES] calls;
 }
 
 fn void recording_material_ids(
@@ -357,10 +359,16 @@ fn void recording_material_ids(
     }
 }
 
-fn b3::ShapeId a_box_with_material_id(b3::WorldId world, b3::Pos position, ulong user_material_id) {
+fn b3::ShapeId a_box_with_material_id(
+  b3::WorldId world,
+  b3::Pos position,
+  ulong user_material_id,
+  b3::Quat rotation = {0.0, 0.0, 0.0, 1.0},
+) {
     b3::BodyDef body_def = b3::default_body_def();
     body_def.type = b3::BodyType.DYNAMIC;
     body_def.position = position;
+    body_def.rotation = rotation;
     b3::BodyId body = b3::create_body(world, &body_def)!!;
     b3::BoxHull box = b3::make_box_hull(0.25, 0.25, 0.25);
     b3::ShapeDef shape_def = b3::default_shape_def();
@@ -418,22 +426,50 @@ fn void the_material_callback_sees_the_user_material_ids_of_both_surfaces() @tes
     b3::ShapeDef compound_shape_def = b3::default_shape_def();
     b3::create_baked_compound_shape(sphere_body, &compound_shape_def, compound)!!;
 
+    // A square of two triangles, the first with material 0 and the second with material 1.
+    b3::Vec3[4] corners = {{-2.0, 0.0, -2.0}, {2.0, 0.0, -2.0}, {2.0, 0.0, 2.0}, {-2.0, 0.0, 2.0}};
+    int[6] corner_indices = { 0, 2, 1, 0, 3, 2 };
+    char[2] triangle_materials = { 0, 1 };
+    b3::MeshDef mesh_def;
+    mesh_def.vertices = &corners[0];
+    mesh_def.indices = &corner_indices[0];
+    mesh_def.material_indices = &triangle_materials[0];
+    mesh_def.vertex_count = 4;
+    mesh_def.triangle_count = 2;
+    b3::MeshData* mesh = b3::create_mesh(&mesh_def)!!;
+    defer b3::destroy_mesh(mesh);
+    b3::BodyDef mesh_body_def = b3::default_body_def();
+    mesh_body_def.position = {20.0, 0.0, 0.0};
+    b3::BodyId mesh_body = b3::create_body(world, &mesh_body_def)!!;
+    b3::ShapeDef mesh_shape_def = b3::default_shape_def();
+    mesh_shape_def.materials = &surfaces[0];
+    mesh_shape_def.material_count = 2;
+    b3::create_mesh_shape(mesh_body, &mesh_shape_def, mesh, {1.0, 1.0, 1.0})!!;
+
     SeenMaterialIds seen = {
         .watched = {
             a_box_with_material_id(world, {1.5, 0.24, 0.5}, 5),
             a_box_with_material_id(world, {1.5, 0.24, 1.5}, 6),
             a_box_with_material_id(world, {10.0, 0.74, 0.0}, 7),
+            // Across the lane border, two corners on each lane: a tie, so the lowest index wins.
+            a_box_with_material_id(world, {2.5, 0.24, 1.0}, 8),
+            // Turned 45 degrees about y, three corners on the second lane and one on the first:
+            // the majority wins although its index is not the lowest.
+            a_box_with_material_id(world, {3.5, 0.24, 1.1}, 9, {0.0, 0.38268343, 0.0, 0.9238795}),
+            // One box inside each triangle of the triangle mesh below.
+            a_box_with_material_id(world, {21.0, 0.24, -1.0}, 10),
+            a_box_with_material_id(world, {19.0, 0.24, 1.0}, 12),
         },
     };
     world.set_contact_material_callback(&recording_material_ids, &seen);
     for (int i = 0; i < 20; i++) b3::world_step(world, MATERIAL_STEP, 4);
 
-    ulong[3] expected_a = { 11, 22, 33 };
-    ulong[3] expected_b = { 5, 6, 7 };
+    ulong[WATCHED_BOXES] expected_a = { 11, 22, 33, 11, 22, 11, 22 };
+    ulong[WATCHED_BOXES] expected_b = { 5, 6, 7, 8, 9, 10, 12 };
     for (int pass = 0; pass < 2; pass++) {
         foreach (i, calls : seen.calls) {
             assert(calls > 0, "every watched contact reached the callback");
-            assert(seen.first_is_watched[i] == false, "the field and the compound are shape A");
+            assert(seen.first_is_watched[i] == false, "the field, the compound and the mesh are shape A");
             assert(seen.id_a[i] == expected_a[i] && seen.id_b[i] == expected_b[i],
                 "lane or sphere child first, the box second: the order of the shape ids");
         }

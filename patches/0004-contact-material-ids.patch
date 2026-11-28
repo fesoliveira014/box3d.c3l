@@ -9,7 +9,8 @@ A convex contact, and a compound child contact against a convex shape, take each
 the pairs the narrow phase flips are swapped back to the contact's order. A mesh or height-field
 contact takes for shape A the material under most of its manifold points (the lowest index on a
 tie) and for shape B its material. The ids are stored on the contact when its manifold is updated,
-and only while a contact material callback is set, so a world without one pays nothing; setting
+and only while a contact material callback is set, so a world without one does no extra work (each
+contact does grow by two 64-bit fields); setting
 the callback already makes every contact update once.
 
 diff --git a/include/box3d/types.h b/include/box3d/types.h
@@ -35,9 +36,9 @@ index 5e27bb6..7110b91 100644
  /// - there is no child index or triangle: on a multi-material mesh, height field or compound the
  ///   material holds the contact's averaged mix
 +/// - userMaterialIdA and userMaterialIdB are the user material ids of the two surfaces in the
-+///   order of shapeIdA and shapeIdB. A convex or compound child shape gives its own material; a
-+///   mesh or height field gives the material under most of the manifold points (the lowest
-+///   index on a tie)
++///   order of shapeIdA and shapeIdB. A convex shape or a convex compound child gives its own
++///   material; a mesh (a compound's mesh child too) or height field gives the material under
++///   most of the manifold points (the lowest index on a tie)
  /// - a negative or non-finite friction, restitution or rolling resistance, or a non-finite
  ///   tangent velocity, is ignored and the mixed value is kept
  /// - the callback is not recorded, like the pre-solve callback, so a replay of a world that uses

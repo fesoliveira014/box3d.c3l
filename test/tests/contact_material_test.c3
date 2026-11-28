@@ -329,3 +329,117 @@ fn void changed_answers_reach_resting_contacts_once_invalidated() @test {
     float[2] both = crate_speeds_over_a_second(&run);
     assert(both[0] > 2.5 && both[0] < 3.5, "invalidating the world starts the other crate as well");
 }
+
+struct SeenMaterialIds {
+    b3::ShapeId[3] watched;
+    bool[3] first_is_watched;
+    ulong[3] id_a;
+    ulong[3] id_b;
+    int[3] calls;
+}
+
+fn void recording_material_ids(
+  b3::ShapeId shape_a,
+  b3::ShapeId shape_b,
+  b3::ContactMaterial* material,
+  void* context,
+) {
+    SeenMaterialIds* seen = context;
+    foreach (i, watched : seen.watched) {
+        if (!touches(shape_a, shape_b, watched)) continue;
+        seen.first_is_watched[i] = same_shape(shape_a, watched);
+        seen.id_a[i] = material.user_material_id_a;
+        seen.id_b[i] = material.user_material_id_b;
+        seen.calls[i]++;
+        // A write to the ids is ignored: the next call still sees the surfaces' own ids.
+        material.user_material_id_a = 999;
+        material.user_material_id_b = 999;
+    }
+}
+
+fn b3::ShapeId a_box_with_material_id(b3::WorldId world, b3::Pos position, ulong user_material_id) {
+    b3::BodyDef body_def = b3::default_body_def();
+    body_def.type = b3::BodyType.DYNAMIC;
+    body_def.position = position;
+    b3::BodyId body = b3::create_body(world, &body_def)!!;
+    b3::BoxHull box = b3::make_box_hull(0.25, 0.25, 0.25);
+    b3::ShapeDef shape_def = b3::default_shape_def();
+    shape_def.density = 1.0;
+    shape_def.base_material.user_material_id = user_material_id;
+    return b3::create_hull_shape(body, &shape_def, &box.base)!!;
+}
+
+fn void the_material_callback_sees_the_user_material_ids_of_both_surfaces() @test {
+    b3::WorldDef world_def = b3::default_world_def();
+    b3::WorldId world = b3::create_world(&world_def)!!;
+    defer b3::destroy_world(world);
+
+    // A height field of two lanes of cells along x, the first with material id 11, the second 22.
+    float[3 * 5] heights;
+    char[2 * 4] lanes = { 0, 0, 0, 0, 1, 1, 1, 1 };
+    b3::HeightFieldDef field_def;
+    field_def.heights = &heights[0];
+    field_def.material_indices = &lanes[0];
+    field_def.scale = { 1.0, 1.0, 1.0 };
+    field_def.count_x = 5;
+    field_def.count_z = 3;
+    field_def.global_minimum_height = -1.0;
+    field_def.global_maximum_height = 1.0;
+    b3::HeightFieldData* field = b3::create_height_field(&field_def)!!;
+    defer b3::destroy_height_field(field);
+
+    b3::SurfaceMaterial[2] surfaces;
+    surfaces[0] = surfaces[1] = b3::default_surface_material();
+    surfaces[0].user_material_id = 11;
+    surfaces[1].user_material_id = 22;
+    b3::BodyDef ground_def = b3::default_body_def();
+    b3::BodyId ground = b3::create_body(world, &ground_def)!!;
+    b3::ShapeDef field_shape_def = b3::default_shape_def();
+    field_shape_def.materials = &surfaces[0];
+    field_shape_def.material_count = 2;
+    b3::create_height_field_shape(ground, &field_shape_def, field)!!;
+
+    // A compound of one sphere with a box on it: the narrow phase flips a sphere child against a
+    // hull, which must not swap the ids the callback sees.
+    b3::BodyDef sphere_body_def = b3::default_body_def();
+    sphere_body_def.position = {10.0, 0.0, 0.0};
+    b3::BodyId sphere_body = b3::create_body(world, &sphere_body_def)!!;
+    b3::SurfaceMaterial ball_surface = b3::default_surface_material();
+    ball_surface.user_material_id = 33;
+    b3::CompoundSphereDef[1] balls = {{
+        .sphere = { .center = {0.0, 0.0, 0.0}, .radius = 0.5 },
+        .material = ball_surface,
+    }};
+    b3::CompoundDef compound_def;
+    compound_def.spheres = &balls[0];
+    compound_def.sphere_count = 1;
+    b3::CompoundData* compound = b3::create_compound(&compound_def)!!;
+    defer b3::destroy_compound(compound);
+    b3::ShapeDef compound_shape_def = b3::default_shape_def();
+    b3::create_baked_compound_shape(sphere_body, &compound_shape_def, compound)!!;
+
+    SeenMaterialIds seen = {
+        .watched = {
+            a_box_with_material_id(world, {1.5, 0.24, 0.5}, 5),
+            a_box_with_material_id(world, {1.5, 0.24, 1.5}, 6),
+            a_box_with_material_id(world, {10.0, 0.74, 0.0}, 7),
+        },
+    };
+    world.set_contact_material_callback(&recording_material_ids, &seen);
+    for (int i = 0; i < 20; i++) b3::world_step(world, MATERIAL_STEP, 4);
+
+    ulong[3] expected_a = { 11, 22, 33 };
+    ulong[3] expected_b = { 5, 6, 7 };
+    for (int pass = 0; pass < 2; pass++) {
+        foreach (i, calls : seen.calls) {
+            assert(calls > 0, "every watched contact reached the callback");
+            assert(seen.first_is_watched[i] == false, "the field and the compound are shape A");
+            assert(seen.id_a[i] == expected_a[i] && seen.id_b[i] == expected_b[i],
+                "lane or sphere child first, the box second: the order of the shape ids");
+        }
+        // The callback wrote 999 into both ids; a second update still sees the surfaces' own.
+        seen.calls = {};
+        b3::world_invalidate_contact_materials(world);
+        for (int i = 0; i < 2; i++) b3::world_step(world, MATERIAL_STEP, 4);
+    }
+}

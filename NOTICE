@@ -16,7 +16,9 @@ patches listed in the source repository's patches/series applied. The modificati
 - add b3World_SetContactMaterialCallback, b3ContactMaterialFcn and b3ContactMaterial, which let
   the application override the material of each touching contact before the solver runs, and
   b3World_InvalidateContactMaterials and b3Shape_InvalidateContactMaterials, which make resting
-  contacts ask for their material again.
+  contacts ask for their material again;
+- add userMaterialIdA and userMaterialIdB to b3ContactMaterial, which tell the contact material
+  callback the user material id of the surface each shape touches.
 
 The C3 binding itself (everything under src/) is MIT-licensed —
 see LICENSE.

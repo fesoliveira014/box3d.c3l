@@ -64,6 +64,10 @@ The library is box3d with a patch series applied:
   overrides the material of each touching contact before the solver runs, and the two
   `*_invalidate_contact_materials` calls for answers that change; see `docs/api/worlds.md`. A
   world that uses none of them behaves exactly as upstream box3d.
+- `0004-contact-material-ids.patch` adds `ContactMaterial.user_material_id_a` and
+  `user_material_id_b`, the user material ids of the two surfaces a contact touches, so the
+  callback can tell which surface of a mesh, height field or compound it is answering for; see
+  `docs/api/worlds.md`. A callback that never reads them is unchanged.
 
 ## License
 

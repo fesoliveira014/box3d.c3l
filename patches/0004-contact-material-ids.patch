@@ -1,0 +1,153 @@
+Contact material callback: the user material ids of both surfaces
+
+b3ContactMaterial grows two inputs at its end, userMaterialIdA and userMaterialIdB: the
+b3SurfaceMaterial::userMaterialId of the surface each shape touches at this contact, in the order
+of the callback's shapeIdA and shapeIdB. A write to them is ignored. No existing field moves, so a
+caller that never reads them is unchanged.
+
+A convex contact, and a compound child contact against a convex shape, take each shape's material;
+the pairs the narrow phase flips are swapped back to the contact's order. A mesh or height-field
+contact takes for shape A the material under most of its manifold points (the lowest index on a
+tie) and for shape B its material. The ids are stored on the contact when its manifold is updated,
+and only while a contact material callback is set, so a world without one pays nothing; setting
+the callback already makes every contact update once.
+
+diff --git a/include/box3d/types.h b/include/box3d/types.h
+index 5e27bb6..7110b91 100644
+--- a/include/box3d/types.h
++++ b/include/box3d/types.h
+@@ -114,6 +114,13 @@ typedef struct b3ContactMaterial
+ 	/// tangential part of the velocity of body B relative to body A at the contact toward this.
+ 	/// The mixed value is the surface velocity of shape A minus that of shape B.
+ 	b3Vec3 tangentVelocity;
++
++	/// Input only: the user material id of the surface material that shape A touches with at this
++	/// contact (b3SurfaceMaterial::userMaterialId). A write is ignored.
++	uint64_t userMaterialIdA;
++
++	/// Input only: the same for shape B. A write is ignored.
++	uint64_t userMaterialIdB;
+ } b3ContactMaterial;
+ 
+ /// Prototype for a contact material callback.
+@@ -129,6 +136,10 @@ typedef struct b3ContactMaterial
+ ///   call b3World_InvalidateContactMaterials or b3Shape_InvalidateContactMaterials
+ /// - there is no child index or triangle: on a multi-material mesh, height field or compound the
+ ///   material holds the contact's averaged mix
++/// - userMaterialIdA and userMaterialIdB are the user material ids of the two surfaces in the
++///   order of shapeIdA and shapeIdB. A convex or compound child shape gives its own material; a
++///   mesh or height field gives the material under most of the manifold points (the lowest
++///   index on a tie)
+ /// - a negative or non-finite friction, restitution or rolling resistance, or a non-finite
+ ///   tangent velocity, is ignored and the mixed value is kept
+ /// - the callback is not recorded, like the pre-solve callback, so a replay of a world that uses
+diff --git a/src/contact.c b/src/contact.c
+index 67b62f1..1d2361f 100644
+--- a/src/contact.c
++++ b/src/contact.c
+@@ -652,6 +652,13 @@ static bool b3UpdateConvexContact( b3World* world, int workerIndex, b3Contact* c
+ 	contact->restitution = world->restitutionCallback( materialA->restitution, materialA->userMaterialId, materialB->restitution,
+ 													   materialB->userMaterialId );
+ 
++	if ( world->contactMaterialFcn != NULL )
++	{
++		// The contact's shape order is the reverse of this function's when flipped.
++		contact->userMaterialIdA = flip ? materialB->userMaterialId : materialA->userMaterialId;
++		contact->userMaterialIdB = flip ? materialA->userMaterialId : materialB->userMaterialId;
++	}
++
+ 	if ( materialA->rollingResistance > 0.0f || materialB->rollingResistance > 0.0f )
+ 	{
+ 		b3ShapeType typeA = shapeA->type;
+@@ -743,6 +750,8 @@ static void b3ApplyContactMaterial( b3World* world, b3Contact* contact, const b3
+ 		.restitution = contact->restitution,
+ 		.rollingResistance = contact->rollingResistance,
+ 		.tangentVelocity = contact->tangentVelocity,
++		.userMaterialIdA = contact->userMaterialIdA,
++		.userMaterialIdB = contact->userMaterialIdB,
+ 	};
+ 
+ 	// this call assumes thread safety
+diff --git a/src/contact.h b/src/contact.h
+index c4388b3..57bb433 100644
+--- a/src/contact.h
++++ b/src/contact.h
+@@ -159,6 +159,11 @@ typedef struct b3Contact
+ 	// This is monotonically advanced when a contact is allocated in this slot
+ 	// Used to check for invalid b3ContactId
+ 	uint32_t generation;
++
++	// User material ids of the surfaces of shape A and B, in contact order. Only kept up to date
++	// while a contact material callback is set.
++	uint64_t userMaterialIdA;
++	uint64_t userMaterialIdB;
+ } b3Contact;
+ 
+ typedef struct b3ContactSpec
+diff --git a/src/mesh_contact.c b/src/mesh_contact.c
+index 2b03577..25cbc8c 100644
+--- a/src/mesh_contact.c
++++ b/src/mesh_contact.c
+@@ -1319,6 +1319,14 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
+ 		float restitution = 0.0f;
+ 		float sampleCount = 0.0f;
+ 
++		// Only a world with a contact material callback reads the ids, and only it pays for the count.
++		int* materialCounts = NULL;
++		if ( world->contactMaterialFcn != NULL )
++		{
++			materialCounts = b3Bump( &arena, shapeA->materialCount * sizeof( int ) );
++			memset( materialCounts, 0, shapeA->materialCount * sizeof( int ) );
++		}
++
+ 		const uint8_t* materialIndices;
+ 		if ( shapeA->type == b3_meshShape )
+ 		{
+@@ -1353,6 +1361,11 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
+ 
+ 				materialIndex = b3ClampInt( materialIndex, 0, shapeA->materialCount - 1 );
+ 				b3SurfaceMaterial material = materialsA[materialIndex];
++				if ( materialCounts != NULL )
++				{
++					materialCounts[materialIndex] += 1;
++				}
++
+ 				friction += world->frictionCallback( material.friction, material.userMaterialId, materialB->friction,
+ 													 materialB->userMaterialId );
+ 				restitution += world->restitutionCallback( material.restitution, material.userMaterialId, materialB->restitution,
+@@ -1372,6 +1385,22 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
+ 			tangentVelocityA = b3MulSV( invCount, tangentVelocityA );
+ 		}
+ 
++		if ( materialCounts != NULL )
++		{
++			// The material under most of the points, the lowest index on a tie.
++			int bestIndex = 0;
++			for ( int i = 1; i < shapeA->materialCount; ++i )
++			{
++				if ( materialCounts[i] > materialCounts[bestIndex] )
++				{
++					bestIndex = i;
++				}
++			}
++
++			contact->userMaterialIdA = materialsA[bestIndex].userMaterialId;
++			contact->userMaterialIdB = materialB->userMaterialId;
++		}
++
+ 		B3_ASSERT( b3IsValidFloat( contact->friction ) && contact->friction >= 0.0f );
+ 		B3_ASSERT( b3IsValidFloat( contact->restitution ) && contact->restitution >= 0.0f );
+ 	}
+@@ -1383,6 +1412,12 @@ bool b3ComputeMeshManifolds( b3World* world, int workerIndex, b3Contact* contact
+ 		contact->restitution = world->restitutionCallback( materialsA[0].restitution, materialsA[0].userMaterialId,
+ 														   materialB->restitution, materialB->userMaterialId );
+ 		tangentVelocityA = materialsA[0].tangentVelocity;
++
++		if ( world->contactMaterialFcn != NULL )
++		{
++			contact->userMaterialIdA = materialsA[0].userMaterialId;
++			contact->userMaterialIdB = materialB->userMaterialId;
++		}
+ 	}
+ 
+ 	tangentVelocityA = b3RotateVector( xfA.q, tangentVelocityA );

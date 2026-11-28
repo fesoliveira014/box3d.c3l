@@ -147,12 +147,14 @@ $assert SurfaceMaterial::members[3].offset == 12 && SurfaceMaterial::members[3].
 $assert SurfaceMaterial::members[4].offset == 24 && SurfaceMaterial::members[4].name == "user_material_id";
 $assert SurfaceMaterial::members[5].offset == 32 && SurfaceMaterial::members[5].name == "custom_color";
 $assert SurfaceMaterial::members[6].offset == 36 && SurfaceMaterial::members[6].name == "padding";
-$assert ContactMaterial::size == 24;
-$assert ContactMaterial::alignment == 4;
+$assert ContactMaterial::size == 40;
+$assert ContactMaterial::alignment == 8;
 $assert ContactMaterial::members[0].offset == 0 && ContactMaterial::members[0].name == "friction";
 $assert ContactMaterial::members[1].offset == 4 && ContactMaterial::members[1].name == "restitution";
 $assert ContactMaterial::members[2].offset == 8 && ContactMaterial::members[2].name == "rolling_resistance";
 $assert ContactMaterial::members[3].offset == 12 && ContactMaterial::members[3].name == "tangent_velocity";
+$assert ContactMaterial::members[4].offset == 24 && ContactMaterial::members[4].name == "user_material_id_a";
+$assert ContactMaterial::members[5].offset == 32 && ContactMaterial::members[5].name == "user_material_id_b";
 $assert ShapeType::size == 4;
 $assert ShapeType::alignment == 4;
 $assert ShapeDef::size == 120;

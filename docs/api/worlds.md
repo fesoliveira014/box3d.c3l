@@ -182,10 +182,15 @@ produced. Change any field to override that contact:
 | `friction`, `restitution` | the coefficients the solver uses for this contact |
 | `rolling_resistance` | already scaled by the rolling shape's radius |
 | `tangent_velocity` | world space, for conveyors: the solver drives the tangential velocity of shape B's body relative to shape A's toward it, so the mixed value is shape A's surface velocity minus shape B's |
+| `user_material_id_a`, `user_material_id_b` | inputs, a write is ignored: the user material id of the surface each shape touches here, in the order of the shape ids |
 
 It runs for convex, compound, mesh and height-field contacts, but not for a contact the pre-solve
 callback disabled. The callback names no child shape or triangle, so on a multi-material mesh,
-height field or compound it sees the contact's averaged mix. Passing null removes it. A negative or
+height field or compound it sees the contact's averaged mix. The two user material ids tell it which
+surface it touches: a convex shape or a convex compound child gives its own material, and a mesh (a
+compound's mesh child too) or height field gives the material under most of the manifold points
+(the lowest index on a tie). Passing null
+removes it. A negative or
 non-finite friction, restitution or rolling resistance, or a non-finite tangent velocity, keeps the
 mixed value.
 

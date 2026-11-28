@@ -13,7 +13,7 @@ limits an application designs around, and the sharp edges that cross domains.
 - Math types mapped onto the C3 standard library, with box3d's validity predicates and helpers.
 - Worlds: creation, stepping, tuning (including restitution iterations and propagation, and the
   isotropic inertia tolerance), worker threads and task callbacks, profile and counters,
-  friction and restitution mixing callbacks, per-contact material overrides, pre-solve and
+  friction and restitution mixing callbacks, per-contact material overrides that see the user material id of each surface (but no triangle index), pre-solve and
   custom-filter callbacks, and a one-pass origin shift for large worlds.
 - Events: contact begin, end and hit; sensor begin and end; body moves; joint thresholds.
 - Bodies: type, pose, velocity, forces and impulses, mass data, damping, sleep, motion locks,

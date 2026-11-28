@@ -102,13 +102,17 @@ struct WorldDef {
 <*
  The material inputs the contact solver reads for one contact. rolling_resistance is already
  scaled by the radius of the rolling shape. tangent_velocity is in world space, for conveyors: the
- solver drives the tangential velocity of shape B's body relative to shape A's toward it.
+ solver drives the tangential velocity of shape B's body relative to shape A's toward it. The
+ user_material_id fields are inputs, in shape id order: the id of the surface each shape touches
+ (a mesh or height field: the one under most points, the lowest on a tie). A write is ignored.
 *>
 struct ContactMaterial {
     float friction;
     float restitution;
     float rolling_resistance;
     Vec3 tangent_velocity;
+    ulong user_material_id_a;
+    ulong user_material_id_b;
 }
 
 struct Profile {
